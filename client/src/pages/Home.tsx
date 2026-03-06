@@ -467,20 +467,62 @@ export default function Home() {
                     <CardContent className="pt-4">
                       <div className="bg-muted/30 p-4 rounded-lg border border-border/50" data-testid="text-transition-status"
                         dangerouslySetInnerHTML={{
-                          __html: result.data.analysis.transition_status
-                            .split(/\n/)
-                            .map((line: string) => line.trim())
-                            .filter((line: string) => line.length > 0)
-                            .map((line: string) => {
-                              const stripped = line.replace(/^[•\-\*]\s*/, "").replace(/\*\*/g, "");
-                              const boldMatch = stripped.match(/^([^:]+):\s*(.*)/);
-                              if (boldMatch) {
-                                return `<li style="margin-bottom:6px;"><strong>${boldMatch[1]}:</strong> ${boldMatch[2]}</li>`;
-                              }
-                              return `<li style="margin-bottom:6px;">${stripped}</li>`;
-                            })
-                            .join("")
-                            .replace(/^(.*)$/, '<ul style="list-style-type:disc; padding-left:1.25rem; margin:0; font-size:0.875rem; line-height:1.7; color:inherit;">$1</ul>')
+                          __html: (() => {
+                            const statusColors: Record<string, string> = {
+                              "good": "background:#dcfce7;color:#166534;border:1px solid #bbf7d0;",
+                              "positive": "background:#dcfce7;color:#166534;border:1px solid #bbf7d0;",
+                              "no readmission": "background:#dcfce7;color:#166534;border:1px solid #bbf7d0;",
+                              "picked up": "background:#dcfce7;color:#166534;border:1px solid #bbf7d0;",
+                              "no issues": "background:#dcfce7;color:#166534;border:1px solid #bbf7d0;",
+                              "scheduled": "background:#dcfce7;color:#166534;border:1px solid #bbf7d0;",
+                              "completed": "background:#dcfce7;color:#166534;border:1px solid #bbf7d0;",
+                              "delivered": "background:#dcfce7;color:#166534;border:1px solid #bbf7d0;",
+                              "no questions": "background:#dcfce7;color:#166534;border:1px solid #bbf7d0;",
+                              "fair": "background:#fef9c3;color:#854d0e;border:1px solid #fde68a;",
+                              "mixed": "background:#fef9c3;color:#854d0e;border:1px solid #fde68a;",
+                              "partially picked up": "background:#fef9c3;color:#854d0e;border:1px solid #fde68a;",
+                              "partially delivered": "background:#fef9c3;color:#854d0e;border:1px solid #fde68a;",
+                              "pending": "background:#fef9c3;color:#854d0e;border:1px solid #fde68a;",
+                              "ordered not received": "background:#fef9c3;color:#854d0e;border:1px solid #fde68a;",
+                              "poor": "background:#fee2e2;color:#991b1b;border:1px solid #fecaca;",
+                              "negative": "background:#fee2e2;color:#991b1b;border:1px solid #fecaca;",
+                              "not picked up": "background:#fee2e2;color:#991b1b;border:1px solid #fecaca;",
+                              "has barriers": "background:#fee2e2;color:#991b1b;border:1px solid #fecaca;",
+                              "not scheduled": "background:#fee2e2;color:#991b1b;border:1px solid #fecaca;",
+                              "cancelled": "background:#fee2e2;color:#991b1b;border:1px solid #fecaca;",
+                              "not delivered": "background:#fee2e2;color:#991b1b;border:1px solid #fecaca;",
+                              "missed": "background:#fee2e2;color:#991b1b;border:1px solid #fecaca;",
+                              "has questions": "background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;",
+                              "readmitted": "background:#fee2e2;color:#991b1b;border:1px solid #fecaca;",
+                              "not discussed": "background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;",
+                              "not asked": "background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;",
+                              "not ordered": "background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;",
+                              "unknown": "background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;",
+                            };
+                            return result.data.analysis.transition_status
+                              .split(/\n/)
+                              .map((line: string) => line.trim())
+                              .filter((line: string) => line.length > 0)
+                              .map((line: string) => {
+                                const stripped = line.replace(/^[•\-\*]\s*/, "").replace(/\*\*/g, "");
+                                const statusMatch = stripped.match(/^([^:]+):\s*\[([^\]]+)\]\s*(.*)/);
+                                if (statusMatch) {
+                                  const topic = statusMatch[1];
+                                  const status = statusMatch[2];
+                                  const detail = statusMatch[3];
+                                  const colorStyle = statusColors[status.toLowerCase()] || "background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;";
+                                  const badge = `<span style="display:inline-block;padding:1px 8px;border-radius:9999px;font-size:11px;font-weight:600;${colorStyle}">${status}</span>`;
+                                  return `<li style="margin-bottom:10px;list-style:none;"><strong>${topic}:</strong> ${badge}${detail ? `<div style="margin-top:2px;margin-left:0;color:inherit;font-size:0.8125rem;line-height:1.5;">${detail}</div>` : ''}</li>`;
+                                }
+                                const boldMatch = stripped.match(/^([^:]+):\s*(.*)/);
+                                if (boldMatch) {
+                                  return `<li style="margin-bottom:10px;list-style:none;"><strong>${boldMatch[1]}:</strong> ${boldMatch[2]}</li>`;
+                                }
+                                return `<li style="margin-bottom:10px;list-style:none;">${stripped}</li>`;
+                              })
+                              .join("")
+                              .replace(/^(.*)$/, '<ul style="padding-left:0;margin:0;font-size:0.875rem;line-height:1.7;color:inherit;">$1</ul>');
+                          })()
                         }}
                       />
                     </CardContent>
