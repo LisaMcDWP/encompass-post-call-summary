@@ -367,7 +367,7 @@ export default function Home() {
                               const stripped = line.replace(/^[•\-\*]\s*/, "");
                               const boldMatch = stripped.match(/^([^:]+):\s*(.*)/);
                               if (boldMatch) {
-                                return `<li style="margin-bottom:6px;">${boldMatch[1]}: ${boldMatch[2]}</li>`;
+                                return `<li style="margin-bottom:6px;"><strong>${boldMatch[1]}:</strong> ${boldMatch[2]}</li>`;
                               }
                               return `<li style="margin-bottom:6px;">${stripped}</li>`;
                             })
