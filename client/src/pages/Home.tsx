@@ -364,7 +364,7 @@ export default function Home() {
                             .map((line: string) => line.trim())
                             .filter((line: string) => line.length > 0)
                             .map((line: string) => {
-                              const stripped = line.replace(/^[•\-\*]\s*/, "");
+                              const stripped = line.replace(/^[•\-\*]\s*/, "").replace(/\*\*/g, "");
                               const boldMatch = stripped.match(/^([^:]+):\s*(.*)/);
                               if (boldMatch) {
                                 return `<li style="margin-bottom:6px;"><strong>${boldMatch[1]}:</strong> ${boldMatch[2]}</li>`;
