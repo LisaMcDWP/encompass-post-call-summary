@@ -357,9 +357,24 @@ export default function Home() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-4">
-                      <div className="text-sm leading-relaxed text-foreground whitespace-pre-line bg-muted/30 p-4 rounded-lg border border-border/50" data-testid="text-transition-status">
-                        {result.data.analysis.transition_status}
-                      </div>
+                      <div className="bg-muted/30 p-4 rounded-lg border border-border/50" data-testid="text-transition-status"
+                        dangerouslySetInnerHTML={{
+                          __html: result.data.analysis.transition_status
+                            .split(/\n/)
+                            .map((line: string) => line.trim())
+                            .filter((line: string) => line.length > 0)
+                            .map((line: string) => {
+                              const stripped = line.replace(/^[•\-\*]\s*/, "");
+                              const boldMatch = stripped.match(/^([^:]+):\s*(.*)/);
+                              if (boldMatch) {
+                                return `<li style="margin-bottom:6px;"><strong>${boldMatch[1]}:</strong> ${boldMatch[2]}</li>`;
+                              }
+                              return `<li style="margin-bottom:6px;">${stripped}</li>`;
+                            })
+                            .join("")
+                            .replace(/^(.*)$/, '<ul style="list-style-type:disc; padding-left:1.25rem; margin:0; font-size:0.875rem; line-height:1.7; color:inherit;">$1</ul>')
+                        }}
+                      />
                     </CardContent>
                   </Card>
                 )}
