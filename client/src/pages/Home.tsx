@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Play, CheckCircle2, AlertCircle, FileText, ListChecks, MessageSquareText, ClipboardList, Settings2, RotateCcw, Pill, AlertTriangle, Star } from "lucide-react";
+import { Loader2, Play, CheckCircle2, AlertCircle, FileText, ListChecks, ClipboardList, Settings2, RotateCcw, Pill, AlertTriangle, Star } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -441,35 +441,6 @@ export default function Home() {
                   </Card>
                 )}
 
-                {/* Q&A */}
-                <Card className="border-border/60 bg-card shadow-md">
-                  <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
-                    <CardTitle className="text-lg flex items-center gap-2 text-secondary">
-                      <MessageSquareText className="h-5 w-5 text-primary" />
-                      Extracted Q&A
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-4">
-                    <div className="space-y-4">
-                      {result.data.analysis.questionsAndResponses.map((item: any, i: number) => (
-                        <div key={i} className="rounded-lg border border-border/60 bg-background overflow-hidden shadow-sm" data-testid={`card-qa-${i}`}>
-                          <div className="bg-muted/50 px-4 py-2.5 border-b border-border/60">
-                            <p className="text-sm font-semibold text-secondary flex items-start gap-2">
-                              <span className="text-primary font-bold">Q:</span> 
-                              {item.question}
-                            </p>
-                          </div>
-                          <div className="px-4 py-3 bg-card">
-                            <p className="text-sm text-foreground flex items-start gap-2">
-                              <span className="text-accent font-bold">A:</span> 
-                              {item.response}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
               </div>
             )}
           </div>

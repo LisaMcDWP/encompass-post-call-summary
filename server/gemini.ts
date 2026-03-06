@@ -39,7 +39,6 @@ export interface TranscriptAnalysis {
   medication_adherence_note: string | null;
   experience_note: string;
   areasForFollowUp: string[];
-  questionsAndResponses: { question: string; response: string }[];
 }
 
 export const DEFAULT_PROMPT_TEMPLATE = `You are an expert healthcare call analyst for Guideway Care. Analyze the following patient interaction transcript and produce a structured JSON output.
@@ -61,11 +60,7 @@ Your response MUST be valid JSON with exactly this structure:
   "transition_status": "A bulleted list (using bullet character •) covering the key post-discharge transition details extracted from the call. Each bullet should be on its own line. Include the following items based on what the patient discussed:\\n• Disposition Change: [ONLY report if the patient was readmitted to an ER, hospital, or SNF since discharge. Include why, where, date, and current location. If the patient was NOT readmitted, state 'No readmission reported.']\\n• Prescription Pickup: [status of prescription pickup — picked up, not yet, barriers, issues, concerns, or questions about medications]\\n• Medication Adherence Note: [summary of any barriers picking up prescriptions, medication concerns, or medication-related questions the patient raised. If the patient did not discuss medications or the question was not asked, skip this bullet.]\\n• Medication Notes: [any other questions, barriers, side effects, or concerns about taking medications]\\n• Follow-up Appointment: [status of follow-up appointment with their doctor — scheduled, not yet, date/time if known]\\n• DME or Supplies Delivered: [whether durable medical equipment or supplies have been delivered — delivered, partially delivered, not delivered, ordered but not received, not ordered, or unknown. Include specific items mentioned.]\\n• Home Health Visit: [whether it occurred, is scheduled, pending, or not discussed — include provider and date details]\\n• Discharge Instructions: [any questions about discharge instructions or questions for the care team]\\n• Encompass Feedback: [any feedback on their stay at Encompass]\\n• Experience Comments: [any comments about the call experience]\\n• Other: [any other important information shared]\\nOnly include bullets for topics the patient actually discussed. Skip bullets for topics not covered in the call.",
   "medication_adherence_note": "Provide a summary of the patient's response if they had any barriers picking up prescriptions or any other medication concerns or questions. Write null (JSON null, not the string) if no response was provided by the patient or the question was not asked.",
   "experience_note": "A summary of the patient's response about their overall experience at the rehab hospital. This is specific to any feedback the patient provides when asked how their stay was. Use third person perspective (e.g. 'Patient reports the staff was attentive and the facility was clean.'). If no feedback was provided or the question was not asked, write exactly 'No feedback was provided.'",
-  "areasForFollowUp": ["actionable follow-up item 1", "actionable follow-up item 2", ...],
-  "questionsAndResponses": [
-    {"question": "exact question asked by patient", "response": "exact or paraphrased response given by care guide"},
-    ...
-  ]
+  "areasForFollowUp": ["actionable follow-up item 1", "actionable follow-up item 2", ...]
 }
 
 Guidelines:
@@ -78,8 +73,6 @@ Guidelines:
 - medication_adherence_note: Summarize any barriers to picking up prescriptions, medication concerns, or medication-related questions the patient raised. If the patient did not discuss medications or the question was not asked, return JSON null (not the string "null").
 - experience_note: Summarize the patient's feedback about their overall experience at the rehab hospital. Use third person perspective. Report exactly what was stated without interpretation. If the patient did not provide feedback or the question was not asked, write exactly "No feedback was provided."
 - areasForFollowUp: List specific, actionable items that need follow-up after this call. Be concrete with dates, names, and details from the transcript.
-- questionsAndResponses: Extract every distinct question the patient asked and the corresponding response. Include only actual questions, not rhetorical ones.
-
 Call ID: {{CALL_ID}}
 
 TRANSCRIPT:
@@ -126,8 +119,7 @@ export async function analyzeTranscript(
   if (
     !parsed.summary ||
     !parsed.transition_status ||
-    !Array.isArray(parsed.areasForFollowUp) ||
-    !Array.isArray(parsed.questionsAndResponses)
+    !Array.isArray(parsed.areasForFollowUp)
   ) {
     console.error("Gemini returned unexpected structure:", JSON.stringify(parsed).substring(0, 500));
     throw new Error("Gemini response missing required fields. Please try again.");
