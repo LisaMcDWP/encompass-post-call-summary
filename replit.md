@@ -23,8 +23,11 @@ A full-stack application that provides a Gemini-powered transcript analysis API.
 
 ## API Endpoints
 ### POST /api/analyze
-Input: `{ callId?: string, transcript: string }`
-Output: `{ status, data: { callId, processedAt, processingTimeMs, analysis: { summary, areasForFollowUp[], questionsAndResponses[] } } }`
+Input: `{ callId?: string, transcript: string, customPrompt?: string }`
+Output: `{ status, data: { callId, processedAt, processingTimeMs, promptUsed, analysis: { summary, transition_status, areasForFollowUp[], questionsAndResponses[] } } }`
+
+### GET /api/prompt
+Returns the default prompt template: `{ prompt: string }`
 
 ### GET /api/health
 Returns service connectivity status.

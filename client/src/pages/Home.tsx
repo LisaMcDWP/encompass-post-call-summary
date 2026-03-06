@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Play, CheckCircle2, AlertCircle, FileText, ListChecks, MessageSquareText, Activity, HeartPulse, Pill, ClipboardList, CalendarCheck, Home as HomeIcon, Settings2, RotateCcw } from "lucide-react";
+import { Loader2, Play, CheckCircle2, AlertCircle, FileText, ListChecks, MessageSquareText, ClipboardList, Settings2, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -347,128 +347,22 @@ export default function Home() {
                   </CardContent>
                 </Card>
 
-                {/* Clinical Assessment Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Disposition Change */}
-                  {result.data.analysis.dispositionChange && (
-                    <Card className="border-border/60 bg-card shadow-md" data-testid="card-disposition">
-                      <CardHeader className="pb-2 border-b border-border/40 bg-muted/20">
-                        <CardTitle className="text-base flex items-center gap-2 text-secondary">
-                          <HeartPulse className="h-4 w-4 text-red-500" />
-                          Disposition Change
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="pt-3">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Badge variant={result.data.analysis.dispositionChange.changed ? "destructive" : "outline"} className="text-xs" data-testid="badge-disposition-status">
-                            {result.data.analysis.dispositionChange.changed ? "Change Detected" : "No Change"}
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-foreground leading-relaxed">{result.data.analysis.dispositionChange.details}</p>
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {/* Prescription Pickup Status */}
-                  {result.data.analysis.prescriptionPickupStatus && (
-                    <Card className="border-border/60 bg-card shadow-md" data-testid="card-prescription">
-                      <CardHeader className="pb-2 border-b border-border/40 bg-muted/20">
-                        <CardTitle className="text-base flex items-center gap-2 text-secondary">
-                          <Pill className="h-4 w-4 text-blue-500" />
-                          Prescription Pickup
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="pt-3">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Badge variant="outline" className="text-xs capitalize" data-testid="badge-prescription-status">
-                            {result.data.analysis.prescriptionPickupStatus.status.replace(/_/g, " ")}
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-foreground leading-relaxed">{result.data.analysis.prescriptionPickupStatus.details}</p>
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {/* Follow-up Scheduled Status */}
-                  {result.data.analysis.followUpScheduledStatus && (
-                    <Card className="border-border/60 bg-card shadow-md" data-testid="card-followup-scheduled">
-                      <CardHeader className="pb-2 border-b border-border/40 bg-muted/20">
-                        <CardTitle className="text-base flex items-center gap-2 text-secondary">
-                          <CalendarCheck className="h-4 w-4 text-green-600" />
-                          Follow-up Scheduled
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="pt-3">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Badge variant={result.data.analysis.followUpScheduledStatus.scheduled ? "default" : "outline"} className="text-xs" data-testid="badge-followup-status">
-                            {result.data.analysis.followUpScheduledStatus.scheduled ? "Scheduled" : "Not Scheduled"}
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-foreground leading-relaxed">{result.data.analysis.followUpScheduledStatus.details}</p>
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {/* Medication Notes */}
-                  {result.data.analysis.medicationNotes && (
-                    <Card className="border-border/60 bg-card shadow-md" data-testid="card-medication-notes">
-                      <CardHeader className="pb-2 border-b border-border/40 bg-muted/20">
-                        <CardTitle className="text-base flex items-center gap-2 text-secondary">
-                          <ClipboardList className="h-4 w-4 text-orange-500" />
-                          Medication Notes
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="pt-3 space-y-3">
-                        <p className="text-sm text-foreground leading-relaxed">{result.data.analysis.medicationNotes.notes}</p>
-                        {result.data.analysis.medicationNotes.questions?.length > 0 && (
-                          <div>
-                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Questions</p>
-                            <ul className="space-y-1">
-                              {result.data.analysis.medicationNotes.questions.map((q: string, i: number) => (
-                                <li key={i} className="text-sm text-foreground flex items-start gap-2" data-testid={`text-med-question-${i}`}>
-                                  <span className="text-primary mt-1.5 w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0"></span>
-                                  {q}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                        {result.data.analysis.medicationNotes.barriers?.length > 0 && (
-                          <div>
-                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Barriers</p>
-                            <ul className="space-y-1">
-                              {result.data.analysis.medicationNotes.barriers.map((b: string, i: number) => (
-                                <li key={i} className="text-sm text-foreground flex items-start gap-2" data-testid={`text-med-barrier-${i}`}>
-                                  <span className="text-red-500 mt-1.5 w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0"></span>
-                                  {b}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  )}
-                  {/* Home Health Visit */}
-                  {result.data.analysis.homeHealthVisit && (
-                    <Card className="border-border/60 bg-card shadow-md md:col-span-2" data-testid="card-home-health">
-                      <CardHeader className="pb-2 border-b border-border/40 bg-muted/20">
-                        <CardTitle className="text-base flex items-center gap-2 text-secondary">
-                          <HomeIcon className="h-4 w-4 text-teal-600" />
-                          Home Health Visit
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="pt-3">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Badge variant={result.data.analysis.homeHealthVisit.status === "completed" ? "default" : "outline"} className="text-xs capitalize" data-testid="badge-home-health-status">
-                            {result.data.analysis.homeHealthVisit.status.replace(/_/g, " ")}
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-foreground leading-relaxed">{result.data.analysis.homeHealthVisit.details}</p>
-                      </CardContent>
-                    </Card>
-                  )}
-                </div>
+                {/* Transition Status */}
+                {result.data.analysis.transition_status && (
+                  <Card className="border-border/60 bg-card shadow-md" data-testid="card-transition-status">
+                    <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
+                      <CardTitle className="text-lg flex items-center gap-2 text-secondary">
+                        <ClipboardList className="h-5 w-5 text-primary" />
+                        Transition Status
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <div className="text-sm leading-relaxed text-foreground whitespace-pre-line bg-muted/30 p-4 rounded-lg border border-border/50" data-testid="text-transition-status">
+                        {result.data.analysis.transition_status}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* Q&A */}
                 <Card className="border-border/60 bg-card shadow-md">
