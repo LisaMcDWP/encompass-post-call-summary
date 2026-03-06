@@ -58,21 +58,7 @@ export interface TranscriptAnalysis {
   };
 }
 
-export async function analyzeTranscript(
-  callId: string,
-  transcript: string
-): Promise<TranscriptAnalysis> {
-  const vertex = getVertexAI();
-
-  const model = vertex.getGenerativeModel({
-    model: "gemini-2.0-flash-001",
-    generationConfig: {
-      responseMimeType: "application/json",
-      temperature: 0.2,
-    },
-  });
-
-  const prompt = `You are an expert healthcare call analyst for Guideway Care. Analyze the following patient interaction transcript and produce a structured JSON output.
+export const DEFAULT_PROMPT_TEMPLATE = `You are an expert healthcare call analyst for Guideway Care. Analyze the following patient interaction transcript and produce a structured JSON output.
 
 Your response MUST be valid JSON with exactly this structure:
 {
@@ -115,10 +101,30 @@ Guidelines:
 - followUpScheduledStatus: Determine if any future appointment or follow-up call was scheduled during this interaction.
 - homeHealthVisit: Determine if a home health visit has already occurred, is scheduled, is pending, or was not discussed. Include provider details and dates if available.
 
-Call ID: ${callId}
+Call ID: {{CALL_ID}}
 
 TRANSCRIPT:
-${transcript}`;
+{{TRANSCRIPT}}`;
+
+export async function analyzeTranscript(
+  callId: string,
+  transcript: string,
+  customPrompt?: string
+): Promise<{ analysis: TranscriptAnalysis; promptUsed: string }> {
+  const vertex = getVertexAI();
+
+  const model = vertex.getGenerativeModel({
+    model: "gemini-2.0-flash-001",
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.2,
+    },
+  });
+
+  const template = customPrompt || DEFAULT_PROMPT_TEMPLATE;
+  const prompt = template
+    .replace("{{CALL_ID}}", callId)
+    .replace("{{TRANSCRIPT}}", transcript);
 
   const result = await model.generateContent(prompt);
   const response = result.response;
@@ -147,5 +153,5 @@ ${transcript}`;
     throw new Error("Gemini response missing required fields. Please try again.");
   }
 
-  return parsed as TranscriptAnalysis;
+  return { analysis: parsed as TranscriptAnalysis, promptUsed: prompt };
 }

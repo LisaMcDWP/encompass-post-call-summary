@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { analyzeTranscript } from "./gemini";
+import { analyzeTranscript, DEFAULT_PROMPT_TEMPLATE } from "./gemini";
 import { logTooBigQuery } from "./bigquery";
 import { randomUUID } from "crypto";
 
@@ -9,9 +9,13 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  app.get("/api/prompt", (_req, res) => {
+    res.json({ prompt: DEFAULT_PROMPT_TEMPLATE });
+  });
+
   app.post("/api/analyze", async (req, res) => {
     const startTime = Date.now();
-    const { callId, transcript } = req.body;
+    const { callId, transcript, customPrompt } = req.body;
 
     const resolvedCallId = callId || `call_${randomUUID().slice(0, 12)}`;
 
@@ -32,7 +36,11 @@ export async function registerRoutes(
     }
 
     try {
-      const analysis = await analyzeTranscript(resolvedCallId, transcript.trim());
+      const { analysis, promptUsed } = await analyzeTranscript(
+        resolvedCallId,
+        transcript.trim(),
+        customPrompt || undefined
+      );
       const processingTime = Date.now() - startTime;
 
       await logTooBigQuery({
@@ -51,6 +59,7 @@ export async function registerRoutes(
           callId: resolvedCallId,
           processedAt: new Date().toISOString(),
           processingTimeMs: processingTime,
+          promptUsed,
           analysis,
         },
       });

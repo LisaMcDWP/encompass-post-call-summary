@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Play, CheckCircle2, AlertCircle, FileText, ListChecks, MessageSquareText, Activity, HeartPulse, Pill, ClipboardList, CalendarCheck, Home as HomeIcon } from "lucide-react";
+import { Loader2, Play, CheckCircle2, AlertCircle, FileText, ListChecks, MessageSquareText, Activity, HeartPulse, Pill, ClipboardList, CalendarCheck, Home as HomeIcon, Settings2, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 const SAMPLE_TRANSCRIPT = `Care Guide: Hello, this is Sarah from Guideway Care. Am I speaking with Mr. Davis?
 Patient: Yes, this is him.
@@ -31,7 +32,20 @@ export default function Home() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [showRawJson, setShowRawJson] = useState(false);
+  const [customPrompt, setCustomPrompt] = useState("");
+  const [defaultPrompt, setDefaultPrompt] = useState("");
+  const [showPromptEditor, setShowPromptEditor] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    fetch("/api/prompt")
+      .then((r) => r.json())
+      .then((data) => {
+        setDefaultPrompt(data.prompt);
+        setCustomPrompt(data.prompt);
+      })
+      .catch(() => {});
+  }, []);
 
   const handleTestApi = async () => {
     if (!transcript.trim()) {
@@ -47,10 +61,15 @@ export default function Home() {
     setResult(null);
     
     try {
+      const isCustom = customPrompt.trim() !== defaultPrompt.trim();
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ callId: callId.trim() || undefined, transcript: transcript.trim() }),
+        body: JSON.stringify({
+          callId: callId.trim() || undefined,
+          transcript: transcript.trim(),
+          customPrompt: isCustom ? customPrompt.trim() : undefined,
+        }),
       });
       
       const data = await res.json();
@@ -156,6 +175,53 @@ export default function Home() {
                   data-testid="input-transcript"
                 />
               </div>
+
+              <Collapsible open={showPromptEditor} onOpenChange={setShowPromptEditor}>
+                <CollapsibleTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-between h-9 text-xs text-muted-foreground hover:text-foreground border border-dashed border-border/60 rounded-md"
+                    data-testid="button-toggle-prompt"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Settings2 className="h-3.5 w-3.5" />
+                      Gemini Prompt Template
+                      {customPrompt.trim() !== defaultPrompt.trim() && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-orange-400 text-orange-500">Modified</Badge>
+                      )}
+                    </span>
+                    <span>{showPromptEditor ? "Collapse" : "Expand"}</span>
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-3 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Prompt Template</Label>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs px-2 text-muted-foreground hover:text-foreground"
+                      onClick={() => {
+                        setCustomPrompt(defaultPrompt);
+                        toast({ title: "Prompt Reset", description: "Restored to default prompt template." });
+                      }}
+                      data-testid="button-reset-prompt"
+                    >
+                      <RotateCcw className="h-3 w-3 mr-1" />
+                      Reset
+                    </Button>
+                  </div>
+                  <Textarea
+                    className="min-h-[250px] font-mono text-xs leading-relaxed bg-background shadow-inner resize-y border-border/60 focus-visible:ring-primary"
+                    value={customPrompt}
+                    onChange={(e) => setCustomPrompt(e.target.value)}
+                    data-testid="input-prompt"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Use <code className="bg-muted px-1 rounded text-[10px]">{"{{CALL_ID}}"}</code> and <code className="bg-muted px-1 rounded text-[10px]">{"{{TRANSCRIPT}}"}</code> as placeholders. They will be replaced with the actual values before sending to Gemini.
+                  </p>
+                </CollapsibleContent>
+              </Collapsible>
             </CardContent>
             <CardFooter className="bg-muted/30 border-t border-border/40 pt-6">
               <Button 
