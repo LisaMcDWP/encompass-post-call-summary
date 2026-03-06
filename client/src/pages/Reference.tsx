@@ -58,13 +58,18 @@ export default function Reference() {
             <Separator className="bg-[#0098db]/10" />
 
             <div>
-              <h3 className="text-white font-semibold mb-2">Request</h3>
+              <h3 className="text-white font-semibold mb-2">Request Body</h3>
               <p className="text-gray-400 text-sm mb-2">Content-Type: application/json</p>
+              <div className="bg-[#0d1520] p-4 rounded-lg text-sm space-y-2 mb-4">
+                <p className="text-gray-300"><span className="text-[#96d410]">callId</span> <span className="text-gray-500">(string, optional)</span> — Unique identifier for the call. Auto-generated if omitted.</p>
+                <p className="text-gray-300"><span className="text-[#96d410]">transcript</span> <span className="text-gray-500">(string, required)</span> — The full patient call transcript text.</p>
+                <p className="text-gray-300"><span className="text-[#96d410]">customPrompt</span> <span className="text-gray-500">(string, optional)</span> — Override the default analysis prompt.</p>
+              </div>
+              <h4 className="text-white font-semibold mb-2 text-sm">Example Request Body</h4>
               <pre className="bg-[#0d1520] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto" data-testid="text-request-body">
 {`{
-  "callId": "string (optional, auto-generated if omitted)",
-  "transcript": "string (required, the patient call transcript)",
-  "customPrompt": "string (optional, override default prompt)"
+  "callId": "CALL-001",
+  "transcript": "Care Guide: Hello, this is Maria from Guideway Care. Am I speaking with Mrs. Thompson?\\nPatient: Yes, this is she.\\nCare Guide: I'm calling to check in on you since you were discharged. How have you been feeling?\\nPatient: I'm doing much better, thank you. Still a little sore but getting around okay."
 }`}
               </pre>
             </div>
