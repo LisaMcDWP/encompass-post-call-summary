@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Play, CheckCircle2, AlertCircle, FileText, ListChecks, MessageSquareText, ClipboardList, Settings2, RotateCcw, Pill } from "lucide-react";
+import { Loader2, Play, CheckCircle2, AlertCircle, FileText, ListChecks, MessageSquareText, ClipboardList, Settings2, RotateCcw, Pill, Package } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -375,6 +375,26 @@ export default function Home() {
                             .replace(/^(.*)$/, '<ul style="list-style-type:disc; padding-left:1.25rem; margin:0; font-size:0.875rem; line-height:1.7; color:inherit;">$1</ul>')
                         }}
                       />
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* DME or Supplies Status */}
+                {result.data.analysis.dme_supplies_status && (
+                  <Card className="border-border/60 bg-card shadow-md" data-testid="card-dme-supplies">
+                    <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
+                      <CardTitle className="text-lg flex items-center gap-2 text-secondary">
+                        <Package className="h-5 w-5 text-primary" />
+                        DME / Supplies Delivered
+                        <Badge variant="outline" className="text-xs capitalize ml-2" data-testid="badge-dme-status">
+                          {result.data.analysis.dme_supplies_status.status.replace(/_/g, " ")}
+                        </Badge>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <p className="text-sm leading-relaxed text-foreground" data-testid="text-dme-details">
+                        {result.data.analysis.dme_supplies_status.details}
+                      </p>
                     </CardContent>
                   </Card>
                 )}
