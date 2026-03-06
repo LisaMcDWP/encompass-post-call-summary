@@ -48,7 +48,7 @@ export async function registerRoutes(
         transcriptLength: transcript.length,
         summary: analysis.summary,
         areasForFollowUp: analysis.areasForFollowUp,
-        questionsCount: analysis.questionsAndResponses.length,
+        questionsCount: 0,
         processingTimeMs: processingTime,
         status: "success",
       });
