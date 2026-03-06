@@ -5,26 +5,91 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Play, CheckCircle2, AlertCircle, FileText, ListChecks, ClipboardList, Settings2, RotateCcw, Pill, AlertTriangle, Star } from "lucide-react";
+import { Loader2, Play, CheckCircle2, AlertCircle, FileText, ListChecks, ClipboardList, Settings2, RotateCcw, Pill, AlertTriangle, Star, FileSearch } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
-const SAMPLE_TRANSCRIPT = `Care Guide: Hello, this is Sarah from Guideway Care. Am I speaking with Mr. Davis?
-Patient: Yes, this is him.
-Care Guide: Hi Mr. Davis. I'm calling to check in before your oncology appointment next Tuesday at 10:30 AM. How are you feeling about getting there?
-Patient: To be honest, I'm not sure I can make it. My daughter usually drives me, but she had to pick up an extra shift at work.
-Care Guide: I completely understand, and it's great that you shared that with me. It's very important we keep that appointment to stay on track with your treatment. What if I could arrange a medical transport to pick you up and bring you back home at no cost to you?
-Patient: Really? That would be a huge relief. I was stressing over it.
-Care Guide: Absolutely. Let's get that set up right now. I'll schedule them to arrive at your house by 9:30 AM. What if the driver doesn't show up?
-Patient: I don't know, what should I do?
-Care Guide: I've set up a direct line for you. If they aren't there by 9:45 AM, call me immediately and I will arrange an alternative. Do I need to pay for this ride?
-Patient: No, you said it was covered, right?
-Care Guide: Exactly, this service is fully covered as part of your care program. 
-Patient: Thank you, Sarah. What should I bring to the appointment?
-Care Guide: Please bring your ID, your updated medication list, and the forms we mailed to you last week.
-Patient: Got it. I'll have them ready.
-Care Guide: Wonderful. I'll call you Monday to confirm the transport details. Have a good weekend, Mr. Davis!`;
+const SAMPLE_TRANSCRIPTS: Record<string, { label: string; transcript: string }> = {
+  struggling: {
+    label: "Struggling Patient",
+    transcript: `Care Guide: Hello, this is Maria from Guideway Care. Am I speaking with Mrs. Thompson?
+Patient: Yes, this is her daughter, Lisa. Mom is here but she's not feeling well enough to talk much.
+Care Guide: I understand, Lisa. Thank you for being there with her. I'm calling to check in on your mother since she was discharged from Encompass Rehabilitation Hospital last week. How has she been feeling overall since coming home?
+Patient's Daughter: Honestly, not great. She's been really weak and dizzy. She can barely get out of bed some days. She's also been having a lot of pain in her hip where the surgery was.
+Care Guide: I'm sorry to hear that. Has your mother had to visit the ER, hospital, or any care facility since she was discharged?
+Patient's Daughter: No, we haven't gone back, but I've been worried we might need to. The pain has been really bad.
+Care Guide: I understand your concern. Let's talk about her medications. Were you able to pick up all of her prescriptions from the pharmacy?
+Patient's Daughter: We got most of them, but one of them — I think it's the blood thinner — the pharmacy said it needed a prior authorization and it's been four days and we still don't have it. The copay on the pain medication was also really high, $85, so we only got a partial fill.
+Care Guide: That's definitely something we need to address. Is your mother having any other concerns or questions about taking her medications?
+Patient's Daughter: She says the new pain pill makes her nauseous and she's been skipping doses because of it. She's also confused about when to take the blood pressure medication — morning or night? Nobody explained it clearly.
+Care Guide: Thank you for sharing that. Has your mother had her follow-up appointment with her doctor since being discharged?
+Patient's Daughter: It was supposed to be this Thursday, but we had to cancel it because we can't get transportation. I don't drive and the bus doesn't go near the doctor's office.
+Care Guide: I see. Has a home health nurse visited since your mother came home?
+Patient's Daughter: They were supposed to come on Monday but nobody showed up. We called the agency and they said they'd reschedule but we haven't heard back.
+Care Guide: Were any medical equipment or supplies supposed to be delivered to your home?
+Patient's Daughter: Yes, she was supposed to get a walker and a shower chair. The walker came but the shower chair hasn't arrived yet. We've been using a regular chair which doesn't feel safe.
+Care Guide: I understand. Do you or your mother have any questions about the discharge instructions you received?
+Patient's Daughter: Yes, actually. The paperwork says she should be doing exercises three times a day, but she's in too much pain. Are those really necessary right now? And it mentions wound care but we're not sure if we're doing it right.
+Care Guide: Those are great questions and I'll make sure the care team addresses them. How was your mother's overall experience during her stay at Encompass?
+Patient's Daughter: Mom said the nurses were nice but the room was always cold and the food was terrible. She also felt like the physical therapy sessions were too short and she wasn't ready to come home when they discharged her.
+Care Guide: Thank you for sharing all of this, Lisa. I'm going to escalate several of these items to make sure your mother gets the support she needs. I'll follow up with you tomorrow.
+Patient's Daughter: Thank you, Maria. We really appreciate the help.`,
+  },
+  positive: {
+    label: "Positive Experience",
+    transcript: `Care Guide: Hello, this is James from Guideway Care. Am I speaking with Mr. Rodriguez?
+Patient: Yes, this is Carlos. How are you?
+Care Guide: I'm doing well, thank you! I'm calling to check in on you since you were discharged from Encompass Rehabilitation Hospital about a week ago. How have you been feeling overall since getting home?
+Patient: I've been feeling pretty good, actually. Each day I feel a little stronger. The first couple of days were tough, but I've been following the exercise routine they gave me and it's really helping.
+Care Guide: That's wonderful to hear. Have you had to visit the ER, hospital, or any care facility since you were discharged?
+Patient: No, nothing like that. I've been staying home and resting like they told me to.
+Care Guide: Great. Were you able to pick up all of your prescriptions from the pharmacy?
+Patient: Yes, my wife picked them all up the day I came home. Everything was ready and the pharmacy was very helpful explaining how to take everything.
+Care Guide: That's great. Are you having any issues, concerns, or questions about taking your medications?
+Patient: No, everything has been smooth. I set up a pill organizer so I don't miss anything. No side effects that I've noticed.
+Care Guide: Excellent. Have you been able to schedule or attend a follow-up appointment with your doctor?
+Patient: Yes, I saw Dr. Patel this past Monday and he said everything is healing well. My next appointment is in three weeks.
+Care Guide: Perfect. Has a home health nurse come to visit you?
+Patient: Yes, she came on Wednesday. Her name was Angela. She checked my vitals, looked at the incision site, and said everything looked great. She'll be coming once a week for the next month.
+Care Guide: That's excellent. Were any medical equipment or supplies delivered to your home?
+Patient: Yes, we got the walker and the raised toilet seat delivered the day before I came home. Everything was set up and ready.
+Care Guide: Do you have any questions about your discharge instructions or anything for the care team?
+Patient: No, I think the team at Encompass did a really thorough job explaining everything before I left. The binder they gave me has been super helpful to reference.
+Care Guide: That's great to hear. How was your overall experience during your stay at Encompass?
+Patient: Honestly, it was excellent. The staff were incredibly kind and professional. My physical therapist, Mike, was amazing — he pushed me just the right amount. The facility was clean, the food was decent, and I felt like they genuinely cared about my recovery. I'd recommend Encompass to anyone.
+Care Guide: That's wonderful feedback, Mr. Rodriguez. It sounds like you're doing really well. I'll check back in with you next week. Take care!
+Patient: Thank you, James. I appreciate the call.`,
+  },
+  readmitted: {
+    label: "Readmitted Patient",
+    transcript: `Care Guide: Hello, this is Sarah from Guideway Care. Am I speaking with Mr. Williams?
+Patient: No, this is his wife, Denise. Harold is here but he's resting.
+Care Guide: Thank you, Denise. I'm calling to check in on Harold since he was discharged from Encompass Rehabilitation Hospital two weeks ago. How has he been feeling overall?
+Patient's Wife: Well, it's been a rough couple of weeks. He was doing okay for the first few days at home, but then last Tuesday he started having trouble breathing and chest pain.
+Care Guide: I'm sorry to hear that. Did Harold have to visit the ER or hospital since being discharged?
+Patient's Wife: Yes, we called 911 last Tuesday night and he was taken to Memorial General Hospital. They admitted him right away. They said he had fluid buildup around his lungs and a possible infection. He was in the hospital for five days.
+Care Guide: I'm glad he got the care he needed. Where is Harold currently?
+Patient's Wife: He's back home now. They discharged him from Memorial on Sunday. He's doing better but still very weak. He's on oxygen at home now, which is new.
+Care Guide: Thank you for letting me know. Were you able to pick up Harold's new prescriptions from the pharmacy after his hospital stay?
+Patient's Wife: Most of them, yes. But the new antibiotic they prescribed — they said it's a specialty medication and we have to get it from a mail-order pharmacy. It's been three days and it hasn't arrived yet. I'm worried because he's supposed to be taking it already.
+Care Guide: That's definitely urgent. Is Harold having any other medication concerns?
+Patient's Wife: He's overwhelmed with all the new medications on top of his old ones. He went from taking 4 pills a day to 11. He doesn't understand what half of them are for and he's worried about interactions. He also says the new water pill makes him have to use the bathroom every 30 minutes, which is exhausting.
+Care Guide: I understand. Has Harold been able to schedule a follow-up appointment with his doctor since coming home from Memorial?
+Patient's Wife: His cardiologist wants to see him this Friday, so that's set up. But his primary care doctor can't get him in for three weeks, which seems too long given everything that happened.
+Care Guide: Has a home health nurse visited since Harold came back from Memorial?
+Patient's Wife: The home health agency from before said they need a new referral since he was readmitted. Nobody has come yet. We're still waiting on that to be processed.
+Care Guide: Were any new medical equipment or supplies delivered after his hospital stay?
+Patient's Wife: The oxygen equipment was delivered by the hospital's supplier, but we were also told he'd be getting a hospital bed and a pulse oximeter. The pulse oximeter came but the hospital bed hasn't arrived and it's been four days. He's been sleeping in the recliner because he can't breathe well lying flat.
+Care Guide: Do you have any questions about Harold's discharge instructions from either Encompass or Memorial?
+Patient's Wife: Yes, the instructions from Memorial say to limit fluids to 1.5 liters a day, but the Encompass instructions say to drink plenty of fluids. Which one do we follow? Also, should he still be doing the physical therapy exercises from Encompass or wait until he's stronger?
+Care Guide: Those are important questions and I'll make sure the care team clarifies both. How was Harold's experience during his stay at Encompass before the readmission?
+Patient's Wife: Harold thought the care at Encompass was good overall. He liked his therapists and the nursing staff. His only complaint was that he felt rushed out too soon. He told me he didn't feel ready to go home and now with the readmission, he feels like maybe he was right. But the people there were good — no complaints about the staff.
+Care Guide: Thank you for sharing all of this, Denise. I'm going to flag several items for immediate follow-up, especially the missing antibiotic and the hospital bed delivery. I'll call you back tomorrow with updates.
+Patient's Wife: Thank you so much, Sarah. We really need the help right now.`,
+  },
+};
+
 
 export default function Home() {
   const [callId, setCallId] = useState("");
@@ -156,15 +221,20 @@ export default function Home() {
               <div className="space-y-2 flex-grow flex flex-col">
                 <div className="flex justify-between items-center">
                   <Label htmlFor="transcript" className="text-sm font-semibold text-foreground">Patient Interaction Transcript</Label>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="h-7 text-xs px-3 border-primary/20 text-primary hover:bg-primary hover:text-white transition-colors"
-                    onClick={() => setTranscript(SAMPLE_TRANSCRIPT)}
-                    data-testid="button-load-sample"
-                  >
-                    Load MPG Sample
-                  </Button>
+                  <div className="flex gap-1.5">
+                    {Object.entries(SAMPLE_TRANSCRIPTS).map(([key, sample]) => (
+                      <Button
+                        key={key}
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs px-3 border-primary/20 text-primary hover:bg-primary hover:text-white transition-colors"
+                        onClick={() => setTranscript(sample.transcript)}
+                        data-testid={`button-load-sample-${key}`}
+                      >
+                        {sample.label}
+                      </Button>
+                    ))}
+                  </div>
                 </div>
                 <Textarea 
                   id="transcript" 
@@ -251,7 +321,7 @@ export default function Home() {
             {!result && !isProcessing && (
               <Card className="h-full border-dashed border-2 border-border/60 bg-muted/10 flex flex-col items-center justify-center p-12 text-center text-muted-foreground min-h-[500px]">
                 <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                  <MessageSquareText className="h-8 w-8 text-primary/50" />
+                  <FileSearch className="h-8 w-8 text-primary/50" />
                 </div>
                 <h3 className="text-xl font-semibold mb-2 text-foreground">Awaiting Execution</h3>
                 <p className="max-w-md text-sm">
