@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Play, CheckCircle2, AlertCircle, FileText, ListChecks, MessageSquareText, ClipboardList, Settings2, RotateCcw, Pill, Package, AlertTriangle } from "lucide-react";
+import { Loader2, Play, CheckCircle2, AlertCircle, FileText, ListChecks, MessageSquareText, ClipboardList, Settings2, RotateCcw, Pill, Package, AlertTriangle, Star } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -439,6 +439,23 @@ export default function Home() {
                     <CardContent className="pt-4">
                       <p className="text-sm leading-relaxed text-foreground" data-testid="text-medication-adherence">
                         {result.data.analysis.medication_adherence_note}
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Experience Note */}
+                {result.data.analysis.experience_note && (
+                  <Card className="border-border/60 bg-card shadow-md" data-testid="card-experience-note">
+                    <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
+                      <CardTitle className="text-lg flex items-center gap-2 text-secondary">
+                        <Star className="h-5 w-5 text-primary" />
+                        Experience Note
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <p className="text-sm leading-relaxed text-foreground" data-testid="text-experience-note">
+                        {result.data.analysis.experience_note}
                       </p>
                     </CardContent>
                   </Card>

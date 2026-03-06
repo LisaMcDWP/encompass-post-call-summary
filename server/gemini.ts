@@ -41,6 +41,7 @@ export interface TranscriptAnalysis {
     status: "delivered" | "partially_delivered" | "not_delivered" | "ordered_not_received" | "not_ordered" | "not_discussed" | "unknown";
     details: string;
   } | null;
+  experience_note: string;
   areasForFollowUp: string[];
   questionsAndResponses: { question: string; response: string }[];
 }
@@ -67,6 +68,7 @@ Your response MUST be valid JSON with exactly this structure:
     "status": "delivered | partially_delivered | not_delivered | ordered_not_received | not_ordered | not_discussed | unknown",
     "details": "Extract the patient's response about whether their DME (durable medical equipment) or supplies have been delivered. Classify into one of: delivered (all items received), partially_delivered (some items received, some pending), not_delivered (items expected but not yet received), ordered_not_received (confirmed ordered but not arrived), not_ordered (patient states nothing was ordered), not_discussed (topic was not brought up in the call), unknown (patient unsure of status). Include specific equipment/supply names and any issues mentioned. Return null if DME/supplies were not discussed."
   },
+  "experience_note": "A summary of the patient's response about their overall experience at the rehab hospital. This is specific to any feedback the patient provides when asked how their stay was. Use third person perspective (e.g. 'Patient reports the staff was attentive and the facility was clean.'). If no feedback was provided or the question was not asked, write exactly 'No feedback was provided.'",
   "areasForFollowUp": ["actionable follow-up item 1", "actionable follow-up item 2", ...],
   "questionsAndResponses": [
     {"question": "exact question asked by patient", "response": "exact or paraphrased response given by care guide"},
@@ -83,6 +85,7 @@ Guidelines:
 - transition_status: Extract each transition detail as a bulleted item using the • character. Each bullet should start with a category label followed by the detail. Only include bullets for topics that were actually discussed in the call. This field should read like a concise clinical status report.
 - medication_adherence_note: Summarize any barriers to picking up prescriptions, medication concerns, or medication-related questions the patient raised. If the patient did not discuss medications or the question was not asked, return JSON null (not the string "null").
 - dme_supplies_status: Extract the patient's response about DME or supplies delivery. Classify status as delivered, partially_delivered, not_delivered, ordered_not_received, not_ordered, not_discussed, or unknown. Include specific equipment/supply names and any issues. Return JSON null if DME/supplies were not discussed at all.
+- experience_note: Summarize the patient's feedback about their overall experience at the rehab hospital. Use third person perspective. Report exactly what was stated without interpretation. If the patient did not provide feedback or the question was not asked, write exactly "No feedback was provided."
 - areasForFollowUp: List specific, actionable items that need follow-up after this call. Be concrete with dates, names, and details from the transcript.
 - questionsAndResponses: Extract every distinct question the patient asked and the corresponding response. Include only actual questions, not rhetorical ones.
 
