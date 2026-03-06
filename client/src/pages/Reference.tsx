@@ -117,11 +117,11 @@ export default function Reference() {
                 </div>
                 <div className="bg-[#0d1520] p-3 rounded-lg">
                   <p className="text-[#96d410] font-mono text-sm">transition_status</p>
-                  <p className="text-gray-400 text-sm mt-1">Bulleted text covering all 11 post-discharge topics. Each bullet uses format: <code className="text-[#0098db]">• Topic: [STATUS] detail</code>. Topics: Overall Feeling, Disposition Change, Prescription Pickup, Medication Adherence, Follow-up Appointment, DME or Supplies Delivered, Home Health Visit, Discharge Instructions, Encompass Feedback, Experience Comments, Other.</p>
+                  <p className="text-gray-400 text-sm mt-1">HTML-formatted rich text covering all 11 post-discharge topics. Uses <code className="text-[#0098db]">&lt;b&gt;</code> for labels, <code className="text-[#0098db]">&lt;span class='status-[type]'&gt;</code> for colored status badges, and <code className="text-[#0098db]">&lt;br&gt;</code> for line breaks. Status classes: <code className="text-[#0098db]">status-good</code> (green), <code className="text-[#0098db]">status-warning</code> (yellow), <code className="text-[#0098db]">status-poor</code> (red), <code className="text-[#0098db]">status-info</code> (blue), <code className="text-[#0098db]">status-neutral</code> (gray).</p>
                 </div>
                 <div className="bg-[#0d1520] p-3 rounded-lg">
                   <p className="text-[#96d410] font-mono text-sm">follow_up_areas</p>
-                  <p className="text-gray-400 text-sm mt-1">Bulleted text listing follow-up items tied directly to issues found in transition_status. Only includes items for topics that had problems or gaps.</p>
+                  <p className="text-gray-400 text-sm mt-1">HTML-formatted rich text using <code className="text-[#0098db]">&lt;ul&gt;</code> and <code className="text-[#0098db]">&lt;li&gt;</code> tags with <code className="text-[#0098db]">&lt;b&gt;</code> for topic names. Only includes items for topics that had problems or gaps.</p>
                 </div>
               </div>
             </div>
@@ -129,8 +129,48 @@ export default function Reference() {
             <Separator className="bg-[#0098db]/10" />
 
             <div>
-              <h3 className="text-white font-semibold mb-2">Status Categories</h3>
-              <p className="text-gray-400 text-sm mb-3">Each transition_status bullet includes a [STATUS] tag. Here are the possible values per topic:</p>
+              <h3 className="text-white font-semibold mb-2">HTML Status Classes</h3>
+              <p className="text-gray-400 text-sm mb-3">The transition_status field returns HTML with these CSS classes for status indicators:</p>
+              <div className="bg-[#0d1520] p-4 rounded-lg text-sm space-y-3">
+                <div className="flex items-center gap-3">
+                  <span className="status-good">Good</span>
+                  <code className="text-gray-400 text-xs">status-good</code>
+                  <span className="text-gray-500 text-xs">— Green: positive outcomes</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="status-warning">Fair</span>
+                  <code className="text-gray-400 text-xs">status-warning</code>
+                  <span className="text-gray-500 text-xs">— Yellow: caution / partial</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="status-poor">Poor</span>
+                  <code className="text-gray-400 text-xs">status-poor</code>
+                  <span className="text-gray-500 text-xs">— Red: negative / missed</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="status-info">Has Questions</span>
+                  <code className="text-gray-400 text-xs">status-info</code>
+                  <span className="text-gray-500 text-xs">— Blue: informational</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="status-neutral">Not Discussed</span>
+                  <code className="text-gray-400 text-xs">status-neutral</code>
+                  <span className="text-gray-500 text-xs">— Gray: not discussed / unknown</span>
+                </div>
+              </div>
+              <h4 className="text-white font-semibold mb-2 mt-4 text-sm">Example HTML Output</h4>
+              <pre className="bg-[#0d1520] text-gray-300 p-4 rounded-lg text-xs overflow-x-auto">
+{`<b>Overall Feeling:</b> <span class='status-poor'>Poor</span><br>
+Patient reports weakness and dizziness since discharge.<br><br>
+
+<b>Prescription Pickup:</b> <span class='status-warning'>Partially Picked Up</span><br>
+Patient's daughter reports most prescriptions picked up but blood thinner
+pending prior authorization.<br><br>
+
+<b>Follow-up Appointment:</b> <span class='status-poor'>Cancelled</span><br>
+Patient cancelled appointment due to lack of transportation.<br><br>`}
+              </pre>
+              <h4 className="text-white font-semibold mb-2 mt-4 text-sm">Status Values Per Topic</h4>
               <div className="bg-[#0d1520] p-4 rounded-lg text-sm space-y-2">
                 <p className="text-gray-300"><span className="text-[#0098db]">Overall Feeling:</span> Good, Fair, Poor, Not Discussed</p>
                 <p className="text-gray-300"><span className="text-[#0098db]">Disposition Change:</span> No Readmission, Readmitted, Not Discussed</p>
