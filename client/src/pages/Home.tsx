@@ -5,10 +5,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Play, CheckCircle2, AlertCircle, FileText, ListChecks, ClipboardList, Settings2, RotateCcw, AlertTriangle, FileSearch } from "lucide-react";
+import { Loader2, Play, CheckCircle2, AlertCircle, FileText, ListChecks, ClipboardList, Settings2, RotateCcw, AlertTriangle, FileSearch, BookOpen } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Link } from "wouter";
 
 const SAMPLE_TRANSCRIPTS: Record<string, { label: string; transcript: string }> = {
   struggling: {
@@ -170,7 +171,13 @@ export default function Home() {
               Activation Intelligence
             </span>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            <Link href="/reference">
+              <Button variant="outline" size="sm" className="border-primary/20 text-primary hover:bg-primary/5 text-xs" data-testid="link-api-reference">
+                <BookOpen className="h-3.5 w-3.5 mr-1.5" />
+                API Reference
+              </Button>
+            </Link>
             <Badge variant="outline" className="font-medium text-xs py-1 px-2 border-primary/20 text-primary bg-primary/5">
               Environment: Testing
             </Badge>
