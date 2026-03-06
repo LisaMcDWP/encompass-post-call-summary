@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Play, CheckCircle2, AlertCircle, FileText, ListChecks, MessageSquareText } from "lucide-react";
+import { Loader2, Play, CheckCircle2, AlertCircle, FileText, ListChecks, MessageSquareText, Activity } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 
@@ -19,24 +19,24 @@ const generateMockResponse = (callId: string) => {
           callId: callId || "call_mock_12345",
           processedAt: new Date().toISOString(),
           analysis: {
-            summary: "The customer called regarding an issue with their recent billing statement. They were charged twice for the monthly subscription. The agent apologized, verified the duplicate charge, and initiated a refund process which will take 3-5 business days. The customer was satisfied with the resolution.",
+            summary: "The patient called regarding transportation issues for their upcoming oncology appointment. The care guide successfully identified the barrier, engaged the patient using motivational interviewing, and arranged a non-emergency medical transport. The patient confirmed they will be able to attend the appointment.",
             areasForFollowUp: [
-              "Verify the refund of $49.99 has been successfully processed to the customer's credit card ending in 4455.",
-              "Investigate the root cause of the duplicate billing system error to prevent future occurrences.",
-              "Send a confirmation email to the customer once the refund clears."
+              "Confirm the transport service (MedRide) arrives at 9:30 AM on Tuesday.",
+              "Follow up with the patient post-appointment to ensure adherence to new care plan.",
+              "Update the SDoH screening profile to note recurring transportation barriers."
             ],
             questionsAndResponses: [
               {
-                question: "Why was I charged twice this month?",
-                response: "I see the duplicate charge here. It looks like a system error on our end during the billing cycle. I apologize for the inconvenience."
+                question: "What if the driver doesn't show up?",
+                response: "I've set up a direct line for you. If they aren't there by 9:45 AM, call me immediately and I will arrange an alternative."
               },
               {
-                question: "How long will it take to get my money back?",
-                response: "I've initiated the refund right now. It typically takes 3 to 5 business days for the funds to appear back on your card."
+                question: "Do I need to pay for this ride?",
+                response: "No, this service is fully covered as part of your care program."
               },
               {
-                question: "Do I need to do anything else?",
-                response: "No, you're all set. I've handled everything on my end and you'll receive an email confirmation shortly."
+                question: "What should I bring to the appointment?",
+                response: "Please bring your ID, your updated medication list, and the forms we mailed to you last week."
               }
             ]
           }
@@ -46,21 +46,25 @@ const generateMockResponse = (callId: string) => {
   });
 };
 
-const SAMPLE_TRANSCRIPT = `Agent: Thank you for calling Customer Support, my name is Alex. How can I help you today?
-Customer: Hi Alex, I'm calling because I just looked at my bank statement and I was charged twice for my monthly subscription.
-Agent: I completely understand your concern, and I apologize for that. Let me pull up your account. Could you verify your name and the last four digits of your card?
-Customer: John Smith, and the card ends in 4455.
-Agent: Thank you, John. Yes, I see the duplicate charge here. It looks like a system error on our end during the billing cycle. Why was I charged twice this month? It was definitely a glitch in our automated system. I apologize for the inconvenience.
-Customer: Okay. How long will it take to get my money back?
-Agent: I've initiated the refund right now. It typically takes 3 to 5 business days for the funds to appear back on your card.
-Customer: Alright, that works. Do I need to do anything else?
-Agent: No, you're all set. I've handled everything on my end and you'll receive an email confirmation shortly.
-Customer: Great, thanks for your help Alex.
-Agent: You're very welcome. Have a wonderful rest of your day!`;
+const SAMPLE_TRANSCRIPT = `Care Guide: Hello, this is Sarah from Guideway Care. Am I speaking with Mr. Davis?
+Patient: Yes, this is him.
+Care Guide: Hi Mr. Davis. I'm calling to check in before your oncology appointment next Tuesday at 10:30 AM. How are you feeling about getting there?
+Patient: To be honest, I'm not sure I can make it. My daughter usually drives me, but she had to pick up an extra shift at work.
+Care Guide: I completely understand, and it's great that you shared that with me. It's very important we keep that appointment to stay on track with your treatment. What if I could arrange a medical transport to pick you up and bring you back home at no cost to you?
+Patient: Really? That would be a huge relief. I was stressing over it.
+Care Guide: Absolutely. Let's get that set up right now. I'll schedule them to arrive at your house by 9:30 AM. What if the driver doesn't show up?
+Patient: I don't know, what should I do?
+Care Guide: I've set up a direct line for you. If they aren't there by 9:45 AM, call me immediately and I will arrange an alternative. Do I need to pay for this ride?
+Patient: No, you said it was covered, right?
+Care Guide: Exactly, this service is fully covered as part of your care program. 
+Patient: Thank you, Sarah. What should I bring to the appointment?
+Care Guide: Please bring your ID, your updated medication list, and the forms we mailed to you last week.
+Patient: Got it. I'll have them ready.
+Care Guide: Wonderful. I'll call you Monday to confirm the transport details. Have a good weekend, Mr. Davis!`;
 
 export default function Home() {
   const [callId, setCallId] = useState("");
-  const [transcript, setTranscript] = useState(SAMPLE_TRANSCRIPT);
+  const [transcript, setTranscript] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<any>(null);
   const { toast } = useToast();
@@ -98,89 +102,102 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground p-6 md:p-10 font-sans">
-      <div className="max-w-6xl mx-auto space-y-8">
-        
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-6">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Gemini Transcript Analyzer</h1>
-            <p className="text-muted-foreground mt-2">
-              Test interface for the GCP-deployed Gemini processing API.
-            </p>
+    <div className="min-h-screen bg-background text-foreground font-sans">
+      {/* Guideway Branded Header */}
+      <header className="bg-white border-b border-border sticky top-0 z-10 shadow-sm">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <img src="/images/guideway-logo.svg" alt="Guideway Care Logo" className="h-8" />
+            <span className="ml-4 text-sm font-medium text-muted-foreground border-l border-border pl-4 hidden sm:inline-block">
+              Activation Intelligence
+            </span>
           </div>
           <div className="flex gap-2">
-            <Badge variant="outline" className="font-mono text-xs py-1 px-2">
-              Status: Mock UI
+            <Badge variant="outline" className="font-medium text-xs py-1 px-2 border-primary/20 text-primary bg-primary/5">
+              Environment: Testing
             </Badge>
-            <Badge variant="secondary" className="font-mono text-xs py-1 px-2 bg-blue-500/10 text-blue-500 hover:bg-blue-500/20">
-              GCP Deployment Pending
+            <Badge variant="secondary" className="font-medium text-xs py-1 px-2 bg-[#96d410]/20 text-[#4d6d08] border border-[#96d410]/30 hover:bg-[#96d410]/30 hidden sm:inline-flex">
+              GCP Ready
             </Badge>
           </div>
-        </header>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto p-6 md:p-10 space-y-8">
+        
+        <div className="flex flex-col space-y-2">
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground">
+            Transcript Analysis API
+          </h1>
+          <p className="text-muted-foreground text-lg max-w-2xl">
+            Evaluate the Gemini-powered pipeline for extracting structured clinical and operational insights from patient interaction transcripts.
+          </p>
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           
           {/* Input Section */}
-          <Card className="border-border bg-card/50 backdrop-blur-sm shadow-xl shadow-black/10">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5 text-primary" />
+          <Card className="border-border/60 bg-card shadow-lg shadow-black/5 flex flex-col h-full">
+            <CardHeader className="bg-muted/30 border-b border-border/40 pb-4">
+              <CardTitle className="flex items-center gap-2 text-primary">
+                <FileText className="h-5 w-5" />
                 API Request Payload
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-sm">
                 Configure the input parameters for the Gemini analysis endpoint.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-6 pt-6 flex-grow">
               <div className="space-y-2">
-                <Label htmlFor="callId" className="text-sm font-medium">Call ID (Optional)</Label>
+                <Label htmlFor="callId" className="text-sm font-semibold text-foreground">Call ID (Optional)</Label>
                 <Input 
                   id="callId" 
-                  placeholder="e.g. call_987654321" 
+                  placeholder="e.g. gdw_call_987654321" 
                   value={callId}
                   onChange={(e) => setCallId(e.target.value)}
-                  className="font-mono text-sm bg-background/50"
+                  className="font-mono text-sm shadow-inner bg-background"
                   data-testid="input-call-id"
                 />
               </div>
               
-              <div className="space-y-2">
+              <div className="space-y-2 flex-grow flex flex-col">
                 <div className="flex justify-between items-center">
-                  <Label htmlFor="transcript" className="text-sm font-medium">Transcript</Label>
+                  <Label htmlFor="transcript" className="text-sm font-semibold text-foreground">Patient Interaction Transcript</Label>
                   <Button 
-                    variant="ghost" 
+                    variant="outline" 
                     size="sm" 
-                    className="h-6 text-xs px-2 text-muted-foreground"
+                    className="h-7 text-xs px-3 border-primary/20 text-primary hover:bg-primary hover:text-white transition-colors"
                     onClick={() => setTranscript(SAMPLE_TRANSCRIPT)}
                   >
-                    Load Sample
+                    Load MPG Sample
                   </Button>
                 </div>
                 <Textarea 
                   id="transcript" 
                   placeholder="Paste call transcript here..." 
-                  className="min-h-[300px] font-mono text-sm leading-relaxed bg-background/50 resize-y"
+                  className="min-h-[300px] flex-grow font-mono text-sm leading-relaxed bg-background shadow-inner resize-y border-border/60 focus-visible:ring-primary"
                   value={transcript}
                   onChange={(e) => setTranscript(e.target.value)}
                   data-testid="input-transcript"
                 />
               </div>
             </CardContent>
-            <CardFooter className="bg-muted/20 border-t border-border/50 pt-6">
+            <CardFooter className="bg-muted/30 border-t border-border/40 pt-6">
               <Button 
                 onClick={handleTestApi} 
                 disabled={isProcessing}
-                className="w-full font-medium"
+                className="w-full font-semibold text-base shadow-md bg-primary hover:bg-secondary text-white transition-all"
+                size="lg"
                 data-testid="button-test-api"
               >
                 {isProcessing ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Processing via Gemini...
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    Processing via Gemini AI...
                   </>
                 ) : (
                   <>
-                    <Play className="mr-2 h-4 w-4" />
+                    <Play className="mr-2 h-5 w-5" />
                     Execute API Request
                   </>
                 )}
@@ -191,76 +208,82 @@ export default function Home() {
           {/* Output Section */}
           <div className="space-y-6">
             {!result && !isProcessing && (
-              <Card className="h-full border-dashed border-2 border-border/60 bg-transparent flex flex-col items-center justify-center p-12 text-center text-muted-foreground">
-                <MessageSquareText className="h-12 w-12 mb-4 opacity-20" />
-                <h3 className="text-lg font-medium mb-2 text-foreground">Awaiting Execution</h3>
-                <p className="max-w-sm text-sm">
-                  Click "Execute API Request" to simulate sending the transcript to the Gemini model and viewing the structured output.
+              <Card className="h-full border-dashed border-2 border-border/60 bg-muted/10 flex flex-col items-center justify-center p-12 text-center text-muted-foreground min-h-[500px]">
+                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                  <MessageSquareText className="h-8 w-8 text-primary/50" />
+                </div>
+                <h3 className="text-xl font-semibold mb-2 text-foreground">Awaiting Execution</h3>
+                <p className="max-w-md text-sm">
+                  Click "Execute API Request" to simulate sending the transcript to the GCP-deployed Gemini model and view the structured output for our Care Guides.
                 </p>
               </Card>
             )}
 
             {isProcessing && (
-              <Card className="h-full border-border bg-card/50 flex flex-col items-center justify-center p-12 text-center shadow-xl shadow-black/10">
-                <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
-                <h3 className="text-lg font-medium mb-2">Analyzing Transcript</h3>
-                <div className="space-y-2 text-sm text-muted-foreground max-w-sm">
-                  <p className="flex items-center justify-center gap-2"><CheckCircle2 className="h-4 w-4 text-green-500" /> Connecting to GCP...</p>
-                  <p className="flex items-center justify-center gap-2"><CheckCircle2 className="h-4 w-4 text-green-500" /> Invoking Gemini Model...</p>
-                  <p className="flex items-center justify-center gap-2 animate-pulse"><Loader2 className="h-4 w-4 animate-spin" /> Extracting insights...</p>
+              <Card className="h-full border-border/60 bg-card flex flex-col items-center justify-center p-12 text-center shadow-lg shadow-black/5 min-h-[500px]">
+                <div className="relative mb-6">
+                  <div className="absolute inset-0 rounded-full blur-xl bg-primary/20 animate-pulse"></div>
+                  <Loader2 className="h-12 w-12 animate-spin text-primary relative z-10" />
+                </div>
+                <h3 className="text-xl font-semibold mb-4 text-foreground">Analyzing Transcript</h3>
+                <div className="space-y-3 text-sm text-muted-foreground bg-muted/30 p-4 rounded-lg border border-border/50 w-full max-w-xs text-left">
+                  <p className="flex items-center gap-3"><CheckCircle2 className="h-4 w-4 text-accent" /> <span className="font-mono text-xs">Authenticating GCP...</span></p>
+                  <p className="flex items-center gap-3"><CheckCircle2 className="h-4 w-4 text-accent" /> <span className="font-mono text-xs">Invoking Gemini Model...</span></p>
+                  <p className="flex items-center gap-3"><Loader2 className="h-4 w-4 animate-spin text-primary" /> <span className="font-mono text-xs text-foreground font-medium">Extracting MPG insights...</span></p>
                 </div>
               </Card>
             )}
 
             {result && !isProcessing && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <Card className="border-green-500/20 bg-green-500/5 shadow-xl shadow-black/10">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-mono text-green-500 flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4" />
-                      HTTP 200 OK
+                <Card className="border-accent/30 bg-accent/5 shadow-md">
+                  <CardHeader className="pb-3 bg-white/50">
+                    <CardTitle className="text-sm font-mono text-[#4d6d08] flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-accent" />
+                      HTTP 200 OK — Response Processed
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="font-mono text-xs overflow-auto bg-black/40 p-4 rounded-md mx-6 mb-6 text-green-400/90">
+                  <CardContent className="font-mono text-xs overflow-auto bg-[#172938] p-4 rounded-b-lg text-green-400">
                     <pre>{JSON.stringify({ 
                       callId: result.data.callId,
                       processedAt: result.data.processedAt,
-                      status: "success"
+                      status: "success",
+                      model: "gemini-1.5-pro"
                     }, null, 2)}</pre>
                   </CardContent>
                 </Card>
 
                 {/* Summary */}
-                <Card className="border-border bg-card/50 shadow-xl shadow-black/10">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <FileText className="h-5 w-5 text-blue-500" />
-                      Summary
+                <Card className="border-border/60 bg-card shadow-md">
+                  <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
+                    <CardTitle className="text-lg flex items-center gap-2 text-secondary">
+                      <FileText className="h-5 w-5 text-primary" />
+                      Interaction Summary
                     </CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <p className="text-sm leading-relaxed text-card-foreground/90">
+                  <CardContent className="pt-4">
+                    <p className="text-sm leading-relaxed text-foreground">
                       {result.data.analysis.summary}
                     </p>
                   </CardContent>
                 </Card>
 
                 {/* Follow Up Areas */}
-                <Card className="border-border bg-card/50 shadow-xl shadow-black/10">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <ListChecks className="h-5 w-5 text-orange-500" />
-                      Areas for Follow-up
+                <Card className="border-border/60 bg-card shadow-md">
+                  <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
+                    <CardTitle className="text-lg flex items-center gap-2 text-secondary">
+                      <ListChecks className="h-5 w-5 text-accent" />
+                      Care Guide Follow-up Actions
                     </CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <ul className="space-y-3">
+                  <CardContent className="pt-4">
+                    <ul className="space-y-4">
                       {result.data.analysis.areasForFollowUp.map((item: string, i: number) => (
-                        <li key={i} className="flex gap-3 text-sm group">
-                          <span className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-orange-500/10 text-orange-500 text-xs font-medium border border-orange-500/20">
+                        <li key={i} className="flex gap-3 text-sm group items-start">
+                          <span className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-accent/20 text-[#4d6d08] text-xs font-bold border border-accent/40 shadow-sm">
                             {i + 1}
                           </span>
-                          <span className="text-card-foreground/90 leading-relaxed pt-0.5">{item}</span>
+                          <span className="text-foreground leading-relaxed pt-0.5">{item}</span>
                         </li>
                       ))}
                     </ul>
@@ -268,22 +291,28 @@ export default function Home() {
                 </Card>
 
                 {/* Q&A */}
-                <Card className="border-border bg-card/50 shadow-xl shadow-black/10">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <MessageSquareText className="h-5 w-5 text-purple-500" />
-                      Questions & Responses
+                <Card className="border-border/60 bg-card shadow-md">
+                  <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
+                    <CardTitle className="text-lg flex items-center gap-2 text-secondary">
+                      <MessageSquareText className="h-5 w-5 text-primary" />
+                      Extracted Q&A
                     </CardTitle>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="pt-4">
                     <div className="space-y-4">
                       {result.data.analysis.questionsAndResponses.map((item: any, i: number) => (
-                        <div key={i} className="rounded-lg border border-border bg-background/50 overflow-hidden">
-                          <div className="bg-purple-500/10 px-4 py-2 border-b border-border/50">
-                            <p className="text-sm font-medium text-purple-400">Q: {item.question}</p>
+                        <div key={i} className="rounded-lg border border-border/60 bg-background overflow-hidden shadow-sm">
+                          <div className="bg-muted/50 px-4 py-2.5 border-b border-border/60">
+                            <p className="text-sm font-semibold text-secondary flex items-start gap-2">
+                              <span className="text-primary font-bold">Q:</span> 
+                              {item.question}
+                            </p>
                           </div>
-                          <div className="px-4 py-3">
-                            <p className="text-sm text-muted-foreground">A: {item.response}</p>
+                          <div className="px-4 py-3 bg-card">
+                            <p className="text-sm text-foreground flex items-start gap-2">
+                              <span className="text-accent font-bold">A:</span> 
+                              {item.response}
+                            </p>
                           </div>
                         </div>
                       ))}
@@ -294,7 +323,7 @@ export default function Home() {
             )}
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
