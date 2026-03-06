@@ -30,6 +30,7 @@ export default function Home() {
   const [transcript, setTranscript] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [showRawJson, setShowRawJson] = useState(false);
   const { toast } = useToast();
 
   const handleTestApi = async () => {
@@ -211,21 +212,36 @@ export default function Home() {
             {result && !isProcessing && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <Card className="border-accent/30 bg-accent/5 shadow-md">
-                  <CardHeader className="pb-3 bg-white/50">
+                  <CardHeader className="pb-3 bg-white/50 flex flex-row items-center justify-between">
                     <CardTitle className="text-sm font-mono text-[#4d6d08] flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-accent" />
                       HTTP 200 OK — Response Processed
                     </CardTitle>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs px-3 font-mono text-muted-foreground hover:text-foreground"
+                      onClick={() => setShowRawJson(!showRawJson)}
+                      data-testid="button-toggle-json"
+                    >
+                      {showRawJson ? "Hide" : "Show"} Full JSON
+                    </Button>
                   </CardHeader>
-                  <CardContent className="font-mono text-xs overflow-auto bg-[#172938] p-4 rounded-b-lg text-green-400">
-                    <pre>{JSON.stringify({ 
-                      callId: result.data.callId,
-                      processedAt: result.data.processedAt,
-                      processingTimeMs: result.data.processingTimeMs,
-                      status: "success",
-                      model: "gemini-2.0-flash"
-                    }, null, 2)}</pre>
-                  </CardContent>
+                  {showRawJson ? (
+                    <CardContent className="font-mono text-xs overflow-auto bg-[#172938] p-4 rounded-b-lg text-green-400 max-h-[600px]">
+                      <pre>{JSON.stringify(result, null, 2)}</pre>
+                    </CardContent>
+                  ) : (
+                    <CardContent className="font-mono text-xs overflow-auto bg-[#172938] p-4 rounded-b-lg text-green-400">
+                      <pre>{JSON.stringify({ 
+                        callId: result.data.callId,
+                        processedAt: result.data.processedAt,
+                        processingTimeMs: result.data.processingTimeMs,
+                        status: "success",
+                        model: "gemini-2.0-flash"
+                      }, null, 2)}</pre>
+                    </CardContent>
+                  )}
                 </Card>
 
                 {/* Summary */}
