@@ -52,6 +52,10 @@ export interface TranscriptAnalysis {
     scheduled: boolean;
     details: string;
   };
+  homeHealthVisit: {
+    status: string;
+    details: string;
+  };
 }
 
 export async function analyzeTranscript(
@@ -94,6 +98,10 @@ Your response MUST be valid JSON with exactly this structure:
   "followUpScheduledStatus": {
     "scheduled": true/false,
     "details": "Was a follow-up appointment or call scheduled? Provide date/time if mentioned. If not discussed, say 'No follow-up scheduling discussed in transcript.'"
+  },
+  "homeHealthVisit": {
+    "status": "completed | scheduled | pending | not_discussed | cancelled | unknown",
+    "details": "Has a home health visit occurred, or what is the current status? Include dates, provider names, and any relevant details mentioned. If not discussed, say 'No home health visit discussed in transcript.'"
   }
 }
 
@@ -105,6 +113,7 @@ Guidelines:
 - prescriptionPickupStatus: Identify if prescriptions were picked up, pending, or not discussed. Include any pharmacy or medication pickup details.
 - medicationNotes: Capture all medication-related questions, barriers to adherence, and general notes. This includes cost concerns, side effects, confusion about dosing, or difficulty obtaining medications.
 - followUpScheduledStatus: Determine if any future appointment or follow-up call was scheduled during this interaction.
+- homeHealthVisit: Determine if a home health visit has already occurred, is scheduled, is pending, or was not discussed. Include provider details and dates if available.
 
 Call ID: ${callId}
 

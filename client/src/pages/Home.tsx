@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Play, CheckCircle2, AlertCircle, FileText, ListChecks, MessageSquareText, Activity, HeartPulse, Pill, ClipboardList, CalendarCheck } from "lucide-react";
+import { Loader2, Play, CheckCircle2, AlertCircle, FileText, ListChecks, MessageSquareText, Activity, HeartPulse, Pill, ClipboardList, CalendarCheck, Home } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 
@@ -364,6 +364,25 @@ export default function Home() {
                             </ul>
                           </div>
                         )}
+                      </CardContent>
+                    </Card>
+                  )}
+                  {/* Home Health Visit */}
+                  {result.data.analysis.homeHealthVisit && (
+                    <Card className="border-border/60 bg-card shadow-md md:col-span-2" data-testid="card-home-health">
+                      <CardHeader className="pb-2 border-b border-border/40 bg-muted/20">
+                        <CardTitle className="text-base flex items-center gap-2 text-secondary">
+                          <Home className="h-4 w-4 text-teal-600" />
+                          Home Health Visit
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="pt-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Badge variant={result.data.analysis.homeHealthVisit.status === "completed" ? "default" : "outline"} className="text-xs capitalize" data-testid="badge-home-health-status">
+                            {result.data.analysis.homeHealthVisit.status.replace(/_/g, " ")}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-foreground leading-relaxed">{result.data.analysis.homeHealthVisit.details}</p>
                       </CardContent>
                     </Card>
                   )}
