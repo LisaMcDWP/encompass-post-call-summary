@@ -47,7 +47,7 @@ export async function registerRoutes(
         callId: resolvedCallId,
         transcriptLength: transcript.length,
         summary: analysis.summary,
-        areasForFollowUp: analysis.areasForFollowUp,
+        areasForFollowUp: [analysis.follow_up_areas],
         questionsCount: 0,
         processingTimeMs: processingTime,
         status: "success",

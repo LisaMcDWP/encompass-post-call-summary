@@ -424,26 +424,36 @@ export default function Home() {
                 </Card>
 
                 {/* Follow Up Areas */}
-                <Card className="border-border/60 bg-card shadow-md">
-                  <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
-                    <CardTitle className="text-lg flex items-center gap-2 text-secondary">
-                      <ListChecks className="h-5 w-5 text-accent" />
-                      Care Guide Follow-up Actions
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-4">
-                    <ul className="space-y-4">
-                      {result.data.analysis.areasForFollowUp.map((item: string, i: number) => (
-                        <li key={i} className="flex gap-3 text-sm group items-start" data-testid={`text-followup-${i}`}>
-                          <span className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-accent/20 text-[#4d6d08] text-xs font-bold border border-accent/40 shadow-sm">
-                            {i + 1}
-                          </span>
-                          <span className="text-foreground leading-relaxed pt-0.5">{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                </Card>
+                {result.data.analysis.follow_up_areas && (
+                  <Card className="border-border/60 bg-card shadow-md" data-testid="card-follow-up-areas">
+                    <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
+                      <CardTitle className="text-lg flex items-center gap-2 text-secondary">
+                        <ListChecks className="h-5 w-5 text-accent" />
+                        Follow-up Areas
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <div className="bg-muted/30 p-4 rounded-lg border border-border/50" data-testid="text-follow-up-areas"
+                        dangerouslySetInnerHTML={{
+                          __html: result.data.analysis.follow_up_areas
+                            .split(/\n/)
+                            .map((line: string) => line.trim())
+                            .filter((line: string) => line.length > 0)
+                            .map((line: string) => {
+                              const stripped = line.replace(/^[•\-\*]\s*/, "").replace(/\*\*/g, "");
+                              const boldMatch = stripped.match(/^([^:]+):\s*(.*)/);
+                              if (boldMatch) {
+                                return `<li style="margin-bottom:6px;"><strong>${boldMatch[1]}:</strong> ${boldMatch[2]}</li>`;
+                              }
+                              return `<li style="margin-bottom:6px;">${stripped}</li>`;
+                            })
+                            .join("")
+                            .replace(/^(.*)$/, '<ul style="list-style-type:disc; padding-left:1.25rem; margin:0; font-size:0.875rem; line-height:1.7; color:inherit;">$1</ul>')
+                        }}
+                      />
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* Transition Status */}
                 {result.data.analysis.transition_status && (
