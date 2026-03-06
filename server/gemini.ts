@@ -35,6 +35,23 @@ export interface TranscriptAnalysis {
   summary: string;
   areasForFollowUp: string[];
   questionsAndResponses: { question: string; response: string }[];
+  dispositionChange: {
+    changed: boolean;
+    details: string;
+  };
+  prescriptionPickupStatus: {
+    status: string;
+    details: string;
+  };
+  medicationNotes: {
+    questions: string[];
+    barriers: string[];
+    notes: string;
+  };
+  followUpScheduledStatus: {
+    scheduled: boolean;
+    details: string;
+  };
 }
 
 export async function analyzeTranscript(
@@ -60,13 +77,34 @@ Your response MUST be valid JSON with exactly this structure:
   "questionsAndResponses": [
     {"question": "exact question asked by patient", "response": "exact or paraphrased response given by care guide"},
     ...
-  ]
+  ],
+  "dispositionChange": {
+    "changed": true/false,
+    "details": "Describe if the patient's disposition changed — did they visit a hospital, ER, or SNF (Skilled Nursing Facility)? If yes, provide details. If no evidence of a disposition change, say 'No disposition change identified in transcript.'"
+  },
+  "prescriptionPickupStatus": {
+    "status": "picked_up | not_picked_up | not_discussed | in_progress | unknown",
+    "details": "Describe the prescription pickup status based on what was discussed in the call. Include medication names if mentioned."
+  },
+  "medicationNotes": {
+    "questions": ["Any medication-related questions the patient asked"],
+    "barriers": ["Any barriers to medication adherence mentioned (cost, side effects, confusion, transportation, etc.)"],
+    "notes": "General commentary on medication-related discussion in the call. If no medication discussion, say 'No medication discussion in transcript.'"
+  },
+  "followUpScheduledStatus": {
+    "scheduled": true/false,
+    "details": "Was a follow-up appointment or call scheduled? Provide date/time if mentioned. If not discussed, say 'No follow-up scheduling discussed in transcript.'"
+  }
 }
 
 Guidelines:
 - summary: Focus on the patient's concern, actions taken by the care guide, and the outcome.
 - areasForFollowUp: List specific, actionable items that need follow-up after this call. Be concrete with dates, names, and details from the transcript.
 - questionsAndResponses: Extract every distinct question the patient asked and the corresponding response. Include only actual questions, not rhetorical ones.
+- dispositionChange: Look for any mention of hospital visits, ER visits, SNF stays, or changes in the patient's care setting. Report what you find or indicate nothing was mentioned.
+- prescriptionPickupStatus: Identify if prescriptions were picked up, pending, or not discussed. Include any pharmacy or medication pickup details.
+- medicationNotes: Capture all medication-related questions, barriers to adherence, and general notes. This includes cost concerns, side effects, confusion about dosing, or difficulty obtaining medications.
+- followUpScheduledStatus: Determine if any future appointment or follow-up call was scheduled during this interaction.
 
 Call ID: ${callId}
 
