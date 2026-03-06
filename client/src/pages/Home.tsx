@@ -9,43 +9,6 @@ import { Loader2, Play, CheckCircle2, AlertCircle, FileText, ListChecks, Message
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 
-// Mock response generation to simulate the API
-const generateMockResponse = (callId: string) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({
-        status: "success",
-        data: {
-          callId: callId || "call_mock_12345",
-          processedAt: new Date().toISOString(),
-          analysis: {
-            summary: "The patient called regarding transportation issues for their upcoming oncology appointment. The care guide successfully identified the barrier, engaged the patient using motivational interviewing, and arranged a non-emergency medical transport. The patient confirmed they will be able to attend the appointment.",
-            areasForFollowUp: [
-              "Confirm the transport service (MedRide) arrives at 9:30 AM on Tuesday.",
-              "Follow up with the patient post-appointment to ensure adherence to new care plan.",
-              "Update the SDoH screening profile to note recurring transportation barriers."
-            ],
-            questionsAndResponses: [
-              {
-                question: "What if the driver doesn't show up?",
-                response: "I've set up a direct line for you. If they aren't there by 9:45 AM, call me immediately and I will arrange an alternative."
-              },
-              {
-                question: "Do I need to pay for this ride?",
-                response: "No, this service is fully covered as part of your care program."
-              },
-              {
-                question: "What should I bring to the appointment?",
-                response: "Please bring your ID, your updated medication list, and the forms we mailed to you last week."
-              }
-            ]
-          }
-        }
-      });
-    }, 2500); // 2.5s delay to simulate Gemini processing
-  });
-};
-
 const SAMPLE_TRANSCRIPT = `Care Guide: Hello, this is Sarah from Guideway Care. Am I speaking with Mr. Davis?
 Patient: Yes, this is him.
 Care Guide: Hi Mr. Davis. I'm calling to check in before your oncology appointment next Tuesday at 10:30 AM. How are you feeling about getting there?
@@ -83,17 +46,27 @@ export default function Home() {
     setResult(null);
     
     try {
-      // Simulate API call
-      const response = await generateMockResponse(callId);
-      setResult(response);
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ callId: callId.trim() || undefined, transcript: transcript.trim() }),
+      });
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to analyze transcript");
+      }
+      
+      setResult(data);
       toast({
         title: "Analysis Complete",
-        description: "Successfully processed transcript using Gemini.",
+        description: `Processed in ${data.data.processingTimeMs}ms via Gemini.`,
       });
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to process transcript.",
+        description: error.message || "Failed to process transcript.",
         variant: "destructive",
       });
     } finally {
@@ -168,6 +141,7 @@ export default function Home() {
                     size="sm" 
                     className="h-7 text-xs px-3 border-primary/20 text-primary hover:bg-primary hover:text-white transition-colors"
                     onClick={() => setTranscript(SAMPLE_TRANSCRIPT)}
+                    data-testid="button-load-sample"
                   >
                     Load MPG Sample
                   </Button>
@@ -214,7 +188,7 @@ export default function Home() {
                 </div>
                 <h3 className="text-xl font-semibold mb-2 text-foreground">Awaiting Execution</h3>
                 <p className="max-w-md text-sm">
-                  Click "Execute API Request" to simulate sending the transcript to the GCP-deployed Gemini model and view the structured output for our Care Guides.
+                  Click "Execute API Request" to send the transcript to your GCP Gemini model and view the structured output. Results are also logged to BigQuery.
                 </p>
               </Card>
             )}
@@ -247,8 +221,9 @@ export default function Home() {
                     <pre>{JSON.stringify({ 
                       callId: result.data.callId,
                       processedAt: result.data.processedAt,
+                      processingTimeMs: result.data.processingTimeMs,
                       status: "success",
-                      model: "gemini-1.5-pro"
+                      model: "gemini-2.0-flash"
                     }, null, 2)}</pre>
                   </CardContent>
                 </Card>
@@ -279,7 +254,7 @@ export default function Home() {
                   <CardContent className="pt-4">
                     <ul className="space-y-4">
                       {result.data.analysis.areasForFollowUp.map((item: string, i: number) => (
-                        <li key={i} className="flex gap-3 text-sm group items-start">
+                        <li key={i} className="flex gap-3 text-sm group items-start" data-testid={`text-followup-${i}`}>
                           <span className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-accent/20 text-[#4d6d08] text-xs font-bold border border-accent/40 shadow-sm">
                             {i + 1}
                           </span>
@@ -301,7 +276,7 @@ export default function Home() {
                   <CardContent className="pt-4">
                     <div className="space-y-4">
                       {result.data.analysis.questionsAndResponses.map((item: any, i: number) => (
-                        <div key={i} className="rounded-lg border border-border/60 bg-background overflow-hidden shadow-sm">
+                        <div key={i} className="rounded-lg border border-border/60 bg-background overflow-hidden shadow-sm" data-testid={`card-qa-${i}`}>
                           <div className="bg-muted/50 px-4 py-2.5 border-b border-border/60">
                             <p className="text-sm font-semibold text-secondary flex items-start gap-2">
                               <span className="text-primary font-bold">Q:</span> 
