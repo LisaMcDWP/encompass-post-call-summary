@@ -62,7 +62,7 @@ export const DEFAULT_PROMPT_TEMPLATE = `You are an expert healthcare call analys
 
 Your response MUST be valid JSON with exactly this structure:
 {
-  "summary": "A concise 2-4 sentence summary of the interaction including key outcomes",
+  "summary": "A brief overall summary of the call based on the questions asked of the patient and their responses. If the patient answered the call, include the following topics at a minimum (only comment on what the patient actually responded to): how the patient is feeling overall since being discharged; whether the patient visited an ER, hospital, or Skilled Nursing Facility since discharge (include specific details on why, where, date if known, and if they are currently at home or still in a care facility); prescription pickup status and any barriers to picking them up or any issues/concerns/questions with taking them; status of follow-up appointment scheduled with their doctor; home health visit status (whether it occurred or was scheduled and any details); any questions specific to discharge instructions or other questions for the care team; any feedback on how their stay was at Encompass; any experience comments related to the call; and any other important information the patient provided.",
   "areasForFollowUp": ["actionable follow-up item 1", "actionable follow-up item 2", ...],
   "questionsAndResponses": [
     {"question": "exact question asked by patient", "response": "exact or paraphrased response given by care guide"},
@@ -92,7 +92,7 @@ Your response MUST be valid JSON with exactly this structure:
 }
 
 Guidelines:
-- summary: Focus on the patient's concern, actions taken by the care guide, and the outcome.
+- summary: Provide a brief overall summary based on questions asked and the patient's responses. Only comment on what the patient actually responded to. If the patient answered the call, cover at a minimum: (1) how the patient is feeling since discharge, (2) any ER/hospital/SNF visits since discharge with specifics (why, where, date, current location), (3) prescription pickup status and barriers/issues/concerns, (4) follow-up appointment status with their doctor, (5) home health visit status and details, (6) any discharge instruction questions or questions for the care team, (7) feedback on their stay at Encompass, (8) experience comments about the call, (9) any other important information shared. Do not include information the patient did not discuss.
 - areasForFollowUp: List specific, actionable items that need follow-up after this call. Be concrete with dates, names, and details from the transcript.
 - questionsAndResponses: Extract every distinct question the patient asked and the corresponding response. Include only actual questions, not rhetorical ones.
 - dispositionChange: Look for any mention of hospital visits, ER visits, SNF stays, or changes in the patient's care setting. Report what you find or indicate nothing was mentioned.
