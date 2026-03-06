@@ -59,7 +59,6 @@ export async function registerRoutes(
           callId: resolvedCallId,
           processedAt: new Date().toISOString(),
           processingTimeMs: processingTime,
-          promptUsed,
           analysis,
         },
       });
