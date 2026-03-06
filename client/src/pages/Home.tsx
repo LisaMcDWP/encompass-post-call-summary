@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Play, CheckCircle2, AlertCircle, FileText, ListChecks, MessageSquareText, Activity, HeartPulse, Pill, ClipboardList, CalendarCheck, Home } from "lucide-react";
+import { Loader2, Play, CheckCircle2, AlertCircle, FileText, ListChecks, MessageSquareText, Activity, HeartPulse, Pill, ClipboardList, CalendarCheck, Home as HomeIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 
@@ -372,7 +372,7 @@ export default function Home() {
                     <Card className="border-border/60 bg-card shadow-md md:col-span-2" data-testid="card-home-health">
                       <CardHeader className="pb-2 border-b border-border/40 bg-muted/20">
                         <CardTitle className="text-base flex items-center gap-2 text-secondary">
-                          <Home className="h-4 w-4 text-teal-600" />
+                          <HomeIcon className="h-4 w-4 text-teal-600" />
                           Home Health Visit
                         </CardTitle>
                       </CardHeader>
