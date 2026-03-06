@@ -1,5 +1,4 @@
 import { VertexAI } from "@google-cloud/vertexai";
-import { GoogleAuth } from "google-auth-library";
 
 function getCredentials() {
   const raw = process.env.GCP_SERVICE_ACCOUNT_KEY;
@@ -20,15 +19,13 @@ function getVertexAI(): VertexAI {
     const credentials = getCredentials();
     const projectId = getProjectId();
 
-    const auth = new GoogleAuth({
-      credentials,
-      scopes: ["https://www.googleapis.com/auth/cloud-platform"],
-    });
-
     vertexAI = new VertexAI({
       project: projectId,
       location: "us-central1",
-      googleAuth: auth as any,
+      googleAuthOptions: {
+        credentials,
+        scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+      },
     });
   }
   return vertexAI;
