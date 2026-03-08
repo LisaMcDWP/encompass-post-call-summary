@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION } from "./gemini";
-import { logTooBigQuery } from "./bigquery";
+import { logTooBigQuery, insertCallObservations } from "./bigquery";
 import { randomUUID, createHash } from "crypto";
 import { storage } from "./storage";
 import { insertObservationSchema, enumValueSchema, insertContextParameterSchema } from "@shared/schema";
@@ -100,6 +100,25 @@ export async function registerRoutes(
         questionsCount: 0,
         processingTimeMs: processingTime,
         status: "success",
+      });
+
+      const processedAt = new Date().toISOString();
+
+      await insertCallObservations({
+        callId: resolvedSourceId,
+        careFlowId: care_flow_id || null,
+        interactionDatetime: interaction_datetime || processedAt,
+        sourceType: source_type || null,
+        sourceId: resolvedSourceId,
+        processedAt,
+        processingTimeMs: processingTime,
+        promptVersion: promptVersion,
+        promptVersionDate: promptVersionDate,
+        contextValues,
+        summary: analysis.summary,
+        dispositionChange: analysis.disposition_change,
+        dispositionChangeNote: analysis.disposition_change_note,
+        observations: analysis.observations,
       });
 
       return res.json({
