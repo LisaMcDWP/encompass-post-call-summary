@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Eye, Copy, Check } from "lucide-react";
@@ -9,10 +10,23 @@ export default function GeneratedPrompt() {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [location] = useLocation();
   const { toast } = useToast();
 
   useEffect(() => {
     fetchPrompt();
+  }, [location]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") fetchPrompt();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", () => fetchPrompt());
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", () => fetchPrompt());
+    };
   }, []);
 
   async function fetchPrompt() {
