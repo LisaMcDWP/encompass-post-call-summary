@@ -61,6 +61,71 @@ Patient: Honestly, it was excellent. The staff were incredibly kind and professi
 Care Guide: That's wonderful feedback, Mr. Rodriguez. It sounds like you're doing really well. I'll check back in with you next week. Take care!
 Patient: Thank you, James. I appreciate the call.`,
   },
+  brief_checkin: {
+    label: "Brief Check-in (No DME/HH)",
+    transcript: `Care Guide: Hi, this is Laura from Guideway Care. Am I speaking with Mrs. Davis?
+Patient: Yes, this is Patricia.
+Care Guide: Hi Patricia. I'm calling to check in on you since your discharge from Encompass last week. How have you been feeling overall?
+Patient: I've been feeling fair. Some good days and some not-so-good days. My energy is still really low.
+Care Guide: I'm sorry to hear that. Have you had to go back to the ER, hospital, or any care facility since your discharge?
+Patient: No, I've been staying home. Just taking it easy.
+Care Guide: Good. Were you able to pick up all of your prescriptions?
+Patient: Yes, my son picked everything up the day I got home. All of them were ready.
+Care Guide: Great. Are you having any issues or concerns with your medications?
+Patient: No, I've been taking everything as prescribed. No problems so far.
+Care Guide: Wonderful. Have you had or scheduled your follow-up appointment with your doctor?
+Patient: Yes, I have an appointment next Wednesday with Dr. Kim.
+Care Guide: Perfect. Do you have any questions about the discharge instructions you received?
+Patient: No, everything was pretty clear. The nurses went over it all before I left.
+Care Guide: How was your overall experience at Encompass?
+Patient: It was good. Everyone was professional and caring. I felt well taken care of.
+Care Guide: That's great to hear. Thank you for your time, Patricia. We'll check in again next week.
+Patient: Thank you, Laura.`,
+  },
+  medication_focus: {
+    label: "Medication Issues (No DME/HH)",
+    transcript: `Care Guide: Hello, this is David from Guideway Care. Am I speaking with Mr. Jackson?
+Patient: Yes, speaking.
+Care Guide: Hi Mr. Jackson. I'm calling to follow up after your discharge from Encompass Rehabilitation. How are you feeling overall?
+Patient: Not the best. I've been having some stomach issues and I'm not sleeping well.
+Care Guide: I'm sorry to hear that. Have you had to visit the ER or hospital since your discharge?
+Patient: No, nothing like that.
+Care Guide: Were you able to pick up all of your medications from the pharmacy?
+Patient: I got most of them but one of them wasn't covered by my insurance. The pharmacy said they need to contact my doctor for an alternative. That was five days ago and I still haven't heard anything.
+Care Guide: That's concerning. Which medication is it?
+Patient: The muscle relaxer. I've been having bad spasms without it.
+Care Guide: I'll make sure that gets followed up on. Are you having any other issues with your medications?
+Patient: Yeah, the new stomach medication gives me terrible headaches. I've been thinking about stopping it but I don't want to do that without asking.
+Care Guide: That's wise. Have you scheduled or attended your follow-up appointment?
+Patient: I'm supposed to see my doctor next Monday. I plan to ask about the medications then.
+Care Guide: Good. Do you have any questions about your discharge instructions?
+Patient: Not really. I've been following them as best I can.
+Care Guide: How was your experience during your stay at Encompass?
+Patient: Mixed. The therapy sessions were really helpful but the communication between staff could have been better. Sometimes I'd get different instructions from different people.
+Care Guide: Thank you for that feedback, Mr. Jackson. I'll get the medication issue flagged right away. Take care.
+Patient: Thanks, David.`,
+  },
+  caregiver_quick: {
+    label: "Caregiver Quick Call (No DME/HH)",
+    transcript: `Care Guide: Hi, this is Monica from Guideway Care. I'm calling for Mrs. Chen. Am I speaking with a family member?
+Patient's Son: Yes, this is her son, Kevin. Mom doesn't speak much English so I handle these calls.
+Care Guide: Thank you, Kevin. I'm checking in on your mother since her discharge from Encompass. How has she been feeling overall?
+Patient's Son: She's been doing okay. She says she feels fair — some pain in her knee but it's getting better each day.
+Care Guide: That's good to hear. Has she had to go back to the hospital or ER since discharge?
+Patient's Son: No, she's been home the whole time. No issues like that.
+Care Guide: Were you able to pick up all of her prescriptions?
+Patient's Son: Yes, I picked them all up. But she's having trouble with the pain medication. She says it makes her dizzy so she's only taking half the dose.
+Care Guide: That's important for the doctor to know. Is she having any other medication concerns?
+Patient's Son: Just that one. Everything else she's taking fine.
+Care Guide: Has she had her follow-up appointment?
+Patient's Son: Not yet. We're trying to schedule it but Dr. Lee's office is booked out for two weeks. We're on a cancellation list.
+Care Guide: Okay. Any questions about the discharge instructions?
+Patient's Son: No, I translated everything for her and we've been following the guidelines.
+Care Guide: How was her experience at Encompass?
+Patient's Son: She said it was positive. She really liked her physical therapist and felt safe there. No complaints.
+Care Guide: Thank you, Kevin. I'll note the medication concern and follow up. Take care.
+Patient's Son: Thank you, Monica.`,
+  },
   readmitted: {
     label: "Readmitted Patient",
     transcript: `Care Guide: Hello, this is Sarah from Guideway Care. Am I speaking with Mr. Williams?
