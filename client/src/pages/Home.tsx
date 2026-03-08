@@ -300,7 +300,9 @@ export default function Home() {
                       onClick={() => {
                         setSourceText(sample.transcript);
                         if (sample.context) {
-                          setContextValues(prev => ({ ...prev, ...sample.context }));
+                          setContextValues({ ...sample.context });
+                        } else {
+                          setContextValues({});
                         }
                       }}
                       data-testid={`button-load-sample-${key}`}

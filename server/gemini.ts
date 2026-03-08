@@ -112,7 +112,14 @@ function buildContextBlock(contextParams: ContextParameter[]): string {
     return `- ${p.displayName} (${p.name}): {{CONTEXT_${p.name.toUpperCase()}}} ${req}${enumHint}`;
   });
 
-  return `\n###KNOWN CONTEXT\nThe following context information has been provided about this interaction. Use it to enrich your analysis where relevant. If a value is empty or "N/A", treat it as not provided.\n${lines.join("\n")}\n`;
+  return `\n###KNOWN CONTEXT\nThe following context information has been provided about this interaction. Use it to enrich your analysis where relevant. If a value is empty or "N/A", treat it as not provided.\n${lines.join("\n")}
+
+IMPORTANT CONTEXT RULES:
+- If a topic was NOT DISCUSSED in the transcript (the care guide did not ask about it), always use "Not Discussed" regardless of context values. "Not Discussed" means the care guide did not bring up the topic during the call.
+- "Not applicable" or "Not Ordered" should ONLY be used when the topic WAS discussed in the call and the response indicates it does not apply or was not ordered.
+- Context values like "home_health_ordered" or "dme_or_supplies_ordered" provide background information but do NOT change whether a topic was discussed. If home_health_ordered is "false" but the care guide never asked about home health, the value should be "Not Discussed", not "Not applicable".
+- If home_health_ordered is "true" and home health was not discussed, that is still "Not Discussed" — and should be noted as a potential gap in the follow-up areas.
+`;
 }
 
 export function buildPromptTemplate(activeObservations: Observation[], summaryInstruction?: string, contextParams?: ContextParameter[], observationsGuidance?: string): string {
