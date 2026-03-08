@@ -67,7 +67,6 @@ async function ensureContextParamsTable(): Promise<void> {
         display_name STRING NOT NULL,
         description STRING,
         data_type STRING NOT NULL,
-        is_required BOOL NOT NULL,
         is_active BOOL NOT NULL,
         display_order INT64 NOT NULL
       )`,
@@ -351,7 +350,7 @@ export class BigQueryStorage implements IStorage {
     };
 
     await client.query({
-      query: `INSERT INTO ${table} (id, name, display_name, description, data_type, is_required, is_active, display_order) VALUES (@id, @name, @display_name, @description, @data_type, @is_required, @is_active, @display_order)`,
+      query: `INSERT INTO ${table} (id, name, display_name, description, data_type, is_active, display_order) VALUES (@id, @name, @display_name, @description, @data_type, @is_active, @display_order)`,
       params: row,
     });
 
