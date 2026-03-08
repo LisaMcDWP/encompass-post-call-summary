@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link } from "wouter";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, GripVertical, X, BookOpen, ArrowLeft } from "lucide-react";
+import { Plus, Pencil, Trash2, GripVertical, X } from "lucide-react";
 
 interface EnumValue {
   label: string;
@@ -201,34 +200,14 @@ export default function Observations() {
   }, {} as Record<string, Observation[]>);
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-sans">
-      <header className="bg-white border-b border-border sticky top-0 z-10 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <img src="/images/guideway-logo.svg" alt="Guideway Care Logo" className="h-8" />
-            <span className="text-xl font-bold text-[#172938]">Guideway Care</span>
-          </div>
-          <nav className="flex items-center gap-4">
-            <Link href="/" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors" data-testid="link-home">
-              Test API
-            </Link>
-            <Link href="/observations" className="text-sm font-medium text-primary border-b-2 border-primary pb-0.5" data-testid="link-observations">
-              Observations
-            </Link>
-            <Link href="/reference" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors flex items-center gap-1" data-testid="link-reference">
-              <BookOpen className="h-3.5 w-3.5" /> Reference
-            </Link>
-          </nav>
-        </div>
-      </header>
-
-      <main className="max-w-5xl mx-auto p-6 md:p-10 space-y-6">
+    <div className="h-full bg-background text-foreground font-sans">
+      <div className="max-w-5xl mx-auto p-6 md:p-8 space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground" data-testid="text-page-title">
-              Observation Definitions
+            <h1 className="text-2xl font-bold tracking-tight text-foreground" data-testid="text-page-title">
+              Observations
             </h1>
-            <p className="text-muted-foreground mt-1">
+            <p className="text-muted-foreground text-sm mt-1">
               Define the observation topics used in the Gemini analysis prompt. Drag to reorder.
             </p>
           </div>
@@ -301,7 +280,7 @@ export default function Observations() {
             </CardContent>
           </Card>
         )}
-      </main>
+      </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">

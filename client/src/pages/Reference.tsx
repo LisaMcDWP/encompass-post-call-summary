@@ -1,28 +1,18 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Link } from "wouter";
-import { ArrowLeft, BookOpen, Code2, Webhook, Server, Key, Activity } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { BookOpen, Code2, Webhook, Server, Key, Activity } from "lucide-react";
 
 export default function Reference() {
   return (
-    <div className="min-h-screen" style={{ background: "linear-gradient(180deg, #101a22 0%, #172938 100%)" }}>
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="flex items-center gap-4 mb-8">
-          <Link href="/">
-            <Button variant="outline" size="sm" className="border-[#0098db]/30 text-[#0098db] hover:bg-[#0098db]/10" data-testid="link-back-home">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Test UI
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-              <BookOpen className="h-6 w-6 text-[#0098db]" />
-              API Reference
-            </h1>
-            <p className="text-sm text-gray-400">Guideway Care Post-Call Analysis API</p>
-          </div>
+    <div className="h-full overflow-y-auto" style={{ background: "linear-gradient(180deg, #101a22 0%, #172938 100%)" }}>
+      <div className="max-w-4xl mx-auto px-6 py-8">
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+            <BookOpen className="h-6 w-6 text-[#0098db]" />
+            API Reference
+          </h1>
+          <p className="text-sm text-gray-400 mt-1">Guideway Care Post-Call Analysis API</p>
         </div>
 
         <Card className="bg-[#1a2f40]/80 border-[#0098db]/20 mb-6">

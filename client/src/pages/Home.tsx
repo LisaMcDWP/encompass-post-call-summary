@@ -5,11 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Play, CheckCircle2, AlertCircle, FileText, ListChecks, ClipboardList, Settings2, RotateCcw, AlertTriangle, FileSearch, BookOpen } from "lucide-react";
+import { Loader2, Play, CheckCircle2, AlertCircle, FileText, ListChecks, ClipboardList, Settings2, RotateCcw, AlertTriangle, FileSearch } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Link } from "wouter";
 
 const SAMPLE_TRANSCRIPTS: Record<string, { label: string; transcript: string }> = {
   struggling: {
@@ -165,46 +164,15 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-sans">
-      {/* Guideway Branded Header */}
-      <header className="bg-white border-b border-border sticky top-0 z-10 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <img src="/images/guideway-logo.svg" alt="Guideway Care Logo" className="h-8" />
-            <span className="ml-4 text-sm font-medium text-muted-foreground border-l border-border pl-4 hidden sm:inline-block">
-              Activation Intelligence
-            </span>
-          </div>
-          <div className="flex gap-2 items-center">
-            <Link href="/observations">
-              <Button variant="outline" size="sm" className="border-primary/20 text-primary hover:bg-primary/5 text-xs" data-testid="link-observations">
-                Observations
-              </Button>
-            </Link>
-            <Link href="/reference">
-              <Button variant="outline" size="sm" className="border-primary/20 text-primary hover:bg-primary/5 text-xs" data-testid="link-api-reference">
-                <BookOpen className="h-3.5 w-3.5 mr-1.5" />
-                API Reference
-              </Button>
-            </Link>
-            <Badge variant="outline" className="font-medium text-xs py-1 px-2 border-primary/20 text-primary bg-primary/5">
-              Environment: Testing
-            </Badge>
-            <Badge variant="secondary" className="font-medium text-xs py-1 px-2 bg-[#96d410]/20 text-[#4d6d08] border border-[#96d410]/30 hover:bg-[#96d410]/30 hidden sm:inline-flex">
-              GCP Ready
-            </Badge>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto p-6 md:p-10 space-y-8">
+    <div className="h-full bg-background text-foreground font-sans">
+      <div className="max-w-7xl mx-auto p-6 md:p-8 space-y-6">
         
-        <div className="flex flex-col space-y-2">
-          <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground">
-            Transcript Analysis API
+        <div className="flex flex-col space-y-1">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            API Playground
           </h1>
-          <p className="text-muted-foreground text-lg max-w-2xl">
-            Evaluate the Gemini-powered pipeline for extracting structured clinical and operational insights from patient interaction transcripts.
+          <p className="text-muted-foreground text-sm">
+            Test the Gemini-powered analysis pipeline with sample or custom source text.
           </p>
         </div>
 
@@ -520,7 +488,7 @@ export default function Home() {
             )}
           </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 }
