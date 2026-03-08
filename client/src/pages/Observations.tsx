@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, GripVertical, X, Save, Loader2, Info } from "lucide-react";
+import { Plus, Pencil, Trash2, GripVertical, X, Save, Loader2, Info, GripVertical as Grip } from "lucide-react";
 
 interface EnumValue {
   label: string;
@@ -470,16 +470,45 @@ export default function Observations() {
             {form.valueType === "enum" && (
               <div className="space-y-3">
                 <Label className="text-sm font-semibold">Enum Values</Label>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {form.value.map((v, i) => {
                     const c = COLOR_MAP[v.color] || COLOR_MAP.GRAY;
                     return (
-                      <div key={i} className="flex items-center gap-2">
-                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium border ${c.bg} ${c.text} ${c.border} flex-grow`}>
-                          {v.label}
-                        </span>
-                        <span className="text-xs text-muted-foreground w-16">{v.color}</span>
-                        <Button variant="ghost" size="sm" onClick={() => removeEnumValue(i)} className="h-7 w-7 p-0" data-testid={`button-remove-enum-${i}`}>
+                      <div key={i} className="flex items-center gap-2 group">
+                        <span className={`w-3 h-3 rounded-full shrink-0 ${c.bg} border ${c.border}`} />
+                        <Input
+                          value={v.label}
+                          onChange={(e) => {
+                            const updated = [...form.value];
+                            updated[i] = { ...updated[i], label: e.target.value };
+                            setForm({ ...form, value: updated });
+                          }}
+                          className="text-sm h-8 flex-grow"
+                          data-testid={`input-enum-label-${i}`}
+                        />
+                        <Select
+                          value={v.color}
+                          onValueChange={(c) => {
+                            const updated = [...form.value];
+                            updated[i] = { ...updated[i], color: c as EnumValue["color"] };
+                            setForm({ ...form, value: updated });
+                          }}
+                        >
+                          <SelectTrigger className="h-8 w-36 text-xs" data-testid={`select-enum-color-${i}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(COLOR_MAP).map(([key, val]) => (
+                              <SelectItem key={key} value={key}>
+                                <span className="flex items-center gap-2">
+                                  <span className={`w-3 h-3 rounded-full ${val.bg} border ${val.border}`} />
+                                  {val.label}
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button variant="ghost" size="sm" onClick={() => removeEnumValue(i)} className="h-7 w-7 p-0 opacity-50 hover:opacity-100" data-testid={`button-remove-enum-${i}`}>
                           <X className="h-3.5 w-3.5" />
                         </Button>
                       </div>
@@ -488,7 +517,7 @@ export default function Observations() {
                 </div>
                 <div className="flex items-end gap-2">
                   <div className="flex-grow space-y-1">
-                    <Label className="text-xs text-muted-foreground">Label</Label>
+                    <Label className="text-xs text-muted-foreground">Add new value</Label>
                     <Input
                       placeholder="e.g. Picked Up"
                       value={newEnumLabel}
