@@ -176,6 +176,11 @@ export default function Home() {
             </span>
           </div>
           <div className="flex gap-2 items-center">
+            <Link href="/observations">
+              <Button variant="outline" size="sm" className="border-primary/20 text-primary hover:bg-primary/5 text-xs" data-testid="link-observations">
+                Observations
+              </Button>
+            </Link>
             <Link href="/reference">
               <Button variant="outline" size="sm" className="border-primary/20 text-primary hover:bg-primary/5 text-xs" data-testid="link-api-reference">
                 <BookOpen className="h-3.5 w-3.5 mr-1.5" />
