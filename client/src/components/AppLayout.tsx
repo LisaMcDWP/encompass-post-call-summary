@@ -41,7 +41,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-3">
             <img src="/images/guideway-logo.svg" alt="Guideway Care Logo" className="h-7" />
             <span className="text-sm font-medium text-muted-foreground border-l border-border pl-3 hidden sm:inline-block">
-              Activation Intelligence
+              Call Observation Extraction
             </span>
           </div>
           <div className="flex gap-2 items-center">
