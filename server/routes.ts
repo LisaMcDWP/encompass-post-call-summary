@@ -15,8 +15,9 @@ export async function registerRoutes(
   app.get("/api/prompt", async (_req, res) => {
     const activeObs = await storage.getActiveObservations();
     const summaryInstruction = await storage.getSetting("summary_instruction");
+    const observationsGuidance = await storage.getSetting("observations_prompt_guidance");
     const contextParams = await storage.getActiveContextParameters();
-    const prompt = buildPromptTemplate(activeObs, summaryInstruction || undefined, contextParams);
+    const prompt = buildPromptTemplate(activeObs, summaryInstruction || undefined, contextParams, observationsGuidance || undefined);
     res.json({ prompt });
   });
 
@@ -46,6 +47,7 @@ export async function registerRoutes(
     try {
       const activeObs = await storage.getActiveObservations();
       const summaryInstruction = await storage.getSetting("summary_instruction");
+      const observationsGuidance = await storage.getSetting("observations_prompt_guidance");
       const contextParams = await storage.getActiveContextParameters();
 
       const contextValues: Record<string, string> = {};
@@ -57,7 +59,6 @@ export async function registerRoutes(
         }
       }
 
-
       const { analysis } = await analyzeTranscript(
         resolvedSourceId,
         source_text.trim(),
@@ -65,7 +66,8 @@ export async function registerRoutes(
         undefined,
         summaryInstruction || undefined,
         contextParams,
-        contextValues
+        contextValues,
+        observationsGuidance || undefined
       );
       const processingTime = Date.now() - startTime;
 
@@ -280,6 +282,60 @@ export async function registerRoutes(
         params: { key: "summary_instruction" },
       });
       res.json({ success: true, instruction: DEFAULT_SUMMARY_INSTRUCTION });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/settings/observations-guidance", async (_req, res) => {
+    try {
+      const stored = await storage.getSetting("observations_prompt_guidance");
+      res.json({
+        guidance: stored || "",
+        isCustom: stored !== null,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/settings/observations-guidance", async (req, res) => {
+    try {
+      const { guidance } = req.body;
+      if (typeof guidance !== "string") {
+        return res.status(400).json({ message: "A guidance string is required." });
+      }
+      if (guidance.trim().length === 0) {
+        const client = (await import("@google-cloud/bigquery")).BigQuery;
+        const raw = process.env.GCP_SERVICE_ACCOUNT_KEY;
+        const projectId = process.env.GCP_PROJECT_ID;
+        if (!raw || !projectId) throw new Error("GCP credentials not set");
+        const bq = new client({ projectId, credentials: JSON.parse(raw) });
+        await bq.query({
+          query: `DELETE FROM \`${projectId}.call_information.settings\` WHERE key = @key`,
+          params: { key: "observations_prompt_guidance" },
+        });
+        return res.json({ success: true, guidance: "" });
+      }
+      await storage.setSetting("observations_prompt_guidance", guidance.trim());
+      res.json({ success: true, guidance: guidance.trim() });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/settings/observations-guidance", async (_req, res) => {
+    try {
+      const client = (await import("@google-cloud/bigquery")).BigQuery;
+      const raw = process.env.GCP_SERVICE_ACCOUNT_KEY;
+      const projectId = process.env.GCP_PROJECT_ID;
+      if (!raw || !projectId) throw new Error("GCP credentials not set");
+      const bq = new client({ projectId, credentials: JSON.parse(raw) });
+      await bq.query({
+        query: `DELETE FROM \`${projectId}.call_information.settings\` WHERE key = @key`,
+        params: { key: "observations_prompt_guidance" },
+      });
+      res.json({ success: true, guidance: "" });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

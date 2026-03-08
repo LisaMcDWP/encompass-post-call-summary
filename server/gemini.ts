@@ -115,7 +115,7 @@ function buildContextBlock(contextParams: ContextParameter[]): string {
   return `\n###KNOWN CONTEXT\nThe following context information has been provided about this interaction. Use it to enrich your analysis where relevant. If a value is empty or "N/A", treat it as not provided.\n${lines.join("\n")}\n`;
 }
 
-export function buildPromptTemplate(activeObservations: Observation[], summaryInstruction?: string, contextParams?: ContextParameter[]): string {
+export function buildPromptTemplate(activeObservations: Observation[], summaryInstruction?: string, contextParams?: ContextParameter[], observationsGuidance?: string): string {
   const instruction = summaryInstruction || DEFAULT_SUMMARY_INSTRUCTION;
   const contextBlock = buildContextBlock(contextParams || []);
 
@@ -175,7 +175,7 @@ Guidelines:
 - summary: Provide a brief overall summary based on questions asked and the patient's responses. Only comment on what the patient actually responded to. Do not include information the patient did not discuss.
 - disposition_change: Set to true ONLY if the patient was readmitted to an ER, hospital, SNF, or any care facility since discharge. Set to false if no readmission occurred or the topic was not discussed.
 - disposition_change_note: If disposition_change is true, describe where the patient currently is (home, hospital, care facility, SNF, rehab, etc.). Return JSON null if the patient was not readmitted, the question was not asked, or no response was provided.
-- observations: Return an array with exactly ${topicCount} objects, one for each observation topic. Each object must have: name (the key), display_name, domain, value_type, value (the extracted value from the transcript — use the exact label for enum types, or null if not discussed), and detail (a brief sentence explaining what was observed). Preserve the name, display_name, domain, and value_type exactly as specified above.
+- observations: Return an array with exactly ${topicCount} objects, one for each observation topic. Each object must have: name (the key), display_name, domain, value_type, value (the extracted value from the transcript — use the exact label for enum types, or null if not discussed), and detail (a brief sentence explaining what was observed). Preserve the name, display_name, domain, and value_type exactly as specified above.${observationsGuidance ? `\n- GENERAL OBSERVATIONS GUIDANCE: ${observationsGuidance}` : ""}
 - transition_status: Return a single HTML string as a valid JSON string value. Do NOT start the string with a quote or any character before the first <b> tag. Use inline style attributes with single quotes for color-coded status badges (e.g. style='display:inline-block;padding:1px 8px;...'). Use <b> for topic labels, <span style='...'> for colored status badges, and <br> for line breaks. Include all ${topicCount} topics. The entire value must be a properly quoted JSON string. The first character of the string content must be the opening < of the first <b> tag. IMPORTANT: List all discussed topics first, then group any "Not Discussed" topics together at the bottom of the output.
 - follow_up_areas: Return a single HTML string as a valid JSON string value. Use <ul>/<li> with <b> for topic names. Use single quotes for any HTML attributes. Only include items with issues. If none, return "<p>No follow-up areas identified.</p>".
 Source ID: {{SOURCE_ID}}
@@ -191,7 +191,8 @@ export async function analyzeTranscript(
   customPrompt?: string,
   summaryInstruction?: string,
   contextParams?: ContextParameter[],
-  contextValues?: Record<string, string>
+  contextValues?: Record<string, string>,
+  observationsGuidance?: string
 ): Promise<{ analysis: TranscriptAnalysis; promptUsed: string }> {
   const vertex = getVertexAI();
 
@@ -203,7 +204,7 @@ export async function analyzeTranscript(
     },
   });
 
-  const template = customPrompt || buildPromptTemplate(activeObservations, summaryInstruction, contextParams);
+  const template = customPrompt || buildPromptTemplate(activeObservations, summaryInstruction, contextParams, observationsGuidance);
   let prompt = template
     .replace("{{SOURCE_ID}}", sourceId)
     .replace("{{SOURCE_TEXT}}", sourceText);

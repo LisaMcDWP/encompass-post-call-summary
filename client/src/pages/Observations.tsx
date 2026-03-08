@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, GripVertical, X } from "lucide-react";
+import { Plus, Pencil, Trash2, GripVertical, X, Save, Loader2, Info } from "lucide-react";
 
 interface EnumValue {
   label: string;
@@ -59,6 +59,9 @@ export default function Observations() {
   const [newEnumLabel, setNewEnumLabel] = useState("");
   const [newEnumColor, setNewEnumColor] = useState<string>("GREEN");
   const [draggedId, setDraggedId] = useState<number | null>(null);
+  const [generalGuidance, setGeneralGuidance] = useState("");
+  const [savedGuidance, setSavedGuidance] = useState("");
+  const [guidanceSaving, setGuidanceSaving] = useState(false);
   const { toast } = useToast();
 
   const fetchObservations = async () => {
@@ -67,8 +70,43 @@ export default function Observations() {
     setObservations(data);
   };
 
+  const fetchGuidance = async () => {
+    try {
+      const res = await fetch("/api/settings/observations-guidance");
+      if (res.ok) {
+        const data = await res.json();
+        setGeneralGuidance(data.guidance || "");
+        setSavedGuidance(data.guidance || "");
+      }
+    } catch {}
+  };
+
+  const saveGuidance = async () => {
+    try {
+      setGuidanceSaving(true);
+      const res = await fetch("/api/settings/observations-guidance", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ guidance: generalGuidance }),
+      });
+      if (res.ok) {
+        setSavedGuidance(generalGuidance.trim());
+        setGeneralGuidance(generalGuidance.trim());
+        toast({ title: "Saved", description: "General observations guidance updated." });
+      } else {
+        const err = await res.json();
+        toast({ title: "Error", description: err.message, variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Failed to save guidance.", variant: "destructive" });
+    } finally {
+      setGuidanceSaving(false);
+    }
+  };
+
   useEffect(() => {
     fetchObservations();
+    fetchGuidance();
   }, []);
 
   const openCreate = () => {
@@ -224,6 +262,42 @@ export default function Observations() {
             <Plus className="h-4 w-4 mr-2" /> Add Observation
           </Button>
         </div>
+
+        <Card className="border-border/60 shadow-sm">
+          <CardContent className="py-4 px-5 space-y-3">
+            <div className="flex items-center gap-2">
+              <Info className="h-4 w-4 text-primary shrink-0" />
+              <Label className="text-sm font-semibold">General Observations Prompt Guidance</Label>
+              <span className="text-muted-foreground text-xs font-normal">(optional)</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Additional instructions for Gemini that apply to all observations. This is injected into the prompt alongside per-observation guidance.
+            </p>
+            <Textarea
+              value={generalGuidance}
+              onChange={(e) => setGeneralGuidance(e.target.value)}
+              placeholder="e.g. When the patient did not answer the phone or the call was not completed, mark all observations as Not Discussed..."
+              rows={3}
+              className="text-sm"
+              data-testid="textarea-general-guidance"
+            />
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                onClick={saveGuidance}
+                disabled={guidanceSaving || generalGuidance === savedGuidance}
+                className="bg-primary hover:bg-primary/90"
+                data-testid="button-save-general-guidance"
+              >
+                {guidanceSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Save className="h-3.5 w-3.5 mr-1.5" />}
+                Save
+              </Button>
+              {generalGuidance !== savedGuidance && (
+                <span className="text-[11px] text-orange-500">Unsaved changes</span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         <div className="space-y-3">
           {observations.map((obs) => (
