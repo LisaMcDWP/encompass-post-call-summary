@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, GripVertical, Variable } from "lucide-react";
+import { Plus, Pencil, Trash2, GripVertical, Variable, X } from "lucide-react";
 
 interface ContextParameter {
   id: number;
@@ -17,17 +17,19 @@ interface ContextParameter {
   displayName: string;
   description: string;
   dataType: string;
+  enumValues: string[];
   isActive: boolean;
   displayOrder: number;
 }
 
-const DATA_TYPE_OPTIONS = ["string", "number", "date", "boolean"];
+const DATA_TYPE_OPTIONS = ["string", "number", "date", "boolean", "enum"];
 
 const DATA_TYPE_LABELS: Record<string, string> = {
   string: "Text",
   number: "Number",
   date: "Date",
   boolean: "Yes/No",
+  enum: "Enum",
 };
 
 const emptyForm = {
@@ -35,6 +37,7 @@ const emptyForm = {
   displayName: "",
   description: "",
   dataType: "string",
+  enumValues: [] as string[],
   isActive: true,
 };
 
@@ -73,6 +76,7 @@ export default function ContextParameters() {
       displayName: p.displayName,
       description: p.description,
       dataType: p.dataType,
+      enumValues: p.enumValues || [],
       isActive: p.isActive,
     });
     setIsDialogOpen(true);
@@ -89,6 +93,7 @@ export default function ContextParameters() {
       displayName: form.displayName.trim(),
       description: form.description.trim(),
       dataType: form.dataType,
+      enumValues: form.dataType === "enum" ? form.enumValues : [],
       isActive: form.isActive,
     };
 
@@ -179,7 +184,7 @@ export default function ContextParameters() {
 {`{
   "source_text": "...",
   "context": {
-${params.filter(p => p.isActive).slice(0, 3).map(p => `    "${p.name}": "${p.dataType === 'number' ? '42' : p.dataType === 'boolean' ? 'true' : p.dataType === 'date' ? '2026-03-01' : 'example value'}"`).join(",\n") || '    "patient_name": "Jane Doe"'}
+${params.filter(p => p.isActive).slice(0, 3).map(p => `    "${p.name}": "${p.dataType === 'number' ? '42' : p.dataType === 'boolean' ? 'true' : p.dataType === 'date' ? '2026-03-01' : p.dataType === 'enum' && p.enumValues?.length ? p.enumValues[0] : 'example value'}"`).join(",\n") || '    "patient_name": "Jane Doe"'}
   }
 }`}
           </pre>
@@ -213,6 +218,13 @@ ${params.filter(p => p.isActive).slice(0, 3).map(p => `    "${p.name}": "${p.dat
                       <Badge variant="outline" className="text-[10px] px-1.5">{DATA_TYPE_LABELS[p.dataType] || p.dataType}</Badge>
                       <span className="text-xs text-muted-foreground font-mono">{p.name}</span>
                     </div>
+                    {p.dataType === "enum" && p.enumValues && p.enumValues.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {p.enumValues.map((val, i) => (
+                          <span key={i} className="text-[10px] bg-muted px-1.5 py-0.5 rounded-full text-muted-foreground">{val}</span>
+                        ))}
+                      </div>
+                    )}
                     {p.description && (
                       <p className="text-[11px] text-muted-foreground mt-1">{p.description}</p>
                     )}
@@ -287,6 +299,44 @@ ${params.filter(p => p.isActive).slice(0, 3).map(p => `    "${p.name}": "${p.dat
                   </SelectContent>
                 </Select>
               </div>
+
+              {form.dataType === "enum" && (
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-semibold">Enum Values</Label>
+                  <div className="flex flex-wrap gap-1.5 min-h-[32px] p-2 border border-border rounded-md bg-background">
+                    {form.enumValues.map((val, idx) => (
+                      <span key={idx} className="inline-flex items-center gap-1 bg-primary/10 text-primary text-xs font-medium px-2 py-0.5 rounded-full" data-testid={`badge-enum-val-${idx}`}>
+                        {val}
+                        <button
+                          type="button"
+                          onClick={() => setForm({ ...form, enumValues: form.enumValues.filter((_, i) => i !== idx) })}
+                          className="hover:text-destructive"
+                          data-testid={`button-remove-enum-${idx}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                    <input
+                      type="text"
+                      className="flex-1 min-w-[100px] outline-none bg-transparent text-sm placeholder:text-muted-foreground"
+                      placeholder="Type a value and press Enter"
+                      data-testid="input-enum-value"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          const val = (e.target as HTMLInputElement).value.trim();
+                          if (val && !form.enumValues.includes(val)) {
+                            setForm({ ...form, enumValues: [...form.enumValues, val] });
+                            (e.target as HTMLInputElement).value = "";
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">Press Enter to add each value. These are the allowed options for this parameter.</p>
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <Label className="text-sm font-semibold">

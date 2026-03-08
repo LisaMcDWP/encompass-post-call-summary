@@ -106,7 +106,10 @@ function buildContextBlock(contextParams: ContextParameter[]): string {
 
   const lines = contextParams.map(p => {
     const req = "(optional)";
-    return `- ${p.displayName} (${p.name}): {{CONTEXT_${p.name.toUpperCase()}}} ${req}`;
+    const enumHint = p.dataType === "enum" && p.enumValues && p.enumValues.length > 0
+      ? ` [Allowed values: ${p.enumValues.join(", ")}]`
+      : "";
+    return `- ${p.displayName} (${p.name}): {{CONTEXT_${p.name.toUpperCase()}}} ${req}${enumHint}`;
   });
 
   return `\n###KNOWN CONTEXT\nThe following context information has been provided about this interaction. Use it to enrich your analysis where relevant. If a value is empty or "N/A", treat it as not provided.\n${lines.join("\n")}\n`;

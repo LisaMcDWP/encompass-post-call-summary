@@ -184,7 +184,8 @@ export async function registerRoutes(
     name: z.string().min(1).regex(/^[a-z][a-z0-9_]*$/, "Name must be lowercase snake_case (letters, numbers, underscores, starting with a letter)"),
     displayName: z.string().min(1),
     description: z.string().default(""),
-    dataType: z.enum(["string", "number", "date", "boolean"]).default("string"),
+    dataType: z.enum(["string", "number", "date", "boolean", "enum"]).default("string"),
+    enumValues: z.array(z.string()).optional().default([]),
     isActive: z.boolean().default(true),
     displayOrder: z.number().int().min(0).default(0),
   });

@@ -60,6 +60,10 @@ async function ensureContextParamsTable(): Promise<void> {
   const fullTable = `${projectId}.${DATASET_ID}.${CONTEXT_PARAMS_TABLE_ID}`;
 
   try {
+    const [rows] = await client.query({ query: `SELECT column_name FROM \`${projectId}.${DATASET_ID}.INFORMATION_SCHEMA.COLUMNS\` WHERE table_name = '${CONTEXT_PARAMS_TABLE_ID}' AND column_name = 'enum_values'` });
+    if (rows.length === 0) {
+      await client.query({ query: `DROP TABLE IF EXISTS \`${fullTable}\`` });
+    }
     await client.query({
       query: `CREATE TABLE IF NOT EXISTS \`${fullTable}\` (
         id INT64 NOT NULL,
@@ -67,6 +71,7 @@ async function ensureContextParamsTable(): Promise<void> {
         display_name STRING NOT NULL,
         description STRING,
         data_type STRING NOT NULL,
+        enum_values STRING,
         is_active BOOL NOT NULL,
         display_order INT64 NOT NULL
       )`,
@@ -84,12 +89,19 @@ async function ensureContextParamsTable(): Promise<void> {
 }
 
 function rowToContextParameter(row: any): ContextParameter {
+  let enumValues: string[] = [];
+  if (row.enum_values) {
+    try {
+      enumValues = typeof row.enum_values === "string" ? JSON.parse(row.enum_values) : row.enum_values;
+    } catch { enumValues = []; }
+  }
   return {
     id: row.id,
     name: row.name,
     displayName: row.display_name,
     description: row.description || "",
     dataType: row.data_type,
+    enumValues,
     isActive: row.is_active,
     displayOrder: row.display_order,
   };
@@ -345,12 +357,13 @@ export class BigQueryStorage implements IStorage {
       display_name: param.displayName,
       description: param.description || "",
       data_type: param.dataType || "string",
+      enum_values: JSON.stringify(param.enumValues || []),
       is_active: param.isActive !== false,
       display_order: param.displayOrder ?? 0,
     };
 
     await client.query({
-      query: `INSERT INTO ${table} (id, name, display_name, description, data_type, is_active, display_order) VALUES (@id, @name, @display_name, @description, @data_type, @is_active, @display_order)`,
+      query: `INSERT INTO ${table} (id, name, display_name, description, data_type, enum_values, is_active, display_order) VALUES (@id, @name, @display_name, @description, @data_type, @enum_values, @is_active, @display_order)`,
       params: row,
     });
 
@@ -372,6 +385,7 @@ export class BigQueryStorage implements IStorage {
     if (data.displayName !== undefined) { setClauses.push("display_name = @displayName"); params.displayName = data.displayName; }
     if (data.description !== undefined) { setClauses.push("description = @description"); params.description = data.description; }
     if (data.dataType !== undefined) { setClauses.push("data_type = @dataType"); params.dataType = data.dataType; }
+    if (data.enumValues !== undefined) { setClauses.push("enum_values = @enumValues"); params.enumValues = JSON.stringify(data.enumValues); }
     if (data.isActive !== undefined) { setClauses.push("is_active = @isActive"); params.isActive = data.isActive; }
     if (data.displayOrder !== undefined) { setClauses.push("display_order = @displayOrder"); params.displayOrder = data.displayOrder; }
 

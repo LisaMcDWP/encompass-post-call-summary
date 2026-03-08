@@ -21,7 +21,8 @@ export const insertContextParameterSchema = z.object({
   name: z.string(),
   displayName: z.string(),
   description: z.string().default(""),
-  dataType: z.enum(["string", "number", "date", "boolean"]).default("string"),
+  dataType: z.enum(["string", "number", "date", "boolean", "enum"]).default("string"),
+  enumValues: z.array(z.string()).optional().default([]),
   isActive: z.boolean().default(true),
   displayOrder: z.number().int().default(0),
 });
@@ -34,6 +35,7 @@ export interface ContextParameter {
   displayName: string;
   description: string;
   dataType: string;
+  enumValues: string[];
   isActive: boolean;
   displayOrder: number;
 }
