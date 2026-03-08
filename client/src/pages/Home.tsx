@@ -284,8 +284,37 @@ export default function Home() {
             </CardHeader>
             <CardContent className="space-y-5 pt-6 flex-grow">
 
+              <div className="space-y-3">
+                <Label className="text-sm font-semibold text-foreground">Load Sample Transcript</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {Object.entries(SAMPLE_TRANSCRIPTS).map(([key, sample]) => (
+                    <Button
+                      key={key}
+                      variant="outline"
+                      size="sm"
+                      className={`h-8 text-xs justify-start transition-colors ${
+                        sample.context
+                          ? "border-amber-300/60 text-amber-700 bg-amber-50/50 hover:bg-amber-100 hover:text-amber-800"
+                          : "border-primary/20 text-primary hover:bg-primary hover:text-white"
+                      }`}
+                      onClick={() => {
+                        setSourceText(sample.transcript);
+                        if (sample.context) {
+                          setContextValues(prev => ({ ...prev, ...sample.context }));
+                        }
+                      }}
+                      data-testid={`button-load-sample-${key}`}
+                    >
+                      {sample.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <Separator />
+
               {contextParams.length > 0 && (
-                <div className="space-y-2 p-4 rounded-lg border border-primary/20 bg-primary/[0.02]">
+                <div className="space-y-3">
                   <Label className="text-sm font-semibold text-foreground">Known Context</Label>
                   <div className="grid grid-cols-2 gap-3">
                     {contextParams.map((cp) => (
@@ -323,31 +352,10 @@ export default function Home() {
                 </div>
               )}
 
+              <Separator />
+
               <div className="space-y-2 flex-grow flex flex-col">
                 <Label htmlFor="sourceText" className="text-sm font-semibold text-foreground">Source Text <span className="text-destructive">*</span></Label>
-                <div className="flex flex-wrap gap-1.5 pb-1">
-                  {Object.entries(SAMPLE_TRANSCRIPTS).map(([key, sample]) => (
-                    <Button
-                      key={key}
-                      variant="outline"
-                      size="sm"
-                      className={`h-7 text-xs px-3 transition-colors ${
-                        sample.context
-                          ? "border-amber-300/60 text-amber-700 bg-amber-50/50 hover:bg-amber-100 hover:text-amber-800"
-                          : "border-primary/20 text-primary hover:bg-primary hover:text-white"
-                      }`}
-                      onClick={() => {
-                        setSourceText(sample.transcript);
-                        if (sample.context) {
-                          setContextValues(prev => ({ ...prev, ...sample.context }));
-                        }
-                      }}
-                      data-testid={`button-load-sample-${key}`}
-                    >
-                      {sample.label}
-                    </Button>
-                  ))}
-                </div>
                 <Textarea 
                   id="sourceText" 
                   placeholder="Paste call transcript or source text here..." 
