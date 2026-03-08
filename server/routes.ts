@@ -15,37 +15,37 @@ export async function registerRoutes(
 
   app.post("/api/analyze", async (req, res) => {
     const startTime = Date.now();
-    const { callId, transcript, customPrompt } = req.body;
+    const { record_context, care_flow_id, interaction_datetime, source_type, source_id, source_text } = req.body;
 
-    const resolvedCallId = callId || `call_${randomUUID().slice(0, 12)}`;
-
-    if (!transcript || typeof transcript !== "string" || transcript.trim().length === 0) {
+    if (!source_text || typeof source_text !== "string" || source_text.trim().length === 0) {
       const processingTime = Date.now() - startTime;
+      const logId = source_id || care_flow_id || `call_${randomUUID().slice(0, 12)}`;
       await logTooBigQuery({
-        callId: resolvedCallId,
+        callId: logId,
         transcriptLength: 0,
         processingTimeMs: processingTime,
         status: "error",
-        errorMessage: "Missing or empty transcript",
+        errorMessage: "Missing or empty source_text",
       });
 
       return res.status(400).json({
         status: "error",
-        message: "A non-empty transcript string is required.",
+        message: "A non-empty source_text string is required.",
       });
     }
 
+    const resolvedSourceId = source_id || `call_${randomUUID().slice(0, 12)}`;
+
     try {
-      const { analysis, promptUsed } = await analyzeTranscript(
-        resolvedCallId,
-        transcript.trim(),
-        customPrompt || undefined
+      const { analysis } = await analyzeTranscript(
+        resolvedSourceId,
+        source_text.trim()
       );
       const processingTime = Date.now() - startTime;
 
       await logTooBigQuery({
-        callId: resolvedCallId,
-        transcriptLength: transcript.length,
+        callId: resolvedSourceId,
+        transcriptLength: source_text.length,
         summary: analysis.summary,
         areasForFollowUp: [analysis.follow_up_areas],
         questionsCount: 0,
@@ -56,7 +56,11 @@ export async function registerRoutes(
       return res.json({
         status: "success",
         data: {
-          callId: resolvedCallId,
+          record_context: record_context || null,
+          care_flow_id: care_flow_id || null,
+          interaction_datetime: interaction_datetime || new Date().toISOString(),
+          source_type: source_type || null,
+          source_id: resolvedSourceId,
           processedAt: new Date().toISOString(),
           processingTimeMs: processingTime,
           analysis,
@@ -66,8 +70,8 @@ export async function registerRoutes(
       const processingTime = Date.now() - startTime;
 
       await logTooBigQuery({
-        callId: resolvedCallId,
-        transcriptLength: transcript.length,
+        callId: resolvedSourceId,
+        transcriptLength: source_text.length,
         processingTimeMs: processingTime,
         status: "error",
         errorMessage: error.message,

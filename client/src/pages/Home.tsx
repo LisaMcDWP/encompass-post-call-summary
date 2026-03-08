@@ -93,8 +93,12 @@ Patient's Wife: Thank you so much, Sarah. We really need the help right now.`,
 
 
 export default function Home() {
-  const [callId, setCallId] = useState("");
-  const [transcript, setTranscript] = useState("");
+  const [recordContext, setRecordContext] = useState("");
+  const [careFlowId, setCareFlowId] = useState("");
+  const [interactionDatetime, setInteractionDatetime] = useState("");
+  const [sourceType, setSourceType] = useState("");
+  const [sourceId, setSourceId] = useState("");
+  const [sourceText, setSourceText] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [showRawJson, setShowRawJson] = useState(false);
@@ -114,10 +118,10 @@ export default function Home() {
   }, []);
 
   const handleTestApi = async () => {
-    if (!transcript.trim()) {
+    if (!sourceText.trim()) {
       toast({
-        title: "Missing Transcript",
-        description: "Please provide a transcript to analyze.",
+        title: "Missing Source Text",
+        description: "Please provide source text to analyze.",
         variant: "destructive",
       });
       return;
@@ -127,14 +131,16 @@ export default function Home() {
     setResult(null);
     
     try {
-      const isCustom = customPrompt.trim() !== defaultPrompt.trim();
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          callId: callId.trim() || undefined,
-          transcript: transcript.trim(),
-          customPrompt: isCustom ? customPrompt.trim() : undefined,
+          record_context: recordContext.trim() || undefined,
+          care_flow_id: careFlowId.trim() || undefined,
+          interaction_datetime: interactionDatetime.trim() || undefined,
+          source_type: sourceType.trim() || undefined,
+          source_id: sourceId.trim() || undefined,
+          source_text: sourceText.trim(),
         }),
       });
       
@@ -213,21 +219,70 @@ export default function Home() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6 pt-6 flex-grow">
-              <div className="space-y-2">
-                <Label htmlFor="callId" className="text-sm font-semibold text-foreground">Call ID (Optional)</Label>
-                <Input 
-                  id="callId" 
-                  placeholder="e.g. gdw_call_987654321" 
-                  value={callId}
-                  onChange={(e) => setCallId(e.target.value)}
-                  className="font-mono text-sm shadow-inner bg-background"
-                  data-testid="input-call-id"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="recordContext" className="text-sm font-semibold text-foreground">Record Context <span className="text-muted-foreground font-normal">(Optional)</span></Label>
+                  <Input 
+                    id="recordContext" 
+                    placeholder="e.g. post_discharge_call" 
+                    value={recordContext}
+                    onChange={(e) => setRecordContext(e.target.value)}
+                    className="font-mono text-sm shadow-inner bg-background"
+                    data-testid="input-record-context"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="careFlowId" className="text-sm font-semibold text-foreground">Care Flow ID <span className="text-muted-foreground font-normal">(Optional)</span></Label>
+                  <Input 
+                    id="careFlowId" 
+                    placeholder="e.g. cf_abc123" 
+                    value={careFlowId}
+                    onChange={(e) => setCareFlowId(e.target.value)}
+                    className="font-mono text-sm shadow-inner bg-background"
+                    data-testid="input-care-flow-id"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="interactionDatetime" className="text-sm font-semibold text-foreground">Interaction Datetime <span className="text-muted-foreground font-normal">(Optional)</span></Label>
+                  <Input 
+                    id="interactionDatetime" 
+                    type="datetime-local"
+                    value={interactionDatetime}
+                    onChange={(e) => setInteractionDatetime(e.target.value)}
+                    className="font-mono text-sm shadow-inner bg-background"
+                    data-testid="input-interaction-datetime"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sourceType" className="text-sm font-semibold text-foreground">Source Type <span className="text-muted-foreground font-normal">(Optional)</span></Label>
+                  <Input 
+                    id="sourceType" 
+                    placeholder="e.g. phone_call, chat" 
+                    value={sourceType}
+                    onChange={(e) => setSourceType(e.target.value)}
+                    className="font-mono text-sm shadow-inner bg-background"
+                    data-testid="input-source-type"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sourceId" className="text-sm font-semibold text-foreground">Source ID <span className="text-muted-foreground font-normal">(Optional)</span></Label>
+                  <Input 
+                    id="sourceId" 
+                    placeholder="e.g. call_987654321" 
+                    value={sourceId}
+                    onChange={(e) => setSourceId(e.target.value)}
+                    className="font-mono text-sm shadow-inner bg-background"
+                    data-testid="input-source-id"
+                  />
+                </div>
               </div>
               
               <div className="space-y-2 flex-grow flex flex-col">
                 <div className="flex justify-between items-center">
-                  <Label htmlFor="transcript" className="text-sm font-semibold text-foreground">Patient Interaction Transcript</Label>
+                  <Label htmlFor="sourceText" className="text-sm font-semibold text-foreground">Source Text <span className="text-destructive">*</span></Label>
                   <div className="flex gap-1.5">
                     {Object.entries(SAMPLE_TRANSCRIPTS).map(([key, sample]) => (
                       <Button
@@ -235,7 +290,7 @@ export default function Home() {
                         variant="outline"
                         size="sm"
                         className="h-7 text-xs px-3 border-primary/20 text-primary hover:bg-primary hover:text-white transition-colors"
-                        onClick={() => setTranscript(sample.transcript)}
+                        onClick={() => setSourceText(sample.transcript)}
                         data-testid={`button-load-sample-${key}`}
                       >
                         {sample.label}
@@ -244,12 +299,12 @@ export default function Home() {
                   </div>
                 </div>
                 <Textarea 
-                  id="transcript" 
-                  placeholder="Paste call transcript here..." 
+                  id="sourceText" 
+                  placeholder="Paste call transcript or source text here..." 
                   className="min-h-[300px] flex-grow font-mono text-sm leading-relaxed bg-background shadow-inner resize-y border-border/60 focus-visible:ring-primary"
-                  value={transcript}
-                  onChange={(e) => setTranscript(e.target.value)}
-                  data-testid="input-transcript"
+                  value={sourceText}
+                  onChange={(e) => setSourceText(e.target.value)}
+                  data-testid="input-source-text"
                 />
               </div>
 
@@ -377,7 +432,10 @@ export default function Home() {
                   ) : (
                     <CardContent className="font-mono text-xs overflow-auto bg-[#172938] p-4 rounded-b-lg text-green-400">
                       <pre>{JSON.stringify({ 
-                        callId: result.data.callId,
+                        record_context: result.data.record_context,
+                        care_flow_id: result.data.care_flow_id,
+                        source_type: result.data.source_type,
+                        source_id: result.data.source_id,
                         processedAt: result.data.processedAt,
                         processingTimeMs: result.data.processingTimeMs,
                         status: "success",

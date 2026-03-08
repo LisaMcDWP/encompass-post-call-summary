@@ -52,7 +52,7 @@ export default function Reference() {
           <CardContent className="space-y-6">
             <div>
               <h3 className="text-white font-semibold mb-2">Description</h3>
-              <p className="text-gray-300">Accepts a call ID and patient transcript, processes it through Gemini AI, and returns structured clinical analysis.</p>
+              <p className="text-gray-300">Accepts source text with contextual metadata (record context, care flow, source type), processes it through Gemini AI, and returns structured clinical analysis with HTML-formatted output.</p>
             </div>
 
             <Separator className="bg-[#0098db]/10" />
@@ -61,15 +61,22 @@ export default function Reference() {
               <h3 className="text-white font-semibold mb-2">Request Body</h3>
               <p className="text-gray-400 text-sm mb-2">Content-Type: application/json</p>
               <div className="bg-[#0d1520] p-4 rounded-lg text-sm space-y-2 mb-4">
-                <p className="text-gray-300"><span className="text-[#96d410]">callId</span> <span className="text-gray-500">(string, optional)</span> — Unique identifier for the call. Auto-generated if omitted.</p>
-                <p className="text-gray-300"><span className="text-[#96d410]">transcript</span> <span className="text-gray-500">(string, required)</span> — The full patient call transcript text.</p>
-                <p className="text-gray-300"><span className="text-[#96d410]">customPrompt</span> <span className="text-gray-500">(string, optional)</span> — Override the default analysis prompt.</p>
+                <p className="text-gray-300"><span className="text-[#96d410]">record_context</span> <span className="text-gray-500">(string, optional)</span> — Context for the record (e.g. post_discharge_call, follow_up).</p>
+                <p className="text-gray-300"><span className="text-[#96d410]">care_flow_id</span> <span className="text-gray-500">(string, optional)</span> — Identifier for the care flow or pathway.</p>
+                <p className="text-gray-300"><span className="text-[#96d410]">interaction_datetime</span> <span className="text-gray-500">(string, optional)</span> — ISO 8601 datetime of the interaction. Defaults to current time.</p>
+                <p className="text-gray-300"><span className="text-[#96d410]">source_type</span> <span className="text-gray-500">(string, optional)</span> — Type of source (e.g. phone_call, chat, note).</p>
+                <p className="text-gray-300"><span className="text-[#96d410]">source_id</span> <span className="text-gray-500">(string, optional)</span> — Unique identifier for the source. Auto-generated if omitted.</p>
+                <p className="text-gray-300"><span className="text-[#96d410]">source_text</span> <span className="text-gray-500">(string, required)</span> — The full patient call transcript or interaction text.</p>
               </div>
               <h4 className="text-white font-semibold mb-2 text-sm">Example Request Body</h4>
               <pre className="bg-[#0d1520] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto" data-testid="text-request-body">
 {`{
-  "callId": "CALL-001",
-  "transcript": "Care Guide: Hello, this is Maria from Guideway Care. Am I speaking with Mrs. Thompson?\\nPatient: Yes, this is she.\\nCare Guide: I'm calling to check in on you since you were discharged. How have you been feeling?\\nPatient: I'm doing much better, thank you. Still a little sore but getting around okay."
+  "record_context": "post_discharge_call",
+  "care_flow_id": "cf_abc123",
+  "interaction_datetime": "2026-03-06T10:30:00Z",
+  "source_type": "phone_call",
+  "source_id": "call_987654321",
+  "source_text": "Care Guide: Hello, this is Maria from Guideway Care. Am I speaking with Mrs. Thompson?\\nPatient: Yes, this is she.\\nCare Guide: I'm calling to check in on you since you were discharged. How have you been feeling?\\nPatient: I'm doing much better, thank you. Still a little sore but getting around okay."
 }`}
               </pre>
             </div>
@@ -82,16 +89,19 @@ export default function Reference() {
 {`{
   "status": "success",
   "data": {
-    "callId": "12345",
+    "record_context": "post_discharge_call",
+    "care_flow_id": "cf_abc123",
+    "interaction_datetime": "2026-03-06T10:30:00Z",
+    "source_type": "phone_call",
+    "source_id": "call_987654321",
     "processedAt": "2026-03-06T12:00:00.000Z",
     "processingTimeMs": 1234,
-    "promptUsed": "...",
     "analysis": {
       "summary": "Brief overall summary of the call...",
       "disposition_change": true | false,
       "disposition_change_note": "Current location if readmitted, or null",
-      "transition_status": "Bulleted list with [STATUS] tags for all 11 topics",
-      "follow_up_areas": "Bulleted list of follow-up items"
+      "transition_status": "<b>Overall Feeling:</b> <span style='...'>Good</span><br>...",
+      "follow_up_areas": "<ul><li><b>Topic:</b> Detail...</li></ul>"
     }
   }
 }`}
@@ -193,8 +203,11 @@ Patient cancelled appointment due to lack of transportation.<br><br>`}
 {`curl -X POST https://YOUR-CLOUD-RUN-URL/api/analyze \\
   -H "Content-Type: application/json" \\
   -d '{
-    "callId": "CALL-001",
-    "transcript": "Care Guide: Hello, this is Maria from Guideway Care..."
+    "record_context": "post_discharge_call",
+    "care_flow_id": "cf_abc123",
+    "source_type": "phone_call",
+    "source_id": "call_987654321",
+    "source_text": "Care Guide: Hello, this is Maria from Guideway Care..."
   }'`}
               </pre>
             </div>
@@ -275,8 +288,12 @@ Patient cancelled appointment due to lack of transportation.<br><br>`}
                 <p className="text-[#96d410] font-mono text-sm mb-1">Body</p>
                 <pre className="text-gray-300 text-sm mt-1">
 {`{
-  "callId": "{{awell.call_id}}",
-  "transcript": "{{awell.transcript}}"
+  "record_context": "{{awell.record_context}}",
+  "care_flow_id": "{{awell.care_flow_id}}",
+  "interaction_datetime": "{{awell.interaction_datetime}}",
+  "source_type": "{{awell.source_type}}",
+  "source_id": "{{awell.source_id}}",
+  "source_text": "{{awell.source_text}}"
 }`}
                 </pre>
               </div>

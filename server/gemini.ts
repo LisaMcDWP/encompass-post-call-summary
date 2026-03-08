@@ -67,14 +67,14 @@ Guidelines:
 - disposition_change_note: If disposition_change is true, describe where the patient currently is (home, hospital, care facility, SNF, rehab, etc.). Return JSON null if the patient was not readmitted, the question was not asked, or no response was provided.
 - transition_status: Return a single HTML string as a valid JSON string value. Do NOT start the string with a quote or any character before the first <b> tag. Use inline style attributes with single quotes for color-coded status badges (e.g. style='display:inline-block;padding:1px 8px;...'). Use <b> for topic labels, <span style='...'> for colored status badges, and <br> for line breaks. Include all 11 topics. The entire value must be a properly quoted JSON string. The first character of the string content must be the opening < of the first <b> tag.
 - follow_up_areas: Return a single HTML string as a valid JSON string value. Use <ul>/<li> with <b> for topic names. Use single quotes for any HTML attributes. Only include items with issues. If none, return "<p>No follow-up areas identified.</p>".
-Call ID: {{CALL_ID}}
+Source ID: {{SOURCE_ID}}
 
-TRANSCRIPT:
-{{TRANSCRIPT}}`;
+SOURCE TEXT:
+{{SOURCE_TEXT}}`;
 
 export async function analyzeTranscript(
-  callId: string,
-  transcript: string,
+  sourceId: string,
+  sourceText: string,
   customPrompt?: string
 ): Promise<{ analysis: TranscriptAnalysis; promptUsed: string }> {
   const vertex = getVertexAI();
@@ -89,8 +89,8 @@ export async function analyzeTranscript(
 
   const template = customPrompt || DEFAULT_PROMPT_TEMPLATE;
   const prompt = template
-    .replace("{{CALL_ID}}", callId)
-    .replace("{{TRANSCRIPT}}", transcript);
+    .replace("{{SOURCE_ID}}", sourceId)
+    .replace("{{SOURCE_TEXT}}", sourceText);
 
   const result = await model.generateContent(prompt);
   const response = result.response;
