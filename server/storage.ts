@@ -1,7 +1,7 @@
 import { BigQuery } from "@google-cloud/bigquery";
 import type { Observation, InsertObservation, EnumValue } from "@shared/schema";
 
-const DATASET_ID = "transcript_analysis";
+const DATASET_ID = "call_information";
 const TABLE_ID = "observations";
 
 let bigquery: BigQuery | null = null;
@@ -26,45 +26,26 @@ async function ensureObservationsTable(): Promise<void> {
   if (tableInitialized) return;
 
   const client = getBigQueryClient();
-  const dataset = client.dataset(DATASET_ID);
+  const projectId = process.env.GCP_PROJECT_ID;
+  const fullTable = `${projectId}.${DATASET_ID}.${TABLE_ID}`;
 
   try {
-    const [datasetExists] = await dataset.exists();
-    if (!datasetExists) {
-      await client.createDataset(DATASET_ID, { location: "US" });
-      console.log(`Created BigQuery dataset: ${DATASET_ID}`);
-    }
+    await client.query({
+      query: `CREATE TABLE IF NOT EXISTS \`${fullTable}\` (
+        id INT64 NOT NULL,
+        name STRING NOT NULL,
+        display_name STRING NOT NULL,
+        domain STRING NOT NULL,
+        display_order INT64 NOT NULL,
+        value_type STRING NOT NULL,
+        value STRING,
+        is_active BOOL NOT NULL
+      )`,
+    });
+    console.log(`BigQuery table ${DATASET_ID}.${TABLE_ID} ready.`);
   } catch (err: any) {
-    if (err.code === 403) {
-      console.log(`BigQuery dataset ${DATASET_ID} access check failed (permissions), assuming it exists.`);
-    } else {
-      throw err;
-    }
-  }
-
-  try {
-    const table = dataset.table(TABLE_ID);
-    const [tableExists] = await table.exists();
-    if (!tableExists) {
-      await dataset.createTable(TABLE_ID, {
-        schema: {
-          fields: [
-            { name: "id", type: "INTEGER", mode: "REQUIRED" },
-            { name: "name", type: "STRING", mode: "REQUIRED" },
-            { name: "display_name", type: "STRING", mode: "REQUIRED" },
-            { name: "domain", type: "STRING", mode: "REQUIRED" },
-            { name: "display_order", type: "INTEGER", mode: "REQUIRED" },
-            { name: "value_type", type: "STRING", mode: "REQUIRED" },
-            { name: "value", type: "STRING", mode: "NULLABLE" },
-            { name: "is_active", type: "BOOLEAN", mode: "REQUIRED" },
-          ],
-        },
-      });
-      console.log(`Created BigQuery table: ${DATASET_ID}.${TABLE_ID}`);
-    }
-  } catch (err: any) {
-    if (err.code === 403) {
-      console.log(`BigQuery table ${TABLE_ID} access check failed (permissions), assuming it exists.`);
+    if (err.message?.includes("Already Exists")) {
+      console.log(`BigQuery table ${DATASET_ID}.${TABLE_ID} already exists.`);
     } else {
       throw err;
     }

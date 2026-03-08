@@ -1,6 +1,6 @@
 import { BigQuery } from "@google-cloud/bigquery";
 
-const DATASET_ID = "transcript_analysis";
+const DATASET_ID = "call_information";
 const TABLE_ID = "api_logs";
 
 let bigquery: BigQuery | null = null;
