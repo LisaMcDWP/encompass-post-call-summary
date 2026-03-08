@@ -1,5 +1,4 @@
-import { db } from "./db";
-import { observations } from "@shared/schema";
+import { storage } from "./storage";
 import type { EnumValue } from "@shared/schema";
 
 const DEFAULT_OBSERVATIONS: {
@@ -155,15 +154,18 @@ const DEFAULT_OBSERVATIONS: {
 
 export async function seedObservations() {
   try {
-    const existing = await db.select().from(observations);
+    const existing = await storage.getObservations();
     if (existing.length > 0) {
+      console.log(`Observations already seeded (${existing.length} found).`);
       return;
     }
 
-    console.log("Seeding default observations...");
-    await db.insert(observations).values(DEFAULT_OBSERVATIONS);
+    console.log("Seeding default observations to BigQuery...");
+    for (const obs of DEFAULT_OBSERVATIONS) {
+      await storage.createObservation(obs);
+    }
     console.log(`Seeded ${DEFAULT_OBSERVATIONS.length} default observations.`);
   } catch (error: any) {
-    console.error("Failed to seed observations (table may not exist yet):", error.message);
+    console.error("Failed to seed observations:", error.message);
   }
 }

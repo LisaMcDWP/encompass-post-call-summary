@@ -277,7 +277,7 @@ export default function Home() {
                     <span className="flex items-center gap-2">
                       <Settings2 className="h-3.5 w-3.5" />
                       Gemini Prompt Template
-                      {customPrompt.trim() !== defaultPrompt.trim() && (
+                      {customPrompt && defaultPrompt && customPrompt.trim() !== defaultPrompt.trim() && (
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-orange-400 text-orange-500">Modified</Badge>
                       )}
                     </span>
