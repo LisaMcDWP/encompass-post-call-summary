@@ -10,6 +10,7 @@ import Reference from "@/pages/Reference";
 import Observations from "@/pages/Observations";
 import SummaryPrompt from "@/pages/SummaryPrompt";
 import ContextParameters from "@/pages/ContextParameters";
+import GeneratedPrompt from "@/pages/GeneratedPrompt";
 
 function Router() {
   return (
@@ -19,6 +20,7 @@ function Router() {
         <Route path="/observations" component={Observations} />
         <Route path="/summary-prompt" component={SummaryPrompt} />
         <Route path="/context-parameters" component={ContextParameters} />
+        <Route path="/generated-prompt" component={GeneratedPrompt} />
         <Route path="/reference" component={Reference} />
         <Route component={NotFound} />
       </Switch>
