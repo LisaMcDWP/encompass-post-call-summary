@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { analyzeTranscript, buildPromptTemplate } from "./gemini";
+import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION } from "./gemini";
 import { logTooBigQuery } from "./bigquery";
 import { randomUUID } from "crypto";
 import { storage } from "./storage";
@@ -14,7 +14,8 @@ export async function registerRoutes(
 
   app.get("/api/prompt", async (_req, res) => {
     const activeObs = await storage.getActiveObservations();
-    const prompt = buildPromptTemplate(activeObs);
+    const summaryInstruction = await storage.getSetting("summary_instruction");
+    const prompt = buildPromptTemplate(activeObs, summaryInstruction || undefined);
     res.json({ prompt });
   });
 
@@ -43,10 +44,13 @@ export async function registerRoutes(
 
     try {
       const activeObs = await storage.getActiveObservations();
+      const summaryInstruction = await storage.getSetting("summary_instruction");
       const { analysis } = await analyzeTranscript(
         resolvedSourceId,
         source_text.trim(),
-        activeObs
+        activeObs,
+        undefined,
+        summaryInstruction || undefined
       );
       const processingTime = Date.now() - startTime;
 
@@ -153,6 +157,49 @@ export async function registerRoutes(
     const deleted = await storage.deleteObservation(id);
     if (!deleted) return res.status(404).json({ message: "Observation not found" });
     res.json({ success: true });
+  });
+
+  app.get("/api/settings/summary-instruction", async (_req, res) => {
+    try {
+      const stored = await storage.getSetting("summary_instruction");
+      res.json({
+        instruction: stored || DEFAULT_SUMMARY_INSTRUCTION,
+        isCustom: stored !== null,
+        defaultInstruction: DEFAULT_SUMMARY_INSTRUCTION,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/settings/summary-instruction", async (req, res) => {
+    try {
+      const { instruction } = req.body;
+      if (!instruction || typeof instruction !== "string" || instruction.trim().length === 0) {
+        return res.status(400).json({ message: "A non-empty instruction string is required." });
+      }
+      await storage.setSetting("summary_instruction", instruction.trim());
+      res.json({ success: true, instruction: instruction.trim() });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/settings/summary-instruction", async (_req, res) => {
+    try {
+      const client = (await import("@google-cloud/bigquery")).BigQuery;
+      const raw = process.env.GCP_SERVICE_ACCOUNT_KEY;
+      const projectId = process.env.GCP_PROJECT_ID;
+      if (!raw || !projectId) throw new Error("GCP credentials not set");
+      const bq = new client({ projectId, credentials: JSON.parse(raw) });
+      await bq.query({
+        query: `DELETE FROM \`${projectId}.call_information.settings\` WHERE key = @key`,
+        params: { key: "summary_instruction" },
+      });
+      res.json({ success: true, instruction: DEFAULT_SUMMARY_INSTRUCTION });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
   });
 
   app.get("/api/health", (_req, res) => {

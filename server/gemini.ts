@@ -96,13 +96,18 @@ function buildObservationsSchema(obs: Observation[]): string {
   return entries.join(",\n");
 }
 
-export function buildPromptTemplate(activeObservations: Observation[]): string {
+export const DEFAULT_SUMMARY_INSTRUCTION = "A brief overall summary of the call based on the questions asked of the patient and their responses. If the patient answered the call, include the following topics at a minimum (only comment on what the patient actually responded to): {{SUMMARY_TOPICS}}.";
+
+export function buildPromptTemplate(activeObservations: Observation[], summaryInstruction?: string): string {
+  const instruction = summaryInstruction || DEFAULT_SUMMARY_INSTRUCTION;
+
   if (activeObservations.length === 0) {
+    const resolvedInstruction = instruction.replace("{{SUMMARY_TOPICS}}", "general topics discussed");
     return `You are an expert healthcare call analyst for Guideway Care. Analyze the following patient interaction transcript and produce a structured JSON output.
 
 Your response MUST be valid JSON with exactly this structure:
 {
-  "summary": "A brief overall summary of the call.",
+  "summary": "${resolvedInstruction}",
   "disposition_change": true/false,
   "disposition_change_note": "Current location if readmitted, or null.",
   "observations": [],
@@ -121,6 +126,7 @@ SOURCE TEXT:
   const summaryTopics = buildSummaryTopics(activeObservations);
   const colorStyles = buildColorStylesBlock();
   const observationsSchema = buildObservationsSchema(activeObservations);
+  const resolvedSummaryInstruction = instruction.replace("{{SUMMARY_TOPICS}}", summaryTopics);
 
   return `You are an expert healthcare call analyst for Guideway Care. Analyze the following patient interaction transcript and produce a structured JSON output.
 
@@ -135,7 +141,7 @@ SOURCE TEXT:
 
 Your response MUST be valid JSON with exactly this structure:
 {
-  "summary": "A brief overall summary of the call based on the questions asked of the patient and their responses. If the patient answered the call, include the following topics at a minimum (only comment on what the patient actually responded to): ${summaryTopics}.",
+  "summary": "${resolvedSummaryInstruction}",
   "disposition_change": true/false,
   "disposition_change_note": "If the patient was readmitted (ER, hospital, SNF, or any care facility since discharge), where are they currently? Examples: home, care facility, hospital, skilled nursing facility, rehab center, etc. Write null (JSON null) if the patient was not readmitted, if the question was not asked, or if no response was provided.",
   "observations": [
@@ -164,7 +170,8 @@ export async function analyzeTranscript(
   sourceId: string,
   sourceText: string,
   activeObservations: Observation[],
-  customPrompt?: string
+  customPrompt?: string,
+  summaryInstruction?: string
 ): Promise<{ analysis: TranscriptAnalysis; promptUsed: string }> {
   const vertex = getVertexAI();
 
@@ -176,7 +183,7 @@ export async function analyzeTranscript(
     },
   });
 
-  const template = customPrompt || buildPromptTemplate(activeObservations);
+  const template = customPrompt || buildPromptTemplate(activeObservations, summaryInstruction);
   const prompt = template
     .replace("{{SOURCE_ID}}", sourceId)
     .replace("{{SOURCE_TEXT}}", sourceText);

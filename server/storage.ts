@@ -3,6 +3,7 @@ import type { Observation, InsertObservation, EnumValue } from "@shared/schema";
 
 const DATASET_ID = "call_information";
 const TABLE_ID = "observations";
+const SETTINGS_TABLE_ID = "settings";
 
 let bigquery: BigQuery | null = null;
 
@@ -21,6 +22,33 @@ function getBigQueryClient(): BigQuery {
 }
 
 let tableInitialized = false;
+let settingsTableInitialized = false;
+
+async function ensureSettingsTable(): Promise<void> {
+  if (settingsTableInitialized) return;
+
+  const client = getBigQueryClient();
+  const projectId = process.env.GCP_PROJECT_ID;
+  const fullTable = `${projectId}.${DATASET_ID}.${SETTINGS_TABLE_ID}`;
+
+  try {
+    await client.query({
+      query: `CREATE TABLE IF NOT EXISTS \`${fullTable}\` (
+        key STRING NOT NULL,
+        value STRING NOT NULL
+      )`,
+    });
+    console.log(`BigQuery table ${DATASET_ID}.${SETTINGS_TABLE_ID} ready.`);
+  } catch (err: any) {
+    if (err.message?.includes("Already Exists")) {
+      console.log(`BigQuery table ${DATASET_ID}.${SETTINGS_TABLE_ID} already exists.`);
+    } else {
+      throw err;
+    }
+  }
+
+  settingsTableInitialized = true;
+}
 
 async function ensureObservationsTable(): Promise<void> {
   if (tableInitialized) return;
@@ -75,6 +103,8 @@ export interface IStorage {
   updateObservation(id: number, observation: Partial<InsertObservation>): Promise<Observation | undefined>;
   deleteObservation(id: number): Promise<boolean>;
   reorderObservations(orderedIds: number[]): Promise<void>;
+  getSetting(key: string): Promise<string | null>;
+  setSetting(key: string, value: string): Promise<void>;
 }
 
 export class BigQueryStorage implements IStorage {
@@ -195,6 +225,40 @@ export class BigQueryStorage implements IStorage {
       await client.query({
         query: `UPDATE ${table} SET display_order = @order WHERE id = @id`,
         params: { order: i, id: orderedIds[i] },
+      });
+    }
+  }
+  private getSettingsTable(): string {
+    const projectId = process.env.GCP_PROJECT_ID;
+    return `\`${projectId}.${DATASET_ID}.${SETTINGS_TABLE_ID}\``;
+  }
+
+  async getSetting(key: string): Promise<string | null> {
+    await ensureSettingsTable();
+    const client = getBigQueryClient();
+    const table = this.getSettingsTable();
+    const [rows] = await client.query({
+      query: `SELECT value FROM ${table} WHERE key = @key LIMIT 1`,
+      params: { key },
+    });
+    return rows.length > 0 ? rows[0].value : null;
+  }
+
+  async setSetting(key: string, value: string): Promise<void> {
+    await ensureSettingsTable();
+    const client = getBigQueryClient();
+    const table = this.getSettingsTable();
+
+    const existing = await this.getSetting(key);
+    if (existing !== null) {
+      await client.query({
+        query: `UPDATE ${table} SET value = @value WHERE key = @key`,
+        params: { key, value },
+      });
+    } else {
+      await client.query({
+        query: `INSERT INTO ${table} (key, value) VALUES (@key, @value)`,
+        params: { key, value },
       });
     }
   }
