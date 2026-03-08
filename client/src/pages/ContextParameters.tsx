@@ -160,21 +160,21 @@ export default function ContextParameters() {
   };
 
   return (
-    <div className="h-full overflow-y-auto" style={{ background: "linear-gradient(180deg, #101a22 0%, #172938 100%)" }}>
+    <div className="h-full overflow-y-auto bg-background">
       <div className="max-w-4xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-white flex items-center gap-2" data-testid="text-page-title">
-              <Variable className="h-6 w-6 text-[#0098db]" />
+            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2" data-testid="text-page-title">
+              <Variable className="h-6 w-6 text-primary" />
               Context Parameters
             </h1>
-            <p className="text-sm text-gray-400 mt-1">
+            <p className="text-sm text-muted-foreground mt-1">
               Define known context fields that API callers can pass in alongside the transcript to enrich the analysis.
             </p>
           </div>
           <Button
             onClick={openCreate}
-            className="bg-[#0098db] hover:bg-[#0088c5] text-white"
+            className="bg-primary hover:bg-primary/90 text-white"
             data-testid="button-add-context-param"
           >
             <Plus className="h-4 w-4 mr-1.5" />
@@ -182,12 +182,12 @@ export default function ContextParameters() {
           </Button>
         </div>
 
-        <div className="bg-[#172938]/60 border border-[#0098db]/10 rounded-lg p-4 mb-6">
-          <p className="text-gray-400 text-sm">
-            Context parameters appear in the API request body under a <code className="text-[#0098db] bg-[#0d1520] px-1.5 py-0.5 rounded text-xs">context</code> object.
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+          <p className="text-foreground text-sm">
+            Context parameters appear in the API request body under a <code className="text-primary bg-primary/10 px-1.5 py-0.5 rounded text-xs">context</code> object.
             Active parameters are injected into the Gemini prompt as known information. Example:
           </p>
-          <pre className="bg-[#0d1520] text-gray-300 p-3 rounded-lg text-xs mt-2 overflow-x-auto">
+          <pre className="bg-white border border-border p-3 rounded-lg text-xs mt-2 overflow-x-auto text-foreground">
 {`{
   "source_text": "...",
   "context": {
@@ -198,15 +198,15 @@ ${params.filter(p => p.isActive).slice(0, 3).map(p => `    "${p.name}": "${p.dat
         </div>
 
         {loading ? (
-          <Card className="bg-[#1a2f40]/80 border-[#0098db]/20">
-            <CardContent className="py-12 text-center text-gray-400">Loading...</CardContent>
+          <Card className="border-border/60">
+            <CardContent className="py-12 text-center text-muted-foreground">Loading...</CardContent>
           </Card>
         ) : params.length === 0 ? (
-          <Card className="bg-[#1a2f40]/80 border-[#0098db]/20">
+          <Card className="border-dashed border-2 border-border/60">
             <CardContent className="py-12 text-center">
-              <Variable className="h-10 w-10 text-gray-600 mx-auto mb-3" />
-              <p className="text-gray-400">No context parameters defined yet.</p>
-              <p className="text-gray-500 text-sm mt-1">Add parameters like patient name, diagnosis, facility, etc.</p>
+              <Variable className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
+              <p className="text-muted-foreground">No context parameters defined yet.</p>
+              <p className="text-muted-foreground/70 text-sm mt-1">Add parameters like patient name, diagnosis, facility, etc.</p>
             </CardContent>
           </Card>
         ) : (
@@ -214,22 +214,22 @@ ${params.filter(p => p.isActive).slice(0, 3).map(p => `    "${p.name}": "${p.dat
             {params.map((p) => (
               <Card
                 key={p.id}
-                className={`bg-[#1a2f40]/80 border-[#0098db]/20 transition-opacity ${!p.isActive ? "opacity-50" : ""}`}
+                className={`border-border/60 shadow-sm transition-opacity ${!p.isActive ? "opacity-50" : ""}`}
                 data-testid={`card-context-param-${p.id}`}
               >
                 <CardContent className="py-3 px-4 flex items-center gap-4">
-                  <GripVertical className="h-4 w-4 text-gray-600 shrink-0 cursor-grab" />
+                  <GripVertical className="h-4 w-4 text-muted-foreground shrink-0 cursor-grab" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-white" data-testid={`text-param-name-${p.id}`}>{p.displayName}</span>
-                      <Badge variant="outline" className="text-[10px] px-1.5 border-gray-600 text-gray-400">{DATA_TYPE_LABELS[p.dataType] || p.dataType}</Badge>
+                      <span className="font-semibold text-foreground" data-testid={`text-param-name-${p.id}`}>{p.displayName}</span>
+                      <Badge variant="outline" className="text-[10px] px-1.5">{DATA_TYPE_LABELS[p.dataType] || p.dataType}</Badge>
                       {p.isRequired && (
-                        <Badge className="text-[10px] px-1.5 bg-red-900/30 text-red-400 border-red-800/50">Required</Badge>
+                        <Badge className="text-[10px] px-1.5 bg-red-100 text-red-700 border-red-200">Required</Badge>
                       )}
-                      <span className="text-xs text-gray-500 font-mono">{p.name}</span>
+                      <span className="text-xs text-muted-foreground font-mono">{p.name}</span>
                     </div>
                     {p.description && (
-                      <p className="text-[11px] text-gray-500 mt-1">{p.description}</p>
+                      <p className="text-[11px] text-muted-foreground mt-1">{p.description}</p>
                     )}
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
@@ -239,13 +239,13 @@ ${params.filter(p => p.isActive).slice(0, 3).map(p => `    "${p.name}": "${p.dat
                         onCheckedChange={() => handleToggleActive(p)}
                         data-testid={`switch-active-${p.id}`}
                       />
-                      <span className="text-[9px] text-gray-600">Active</span>
+                      <span className="text-[9px] text-muted-foreground">Active</span>
                     </div>
                     <Button variant="ghost" size="sm" onClick={() => openEdit(p)} data-testid={`button-edit-${p.id}`}>
-                      <Pencil className="h-4 w-4 text-gray-400" />
+                      <Pencil className="h-4 w-4 text-muted-foreground" />
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => handleDelete(p.id)} data-testid={`button-delete-${p.id}`}>
-                      <Trash2 className="h-4 w-4 text-red-400" />
+                      <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </div>
                 </CardContent>
@@ -255,13 +255,13 @@ ${params.filter(p => p.isActive).slice(0, 3).map(p => `    "${p.name}": "${p.dat
         )}
 
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="bg-[#1a2f40] border-[#0098db]/20 text-white max-w-lg">
+          <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle className="text-white">{editingId ? "Edit Context Parameter" : "Add Context Parameter"}</DialogTitle>
+              <DialogTitle>{editingId ? "Edit Context Parameter" : "Add Context Parameter"}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-2">
               <div className="space-y-1.5">
-                <Label className="text-sm font-semibold text-gray-300">Display Name</Label>
+                <Label className="text-sm font-semibold">Display Name</Label>
                 <Input
                   placeholder="e.g. Patient Name"
                   value={form.displayName}
@@ -273,28 +273,27 @@ ${params.filter(p => p.isActive).slice(0, 3).map(p => `    "${p.name}": "${p.dat
                       name: editingId ? form.name : autoGenerateName(displayName),
                     });
                   }}
-                  className="bg-[#0d1520] border-gray-700 text-white"
                   data-testid="input-param-display-name"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-sm font-semibold text-gray-300">API Key Name</Label>
+                <Label className="text-sm font-semibold">API Key Name</Label>
                 <Input
                   placeholder="e.g. patient_name"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="bg-[#0d1520] border-gray-700 text-white font-mono text-sm"
+                  className="font-mono text-sm"
                   data-testid="input-param-name"
                 />
-                <p className="text-[11px] text-gray-500">The key used in the API request body under <code className="text-[#0098db]">context.{form.name || "key"}</code></p>
+                <p className="text-[11px] text-muted-foreground">The key used in the API request body under <code className="text-primary">context.{form.name || "key"}</code></p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label className="text-sm font-semibold text-gray-300">Data Type</Label>
+                  <Label className="text-sm font-semibold">Data Type</Label>
                   <Select value={form.dataType} onValueChange={(v) => setForm({ ...form, dataType: v })}>
-                    <SelectTrigger className="bg-[#0d1520] border-gray-700 text-white" data-testid="select-param-data-type">
+                    <SelectTrigger data-testid="select-param-data-type">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -305,36 +304,36 @@ ${params.filter(p => p.isActive).slice(0, 3).map(p => `    "${p.name}": "${p.dat
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-sm font-semibold text-gray-300">Required</Label>
+                  <Label className="text-sm font-semibold">Required</Label>
                   <div className="flex items-center gap-2 h-10">
                     <Switch
                       checked={form.isRequired}
                       onCheckedChange={(v) => setForm({ ...form, isRequired: v })}
                       data-testid="switch-param-required"
                     />
-                    <span className="text-sm text-gray-400">{form.isRequired ? "Required" : "Optional"}</span>
+                    <span className="text-sm text-muted-foreground">{form.isRequired ? "Required" : "Optional"}</span>
                   </div>
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-sm font-semibold text-gray-300">
+                <Label className="text-sm font-semibold">
                   Description
-                  <span className="text-gray-500 font-normal ml-1">(optional)</span>
+                  <span className="text-muted-foreground font-normal ml-1">(optional)</span>
                 </Label>
                 <Textarea
                   placeholder="e.g. The full name of the patient being called."
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                   rows={2}
-                  className="bg-[#0d1520] border-gray-700 text-white text-sm"
+                  className="text-sm"
                   data-testid="textarea-param-description"
                 />
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="border-gray-600 text-gray-300 hover:bg-gray-700">Cancel</Button>
-              <Button onClick={handleSave} className="bg-[#0098db] hover:bg-[#0088c5] text-white" data-testid="button-save-param">{editingId ? "Update" : "Create"}</Button>
+              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
+              <Button onClick={handleSave} className="bg-primary hover:bg-primary/90 text-white" data-testid="button-save-param">{editingId ? "Update" : "Create"}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
