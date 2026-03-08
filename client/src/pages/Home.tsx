@@ -282,61 +282,11 @@ export default function Home() {
                 Configure the input parameters for the Gemini analysis endpoint.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6 pt-6 flex-grow">
-              <div className="space-y-2">
-                <Label htmlFor="careFlowId" className="text-sm font-semibold text-foreground">Care Flow ID <span className="text-muted-foreground font-normal">(Optional)</span></Label>
-                <Input 
-                  id="careFlowId" 
-                  placeholder="e.g. cf_abc123" 
-                  value={careFlowId}
-                  onChange={(e) => setCareFlowId(e.target.value)}
-                  className="font-mono text-sm shadow-inner bg-background"
-                  data-testid="input-care-flow-id"
-                />
-              </div>
+            <CardContent className="space-y-5 pt-6 flex-grow">
 
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="interactionDatetime" className="text-sm font-semibold text-foreground">Interaction Datetime <span className="text-muted-foreground font-normal">(Optional)</span></Label>
-                  <Input 
-                    id="interactionDatetime" 
-                    type="datetime-local"
-                    value={interactionDatetime}
-                    onChange={(e) => setInteractionDatetime(e.target.value)}
-                    className="font-mono text-sm shadow-inner bg-background"
-                    data-testid="input-interaction-datetime"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sourceType" className="text-sm font-semibold text-foreground">Source Type <span className="text-muted-foreground font-normal">(Optional)</span></Label>
-                  <Input 
-                    id="sourceType" 
-                    placeholder="e.g. phone_call, chat" 
-                    value={sourceType}
-                    onChange={(e) => setSourceType(e.target.value)}
-                    className="font-mono text-sm shadow-inner bg-background"
-                    data-testid="input-source-type"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sourceId" className="text-sm font-semibold text-foreground">Source ID <span className="text-muted-foreground font-normal">(Optional)</span></Label>
-                  <Input 
-                    id="sourceId" 
-                    placeholder="e.g. call_987654321" 
-                    value={sourceId}
-                    onChange={(e) => setSourceId(e.target.value)}
-                    className="font-mono text-sm shadow-inner bg-background"
-                    data-testid="input-source-id"
-                  />
-                </div>
-              </div>
-              
               {contextParams.length > 0 && (
-                <div className="space-y-2">
-                  <Label className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-                    Known Context
-                    <span className="text-muted-foreground font-normal">(from configured parameters)</span>
-                  </Label>
+                <div className="space-y-2 p-4 rounded-lg border border-primary/20 bg-primary/[0.02]">
+                  <Label className="text-sm font-semibold text-foreground">Known Context</Label>
                   <div className="grid grid-cols-2 gap-3">
                     {contextParams.map((cp) => (
                       <div key={cp.id} className="space-y-1">
@@ -374,27 +324,29 @@ export default function Home() {
               )}
 
               <div className="space-y-2 flex-grow flex flex-col">
-                <div className="flex justify-between items-center">
-                  <Label htmlFor="sourceText" className="text-sm font-semibold text-foreground">Source Text <span className="text-destructive">*</span></Label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {Object.entries(SAMPLE_TRANSCRIPTS).map(([key, sample]) => (
-                      <Button
-                        key={key}
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs px-3 border-primary/20 text-primary hover:bg-primary hover:text-white transition-colors"
-                        onClick={() => {
-                          setSourceText(sample.transcript);
-                          if (sample.context) {
-                            setContextValues(prev => ({ ...prev, ...sample.context }));
-                          }
-                        }}
-                        data-testid={`button-load-sample-${key}`}
-                      >
-                        {sample.label}
-                      </Button>
-                    ))}
-                  </div>
+                <Label htmlFor="sourceText" className="text-sm font-semibold text-foreground">Source Text <span className="text-destructive">*</span></Label>
+                <div className="flex flex-wrap gap-1.5 pb-1">
+                  {Object.entries(SAMPLE_TRANSCRIPTS).map(([key, sample]) => (
+                    <Button
+                      key={key}
+                      variant="outline"
+                      size="sm"
+                      className={`h-7 text-xs px-3 transition-colors ${
+                        sample.context
+                          ? "border-amber-300/60 text-amber-700 bg-amber-50/50 hover:bg-amber-100 hover:text-amber-800"
+                          : "border-primary/20 text-primary hover:bg-primary hover:text-white"
+                      }`}
+                      onClick={() => {
+                        setSourceText(sample.transcript);
+                        if (sample.context) {
+                          setContextValues(prev => ({ ...prev, ...sample.context }));
+                        }
+                      }}
+                      data-testid={`button-load-sample-${key}`}
+                    >
+                      {sample.label}
+                    </Button>
+                  ))}
                 </div>
                 <Textarea 
                   id="sourceText" 
@@ -450,6 +402,72 @@ export default function Home() {
                   <p className="text-[11px] text-muted-foreground">
                     Use <code className="bg-muted px-1 rounded text-[10px]">{"{{CALL_ID}}"}</code> and <code className="bg-muted px-1 rounded text-[10px]">{"{{TRANSCRIPT}}"}</code> as placeholders. They will be replaced with the actual values before sending to Gemini.
                   </p>
+                </CollapsibleContent>
+              </Collapsible>
+
+              <Collapsible>
+                <CollapsibleTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-between h-9 text-xs text-muted-foreground hover:text-foreground border border-dashed border-border/60 rounded-md"
+                    data-testid="button-toggle-metadata"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Settings2 className="h-3.5 w-3.5" />
+                      Request Metadata
+                      <span className="text-muted-foreground font-normal">(optional)</span>
+                    </span>
+                    <span>Expand</span>
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-3 space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="careFlowId" className="text-xs text-muted-foreground">Care Flow ID</Label>
+                    <Input 
+                      id="careFlowId" 
+                      placeholder="e.g. cf_abc123" 
+                      value={careFlowId}
+                      onChange={(e) => setCareFlowId(e.target.value)}
+                      className="font-mono text-sm shadow-inner bg-background h-9"
+                      data-testid="input-care-flow-id"
+                    />
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="interactionDatetime" className="text-xs text-muted-foreground">Interaction Datetime</Label>
+                      <Input 
+                        id="interactionDatetime" 
+                        type="datetime-local"
+                        value={interactionDatetime}
+                        onChange={(e) => setInteractionDatetime(e.target.value)}
+                        className="font-mono text-sm shadow-inner bg-background h-9"
+                        data-testid="input-interaction-datetime"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="sourceType" className="text-xs text-muted-foreground">Source Type</Label>
+                      <Input 
+                        id="sourceType" 
+                        placeholder="e.g. phone_call, chat" 
+                        value={sourceType}
+                        onChange={(e) => setSourceType(e.target.value)}
+                        className="font-mono text-sm shadow-inner bg-background h-9"
+                        data-testid="input-source-type"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="sourceId" className="text-xs text-muted-foreground">Source ID</Label>
+                      <Input 
+                        id="sourceId" 
+                        placeholder="e.g. call_987654321" 
+                        value={sourceId}
+                        onChange={(e) => setSourceId(e.target.value)}
+                        className="font-mono text-sm shadow-inner bg-background h-9"
+                        data-testid="input-source-id"
+                      />
+                    </div>
+                  </div>
                 </CollapsibleContent>
               </Collapsible>
             </CardContent>
