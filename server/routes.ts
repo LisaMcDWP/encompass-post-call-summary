@@ -2,10 +2,34 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION } from "./gemini";
 import { logTooBigQuery } from "./bigquery";
-import { randomUUID } from "crypto";
+import { randomUUID, createHash } from "crypto";
 import { storage } from "./storage";
 import { insertObservationSchema, enumValueSchema, insertContextParameterSchema } from "@shared/schema";
 import { z } from "zod";
+
+async function getPromptWithVersion() {
+  const activeObs = await storage.getActiveObservations();
+  const summaryInstruction = await storage.getSetting("summary_instruction");
+  const observationsGuidance = await storage.getSetting("observations_prompt_guidance");
+  const contextParams = await storage.getActiveContextParameters();
+  const prompt = buildPromptTemplate(activeObs, summaryInstruction || undefined, contextParams, observationsGuidance || undefined);
+
+  const hash = createHash("sha256").update(prompt).digest("hex");
+  const storedHash = await storage.getSetting("prompt_hash");
+
+  let version = parseInt(await storage.getSetting("prompt_version") || "0", 10);
+  let versionDate = await storage.getSetting("prompt_version_date") || new Date().toISOString();
+
+  if (hash !== storedHash) {
+    version = version + 1;
+    versionDate = new Date().toISOString();
+    await storage.setSetting("prompt_hash", hash);
+    await storage.setSetting("prompt_version", String(version));
+    await storage.setSetting("prompt_version_date", versionDate);
+  }
+
+  return { prompt, promptVersion: version, promptVersionDate: versionDate };
+}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -13,12 +37,8 @@ export async function registerRoutes(
 ): Promise<Server> {
 
   app.get("/api/prompt", async (_req, res) => {
-    const activeObs = await storage.getActiveObservations();
-    const summaryInstruction = await storage.getSetting("summary_instruction");
-    const observationsGuidance = await storage.getSetting("observations_prompt_guidance");
-    const contextParams = await storage.getActiveContextParameters();
-    const prompt = buildPromptTemplate(activeObs, summaryInstruction || undefined, contextParams, observationsGuidance || undefined);
-    res.json({ prompt });
+    const { prompt, promptVersion, promptVersionDate } = await getPromptWithVersion();
+    res.json({ prompt, promptVersion, promptVersionDate });
   });
 
   app.post("/api/analyze", async (req, res) => {
@@ -45,6 +65,7 @@ export async function registerRoutes(
     const resolvedSourceId = source_id || `call_${randomUUID().slice(0, 12)}`;
 
     try {
+      const { prompt: _promptText, promptVersion, promptVersionDate } = await getPromptWithVersion();
       const activeObs = await storage.getActiveObservations();
       const summaryInstruction = await storage.getSetting("summary_instruction");
       const observationsGuidance = await storage.getSetting("observations_prompt_guidance");
@@ -91,6 +112,8 @@ export async function registerRoutes(
           context: contextValues,
           processedAt: new Date().toISOString(),
           processingTimeMs: processingTime,
+          prompt_version: promptVersion,
+          prompt_version_date: promptVersionDate,
           analysis,
         },
       });

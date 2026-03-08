@@ -8,6 +8,8 @@ import { useToast } from "@/hooks/use-toast";
 
 export default function GeneratedPrompt() {
   const [prompt, setPrompt] = useState("");
+  const [promptVersion, setPromptVersion] = useState<number>(0);
+  const [promptVersionDate, setPromptVersionDate] = useState("");
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [location] = useLocation();
@@ -36,6 +38,8 @@ export default function GeneratedPrompt() {
       if (!res.ok) throw new Error("Failed to load prompt");
       const data = await res.json();
       setPrompt(data.prompt);
+      setPromptVersion(data.promptVersion || 0);
+      setPromptVersionDate(data.promptVersionDate || "");
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
@@ -75,7 +79,20 @@ export default function GeneratedPrompt() {
               Read-only view of the fully assembled prompt sent to Gemini, built from your observations, summary instruction, context parameters, and guidance settings.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {promptVersion > 0 && (
+              <div className="text-right">
+                <div className="flex items-center gap-1.5">
+                  <Badge variant="outline" className="text-xs font-semibold" data-testid="badge-prompt-version">
+                    v{promptVersion}
+                  </Badge>
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-0.5" data-testid="text-prompt-version-date">
+                  {new Date(promptVersionDate).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}{" "}
+                  {new Date(promptVersionDate).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                </p>
+              </div>
+            )}
             <Button
               variant="outline"
               size="sm"
