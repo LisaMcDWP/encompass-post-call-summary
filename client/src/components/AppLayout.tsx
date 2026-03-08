@@ -56,11 +56,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        <aside className="w-56 bg-[#172938] border-r border-[#0098db]/10 flex flex-col shrink-0 overflow-y-auto">
+        <aside className="w-56 bg-white border-r border-border flex flex-col shrink-0 overflow-y-auto">
           <nav className="flex-1 py-4 px-3 space-y-5">
             {NAV_SECTIONS.map((section) => (
               <div key={section.title}>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 px-3 mb-1.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 px-3 mb-1.5">
                   {section.title}
                 </p>
                 <div className="space-y-0.5">
@@ -71,8 +71,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         <div
                           className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm cursor-pointer transition-colors ${
                             isActive
-                              ? "bg-[#0098db]/15 text-[#0098db] font-medium"
-                              : "text-gray-400 hover:text-gray-200 hover:bg-white/5"
+                              ? "bg-primary/10 text-primary font-medium"
+                              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                           }`}
                           data-testid={`nav-${item.href.replace("/", "") || "home"}`}
                         >
@@ -87,8 +87,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
             ))}
           </nav>
-          <div className="px-3 py-3 border-t border-white/5">
-            <p className="text-[10px] text-gray-600 text-center">Guideway Care API v1</p>
+          <div className="px-3 py-3 border-t border-border">
+            <p className="text-[10px] text-muted-foreground/50 text-center">Guideway Care API v1</p>
           </div>
         </aside>
 
