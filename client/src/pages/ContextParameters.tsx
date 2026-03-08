@@ -17,7 +17,6 @@ interface ContextParameter {
   displayName: string;
   description: string;
   dataType: string;
-  isRequired: boolean;
   isActive: boolean;
   displayOrder: number;
 }
@@ -36,7 +35,6 @@ const emptyForm = {
   displayName: "",
   description: "",
   dataType: "string",
-  isRequired: false,
   isActive: true,
 };
 
@@ -75,7 +73,6 @@ export default function ContextParameters() {
       displayName: p.displayName,
       description: p.description,
       dataType: p.dataType,
-      isRequired: p.isRequired,
       isActive: p.isActive,
     });
     setIsDialogOpen(true);
@@ -92,7 +89,6 @@ export default function ContextParameters() {
       displayName: form.displayName.trim(),
       description: form.description.trim(),
       dataType: form.dataType,
-      isRequired: form.isRequired,
       isActive: form.isActive,
     };
 
@@ -138,14 +134,6 @@ export default function ContextParameters() {
     fetchParams();
   };
 
-  const handleToggleRequired = async (p: ContextParameter) => {
-    await fetch(`/api/context-parameters/${p.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isRequired: !p.isRequired }),
-    });
-    fetchParams();
-  };
 
   const autoGenerateName = (displayName: string) => {
     let name = displayName
@@ -223,9 +211,6 @@ ${params.filter(p => p.isActive).slice(0, 3).map(p => `    "${p.name}": "${p.dat
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-foreground" data-testid={`text-param-name-${p.id}`}>{p.displayName}</span>
                       <Badge variant="outline" className="text-[10px] px-1.5">{DATA_TYPE_LABELS[p.dataType] || p.dataType}</Badge>
-                      {p.isRequired && (
-                        <Badge className="text-[10px] px-1.5 bg-red-100 text-red-700 border-red-200">Required</Badge>
-                      )}
                       <span className="text-xs text-muted-foreground font-mono">{p.name}</span>
                     </div>
                     {p.description && (
@@ -289,31 +274,18 @@ ${params.filter(p => p.isActive).slice(0, 3).map(p => `    "${p.name}": "${p.dat
                 <p className="text-[11px] text-muted-foreground">The key used in the API request body under <code className="text-primary">context.{form.name || "key"}</code></p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-sm font-semibold">Data Type</Label>
-                  <Select value={form.dataType} onValueChange={(v) => setForm({ ...form, dataType: v })}>
-                    <SelectTrigger data-testid="select-param-data-type">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DATA_TYPE_OPTIONS.map((dt) => (
-                        <SelectItem key={dt} value={dt}>{DATA_TYPE_LABELS[dt]}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-sm font-semibold">Required</Label>
-                  <div className="flex items-center gap-2 h-10">
-                    <Switch
-                      checked={form.isRequired}
-                      onCheckedChange={(v) => setForm({ ...form, isRequired: v })}
-                      data-testid="switch-param-required"
-                    />
-                    <span className="text-sm text-muted-foreground">{form.isRequired ? "Required" : "Optional"}</span>
-                  </div>
-                </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm font-semibold">Data Type</Label>
+                <Select value={form.dataType} onValueChange={(v) => setForm({ ...form, dataType: v })}>
+                  <SelectTrigger data-testid="select-param-data-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DATA_TYPE_OPTIONS.map((dt) => (
+                      <SelectItem key={dt} value={dt}>{DATA_TYPE_LABELS[dt]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-1.5">

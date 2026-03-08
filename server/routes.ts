@@ -57,16 +57,6 @@ export async function registerRoutes(
         }
       }
 
-      const missingRequired = contextParams
-        .filter(p => p.isRequired && !contextValues[p.name])
-        .map(p => p.displayName);
-
-      if (missingRequired.length > 0) {
-        return res.status(400).json({
-          status: "error",
-          message: `Missing required context parameters: ${missingRequired.join(", ")}`,
-        });
-      }
 
       const { analysis } = await analyzeTranscript(
         resolvedSourceId,
@@ -195,7 +185,6 @@ export async function registerRoutes(
     displayName: z.string().min(1),
     description: z.string().default(""),
     dataType: z.enum(["string", "number", "date", "boolean"]).default("string"),
-    isRequired: z.boolean().default(false),
     isActive: z.boolean().default(true),
     displayOrder: z.number().int().min(0).default(0),
   });

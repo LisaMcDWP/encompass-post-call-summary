@@ -97,7 +97,6 @@ interface ContextParam {
   displayName: string;
   description: string;
   dataType: string;
-  isRequired: boolean;
   isActive: boolean;
 }
 
@@ -140,18 +139,6 @@ export default function Home() {
       toast({
         title: "Missing Source Text",
         description: "Please provide source text to analyze.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const missingRequired = contextParams
-      .filter(cp => cp.isRequired && !(contextValues[cp.name]?.trim()))
-      .map(cp => cp.displayName);
-    if (missingRequired.length > 0) {
-      toast({
-        title: "Missing Required Context",
-        description: `Please fill in: ${missingRequired.join(", ")}`,
         variant: "destructive",
       });
       return;
@@ -286,7 +273,6 @@ export default function Home() {
                       <div key={cp.id} className="space-y-1">
                         <Label htmlFor={`ctx-${cp.name}`} className="text-xs text-muted-foreground">
                           {cp.displayName}
-                          {cp.isRequired && <span className="text-destructive ml-0.5">*</span>}
                         </Label>
                         <Input
                           id={`ctx-${cp.name}`}

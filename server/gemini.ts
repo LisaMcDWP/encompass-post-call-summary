@@ -105,7 +105,7 @@ function buildContextBlock(contextParams: ContextParameter[]): string {
   if (contextParams.length === 0) return "";
 
   const lines = contextParams.map(p => {
-    const req = p.isRequired ? "(required)" : "(optional)";
+    const req = "(optional)";
     return `- ${p.displayName} (${p.name}): {{CONTEXT_${p.name.toUpperCase()}}} ${req}`;
   });
 

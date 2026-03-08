@@ -91,7 +91,6 @@ function rowToContextParameter(row: any): ContextParameter {
     displayName: row.display_name,
     description: row.description || "",
     dataType: row.data_type,
-    isRequired: row.is_required,
     isActive: row.is_active,
     displayOrder: row.display_order,
   };
@@ -347,7 +346,6 @@ export class BigQueryStorage implements IStorage {
       display_name: param.displayName,
       description: param.description || "",
       data_type: param.dataType || "string",
-      is_required: param.isRequired !== undefined ? param.isRequired : false,
       is_active: param.isActive !== false,
       display_order: param.displayOrder ?? 0,
     };
@@ -375,7 +373,6 @@ export class BigQueryStorage implements IStorage {
     if (data.displayName !== undefined) { setClauses.push("display_name = @displayName"); params.displayName = data.displayName; }
     if (data.description !== undefined) { setClauses.push("description = @description"); params.description = data.description; }
     if (data.dataType !== undefined) { setClauses.push("data_type = @dataType"); params.dataType = data.dataType; }
-    if (data.isRequired !== undefined) { setClauses.push("is_required = @isRequired"); params.isRequired = data.isRequired; }
     if (data.isActive !== undefined) { setClauses.push("is_active = @isActive"); params.isActive = data.isActive; }
     if (data.displayOrder !== undefined) { setClauses.push("display_order = @displayOrder"); params.displayOrder = data.displayOrder; }
 
