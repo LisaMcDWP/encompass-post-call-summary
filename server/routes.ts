@@ -15,7 +15,7 @@ export async function registerRoutes(
 
   app.post("/api/analyze", async (req, res) => {
     const startTime = Date.now();
-    const { record_context, care_flow_id, interaction_datetime, source_type, source_id, source_text } = req.body;
+    const { care_flow_id, interaction_datetime, source_type, source_id, source_text } = req.body;
 
     if (!source_text || typeof source_text !== "string" || source_text.trim().length === 0) {
       const processingTime = Date.now() - startTime;
@@ -56,7 +56,6 @@ export async function registerRoutes(
       return res.json({
         status: "success",
         data: {
-          record_context: record_context || null,
           care_flow_id: care_flow_id || null,
           interaction_datetime: interaction_datetime || new Date().toISOString(),
           source_type: source_type || null,

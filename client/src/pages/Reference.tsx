@@ -52,7 +52,7 @@ export default function Reference() {
           <CardContent className="space-y-6">
             <div>
               <h3 className="text-white font-semibold mb-2">Description</h3>
-              <p className="text-gray-300">Accepts source text with contextual metadata (record context, care flow, source type), processes it through Gemini AI, and returns structured clinical analysis with HTML-formatted output.</p>
+              <p className="text-gray-300">Accepts source text with contextual metadata (care flow, source type), processes it through Gemini AI, and returns structured clinical analysis with HTML-formatted output.</p>
             </div>
 
             <Separator className="bg-[#0098db]/10" />
@@ -61,7 +61,6 @@ export default function Reference() {
               <h3 className="text-white font-semibold mb-2">Request Body</h3>
               <p className="text-gray-400 text-sm mb-2">Content-Type: application/json</p>
               <div className="bg-[#0d1520] p-4 rounded-lg text-sm space-y-2 mb-4">
-                <p className="text-gray-300"><span className="text-[#96d410]">record_context</span> <span className="text-gray-500">(string, optional)</span> — Context for the record (e.g. post_discharge_call, follow_up).</p>
                 <p className="text-gray-300"><span className="text-[#96d410]">care_flow_id</span> <span className="text-gray-500">(string, optional)</span> — Identifier for the care flow or pathway.</p>
                 <p className="text-gray-300"><span className="text-[#96d410]">interaction_datetime</span> <span className="text-gray-500">(string, optional)</span> — ISO 8601 datetime of the interaction. Defaults to current time.</p>
                 <p className="text-gray-300"><span className="text-[#96d410]">source_type</span> <span className="text-gray-500">(string, optional)</span> — Type of source (e.g. phone_call, chat, note).</p>
@@ -71,7 +70,6 @@ export default function Reference() {
               <h4 className="text-white font-semibold mb-2 text-sm">Example Request Body</h4>
               <pre className="bg-[#0d1520] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto" data-testid="text-request-body">
 {`{
-  "record_context": "post_discharge_call",
   "care_flow_id": "cf_abc123",
   "interaction_datetime": "2026-03-06T10:30:00Z",
   "source_type": "phone_call",
@@ -89,7 +87,6 @@ export default function Reference() {
 {`{
   "status": "success",
   "data": {
-    "record_context": "post_discharge_call",
     "care_flow_id": "cf_abc123",
     "interaction_datetime": "2026-03-06T10:30:00Z",
     "source_type": "phone_call",
@@ -203,7 +200,6 @@ Patient cancelled appointment due to lack of transportation.<br><br>`}
 {`curl -X POST https://YOUR-CLOUD-RUN-URL/api/analyze \\
   -H "Content-Type: application/json" \\
   -d '{
-    "record_context": "post_discharge_call",
     "care_flow_id": "cf_abc123",
     "source_type": "phone_call",
     "source_id": "call_987654321",
@@ -288,7 +284,6 @@ Patient cancelled appointment due to lack of transportation.<br><br>`}
                 <p className="text-[#96d410] font-mono text-sm mb-1">Body</p>
                 <pre className="text-gray-300 text-sm mt-1">
 {`{
-  "record_context": "{{awell.record_context}}",
   "care_flow_id": "{{awell.care_flow_id}}",
   "interaction_datetime": "{{awell.interaction_datetime}}",
   "source_type": "{{awell.source_type}}",

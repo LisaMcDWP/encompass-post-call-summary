@@ -93,7 +93,6 @@ Patient's Wife: Thank you so much, Sarah. We really need the help right now.`,
 
 
 export default function Home() {
-  const [recordContext, setRecordContext] = useState("");
   const [careFlowId, setCareFlowId] = useState("");
   const [interactionDatetime, setInteractionDatetime] = useState("");
   const [sourceType, setSourceType] = useState("");
@@ -135,7 +134,6 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          record_context: recordContext.trim() || undefined,
           care_flow_id: careFlowId.trim() || undefined,
           interaction_datetime: interactionDatetime.trim() || undefined,
           source_type: sourceType.trim() || undefined,
@@ -219,29 +217,16 @@ export default function Home() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6 pt-6 flex-grow">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="recordContext" className="text-sm font-semibold text-foreground">Record Context <span className="text-muted-foreground font-normal">(Optional)</span></Label>
-                  <Input 
-                    id="recordContext" 
-                    placeholder="e.g. post_discharge_call" 
-                    value={recordContext}
-                    onChange={(e) => setRecordContext(e.target.value)}
-                    className="font-mono text-sm shadow-inner bg-background"
-                    data-testid="input-record-context"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="careFlowId" className="text-sm font-semibold text-foreground">Care Flow ID <span className="text-muted-foreground font-normal">(Optional)</span></Label>
-                  <Input 
-                    id="careFlowId" 
-                    placeholder="e.g. cf_abc123" 
-                    value={careFlowId}
-                    onChange={(e) => setCareFlowId(e.target.value)}
-                    className="font-mono text-sm shadow-inner bg-background"
-                    data-testid="input-care-flow-id"
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="careFlowId" className="text-sm font-semibold text-foreground">Care Flow ID <span className="text-muted-foreground font-normal">(Optional)</span></Label>
+                <Input 
+                  id="careFlowId" 
+                  placeholder="e.g. cf_abc123" 
+                  value={careFlowId}
+                  onChange={(e) => setCareFlowId(e.target.value)}
+                  className="font-mono text-sm shadow-inner bg-background"
+                  data-testid="input-care-flow-id"
+                />
               </div>
 
               <div className="grid grid-cols-3 gap-4">
@@ -432,7 +417,6 @@ export default function Home() {
                   ) : (
                     <CardContent className="font-mono text-xs overflow-auto bg-[#172938] p-4 rounded-b-lg text-green-400">
                       <pre>{JSON.stringify({ 
-                        record_context: result.data.record_context,
                         care_flow_id: result.data.care_flow_id,
                         source_type: result.data.source_type,
                         source_id: result.data.source_id,
