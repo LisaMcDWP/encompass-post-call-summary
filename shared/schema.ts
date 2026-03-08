@@ -17,6 +17,29 @@ export const insertUserSchema = createInsertSchema(users).pick({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
+export const insertContextParameterSchema = z.object({
+  name: z.string(),
+  displayName: z.string(),
+  description: z.string().default(""),
+  dataType: z.enum(["string", "number", "date", "boolean"]).default("string"),
+  isRequired: z.boolean().default(false),
+  isActive: z.boolean().default(true),
+  displayOrder: z.number().int().default(0),
+});
+
+export type InsertContextParameter = z.infer<typeof insertContextParameterSchema>;
+
+export interface ContextParameter {
+  id: number;
+  name: string;
+  displayName: string;
+  description: string;
+  dataType: string;
+  isRequired: boolean;
+  isActive: boolean;
+  displayOrder: number;
+}
+
 export const enumValueSchema = z.object({
   label: z.string(),
   color: z.enum(["GREEN", "YELLOW", "RED", "BLUE", "GRAY"]),

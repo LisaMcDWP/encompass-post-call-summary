@@ -1,9 +1,10 @@
 import { BigQuery } from "@google-cloud/bigquery";
-import type { Observation, InsertObservation, EnumValue } from "@shared/schema";
+import type { Observation, InsertObservation, EnumValue, ContextParameter, InsertContextParameter } from "@shared/schema";
 
 const DATASET_ID = "call_information";
 const TABLE_ID = "observations";
 const SETTINGS_TABLE_ID = "settings";
+const CONTEXT_PARAMS_TABLE_ID = "context_parameters";
 
 let bigquery: BigQuery | null = null;
 
@@ -23,6 +24,7 @@ function getBigQueryClient(): BigQuery {
 
 let tableInitialized = false;
 let settingsTableInitialized = false;
+let contextParamsTableInitialized = false;
 
 async function ensureSettingsTable(): Promise<void> {
   if (settingsTableInitialized) return;
@@ -48,6 +50,51 @@ async function ensureSettingsTable(): Promise<void> {
   }
 
   settingsTableInitialized = true;
+}
+
+async function ensureContextParamsTable(): Promise<void> {
+  if (contextParamsTableInitialized) return;
+
+  const client = getBigQueryClient();
+  const projectId = process.env.GCP_PROJECT_ID;
+  const fullTable = `${projectId}.${DATASET_ID}.${CONTEXT_PARAMS_TABLE_ID}`;
+
+  try {
+    await client.query({
+      query: `CREATE TABLE IF NOT EXISTS \`${fullTable}\` (
+        id INT64 NOT NULL,
+        name STRING NOT NULL,
+        display_name STRING NOT NULL,
+        description STRING,
+        data_type STRING NOT NULL,
+        is_required BOOL NOT NULL,
+        is_active BOOL NOT NULL,
+        display_order INT64 NOT NULL
+      )`,
+    });
+    console.log(`BigQuery table ${DATASET_ID}.${CONTEXT_PARAMS_TABLE_ID} ready.`);
+  } catch (err: any) {
+    if (err.message?.includes("Already Exists")) {
+      console.log(`BigQuery table ${DATASET_ID}.${CONTEXT_PARAMS_TABLE_ID} already exists.`);
+    } else {
+      throw err;
+    }
+  }
+
+  contextParamsTableInitialized = true;
+}
+
+function rowToContextParameter(row: any): ContextParameter {
+  return {
+    id: row.id,
+    name: row.name,
+    displayName: row.display_name,
+    description: row.description || "",
+    dataType: row.data_type,
+    isRequired: row.is_required,
+    isActive: row.is_active,
+    displayOrder: row.display_order,
+  };
 }
 
 async function ensureObservationsTable(): Promise<void> {
@@ -117,6 +164,13 @@ export interface IStorage {
   reorderObservations(orderedIds: number[]): Promise<void>;
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string): Promise<void>;
+  getContextParameters(): Promise<ContextParameter[]>;
+  getActiveContextParameters(): Promise<ContextParameter[]>;
+  getContextParameter(id: number): Promise<ContextParameter | undefined>;
+  createContextParameter(param: InsertContextParameter): Promise<ContextParameter>;
+  updateContextParameter(id: number, param: Partial<InsertContextParameter>): Promise<ContextParameter | undefined>;
+  deleteContextParameter(id: number): Promise<boolean>;
+  reorderContextParameters(orderedIds: number[]): Promise<void>;
 }
 
 export class BigQueryStorage implements IStorage {
@@ -242,6 +296,127 @@ export class BigQueryStorage implements IStorage {
       });
     }
   }
+  private getContextParamsTable(): string {
+    const projectId = process.env.GCP_PROJECT_ID;
+    return `\`${projectId}.${DATASET_ID}.${CONTEXT_PARAMS_TABLE_ID}\``;
+  }
+
+  async getContextParameters(): Promise<ContextParameter[]> {
+    await ensureContextParamsTable();
+    const client = getBigQueryClient();
+    const table = this.getContextParamsTable();
+    const [rows] = await client.query({ query: `SELECT * FROM ${table} ORDER BY display_order ASC` });
+    return rows.map(rowToContextParameter);
+  }
+
+  async getActiveContextParameters(): Promise<ContextParameter[]> {
+    await ensureContextParamsTable();
+    const client = getBigQueryClient();
+    const table = this.getContextParamsTable();
+    const [rows] = await client.query({ query: `SELECT * FROM ${table} WHERE is_active = TRUE ORDER BY display_order ASC` });
+    return rows.map(rowToContextParameter);
+  }
+
+  async getContextParameter(id: number): Promise<ContextParameter | undefined> {
+    await ensureContextParamsTable();
+    const client = getBigQueryClient();
+    const table = this.getContextParamsTable();
+    const [rows] = await client.query({
+      query: `SELECT * FROM ${table} WHERE id = @id`,
+      params: { id },
+    });
+    return rows.length > 0 ? rowToContextParameter(rows[0]) : undefined;
+  }
+
+  private async getNextContextParamId(): Promise<number> {
+    const client = getBigQueryClient();
+    const table = this.getContextParamsTable();
+    const [rows] = await client.query({ query: `SELECT COALESCE(MAX(id), 0) + 1 as next_id FROM ${table}` });
+    return rows[0].next_id;
+  }
+
+  async createContextParameter(param: InsertContextParameter): Promise<ContextParameter> {
+    await ensureContextParamsTable();
+    const client = getBigQueryClient();
+    const table = this.getContextParamsTable();
+    const id = await this.getNextContextParamId();
+
+    const row = {
+      id,
+      name: param.name,
+      display_name: param.displayName,
+      description: param.description || "",
+      data_type: param.dataType || "string",
+      is_required: param.isRequired !== undefined ? param.isRequired : false,
+      is_active: param.isActive !== false,
+      display_order: param.displayOrder ?? 0,
+    };
+
+    await client.query({
+      query: `INSERT INTO ${table} (id, name, display_name, description, data_type, is_required, is_active, display_order) VALUES (@id, @name, @display_name, @description, @data_type, @is_required, @is_active, @display_order)`,
+      params: row,
+    });
+
+    return rowToContextParameter(row);
+  }
+
+  async updateContextParameter(id: number, data: Partial<InsertContextParameter>): Promise<ContextParameter | undefined> {
+    await ensureContextParamsTable();
+    const client = getBigQueryClient();
+    const table = this.getContextParamsTable();
+
+    const existing = await this.getContextParameter(id);
+    if (!existing) return undefined;
+
+    const setClauses: string[] = [];
+    const params: Record<string, any> = { id };
+
+    if (data.name !== undefined) { setClauses.push("name = @name"); params.name = data.name; }
+    if (data.displayName !== undefined) { setClauses.push("display_name = @displayName"); params.displayName = data.displayName; }
+    if (data.description !== undefined) { setClauses.push("description = @description"); params.description = data.description; }
+    if (data.dataType !== undefined) { setClauses.push("data_type = @dataType"); params.dataType = data.dataType; }
+    if (data.isRequired !== undefined) { setClauses.push("is_required = @isRequired"); params.isRequired = data.isRequired; }
+    if (data.isActive !== undefined) { setClauses.push("is_active = @isActive"); params.isActive = data.isActive; }
+    if (data.displayOrder !== undefined) { setClauses.push("display_order = @displayOrder"); params.displayOrder = data.displayOrder; }
+
+    if (setClauses.length === 0) return existing;
+
+    await client.query({
+      query: `UPDATE ${table} SET ${setClauses.join(", ")} WHERE id = @id`,
+      params,
+    });
+
+    return this.getContextParameter(id);
+  }
+
+  async deleteContextParameter(id: number): Promise<boolean> {
+    await ensureContextParamsTable();
+    const client = getBigQueryClient();
+    const table = this.getContextParamsTable();
+
+    const existing = await this.getContextParameter(id);
+    if (!existing) return false;
+
+    await client.query({
+      query: `DELETE FROM ${table} WHERE id = @id`,
+      params: { id },
+    });
+    return true;
+  }
+
+  async reorderContextParameters(orderedIds: number[]): Promise<void> {
+    await ensureContextParamsTable();
+    const client = getBigQueryClient();
+    const table = this.getContextParamsTable();
+
+    for (let i = 0; i < orderedIds.length; i++) {
+      await client.query({
+        query: `UPDATE ${table} SET display_order = @order WHERE id = @id`,
+        params: { order: i, id: orderedIds[i] },
+      });
+    }
+  }
+
   private getSettingsTable(): string {
     const projectId = process.env.GCP_PROJECT_ID;
     return `\`${projectId}.${DATASET_ID}.${SETTINGS_TABLE_ID}\``;

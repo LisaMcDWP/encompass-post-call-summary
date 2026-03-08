@@ -1,5 +1,5 @@
 import { VertexAI } from "@google-cloud/vertexai";
-import type { Observation, EnumValue } from "@shared/schema";
+import type { Observation, EnumValue, ContextParameter } from "@shared/schema";
 
 function getCredentials() {
   const raw = process.env.GCP_SERVICE_ACCOUNT_KEY;
@@ -101,13 +101,25 @@ function buildObservationsSchema(obs: Observation[]): string {
 
 export const DEFAULT_SUMMARY_INSTRUCTION = "A brief overall summary of the call based on the questions asked of the patient and their responses. If the patient answered the call, include the following topics at a minimum (only comment on what the patient actually responded to): {{SUMMARY_TOPICS}}.";
 
-export function buildPromptTemplate(activeObservations: Observation[], summaryInstruction?: string): string {
+function buildContextBlock(contextParams: ContextParameter[]): string {
+  if (contextParams.length === 0) return "";
+
+  const lines = contextParams.map(p => {
+    const req = p.isRequired ? "(required)" : "(optional)";
+    return `- ${p.displayName} (${p.name}): {{CONTEXT_${p.name.toUpperCase()}}} ${req}`;
+  });
+
+  return `\n###KNOWN CONTEXT\nThe following context information has been provided about this interaction. Use it to enrich your analysis where relevant. If a value is empty or "N/A", treat it as not provided.\n${lines.join("\n")}\n`;
+}
+
+export function buildPromptTemplate(activeObservations: Observation[], summaryInstruction?: string, contextParams?: ContextParameter[]): string {
   const instruction = summaryInstruction || DEFAULT_SUMMARY_INSTRUCTION;
+  const contextBlock = buildContextBlock(contextParams || []);
 
   if (activeObservations.length === 0) {
     const resolvedInstruction = instruction.replace("{{SUMMARY_TOPICS}}", "general topics discussed");
     return `You are an expert healthcare call analyst for Guideway Care. Analyze the following patient interaction transcript and produce a structured JSON output.
-
+${contextBlock}
 Your response MUST be valid JSON with exactly this structure:
 {
   "summary": "${resolvedInstruction}",
@@ -132,7 +144,7 @@ SOURCE TEXT:
   const resolvedSummaryInstruction = instruction.replace("{{SUMMARY_TOPICS}}", summaryTopics);
 
   return `You are an expert healthcare call analyst for Guideway Care. Analyze the following patient interaction transcript and produce a structured JSON output.
-
+${contextBlock}
 ###CORE FORMATTING RULES
 1. Use Third Person Perspective
    - "Patient reports..." (when patient answered directly)
@@ -174,7 +186,9 @@ export async function analyzeTranscript(
   sourceText: string,
   activeObservations: Observation[],
   customPrompt?: string,
-  summaryInstruction?: string
+  summaryInstruction?: string,
+  contextParams?: ContextParameter[],
+  contextValues?: Record<string, string>
 ): Promise<{ analysis: TranscriptAnalysis; promptUsed: string }> {
   const vertex = getVertexAI();
 
@@ -186,10 +200,18 @@ export async function analyzeTranscript(
     },
   });
 
-  const template = customPrompt || buildPromptTemplate(activeObservations, summaryInstruction);
-  const prompt = template
+  const template = customPrompt || buildPromptTemplate(activeObservations, summaryInstruction, contextParams);
+  let prompt = template
     .replace("{{SOURCE_ID}}", sourceId)
     .replace("{{SOURCE_TEXT}}", sourceText);
+
+  if (contextParams && contextValues) {
+    for (const param of contextParams) {
+      const placeholder = `{{CONTEXT_${param.name.toUpperCase()}}}`;
+      const val = contextValues[param.name] || "N/A";
+      prompt = prompt.replace(placeholder, val);
+    }
+  }
 
   const result = await model.generateContent(prompt);
   const response = result.response;

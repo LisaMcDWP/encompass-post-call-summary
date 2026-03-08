@@ -91,6 +91,16 @@ Patient's Wife: Thank you so much, Sarah. We really need the help right now.`,
 };
 
 
+interface ContextParam {
+  id: number;
+  name: string;
+  displayName: string;
+  description: string;
+  dataType: string;
+  isRequired: boolean;
+  isActive: boolean;
+}
+
 export default function Home() {
   const [careFlowId, setCareFlowId] = useState("");
   const [interactionDatetime, setInteractionDatetime] = useState("");
@@ -103,6 +113,8 @@ export default function Home() {
   const [customPrompt, setCustomPrompt] = useState("");
   const [defaultPrompt, setDefaultPrompt] = useState("");
   const [showPromptEditor, setShowPromptEditor] = useState(false);
+  const [contextParams, setContextParams] = useState<ContextParam[]>([]);
+  const [contextValues, setContextValues] = useState<Record<string, string>>({});
   const { toast } = useToast();
 
   useEffect(() => {
@@ -113,6 +125,14 @@ export default function Home() {
         setCustomPrompt(data.prompt);
       })
       .catch(() => {});
+
+    fetch("/api/context-parameters")
+      .then((r) => r.json())
+      .then((data) => {
+        const active = data.filter((p: ContextParam) => p.isActive);
+        setContextParams(active);
+      })
+      .catch(() => {});
   }, []);
 
   const handleTestApi = async () => {
@@ -120,6 +140,18 @@ export default function Home() {
       toast({
         title: "Missing Source Text",
         description: "Please provide source text to analyze.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const missingRequired = contextParams
+      .filter(cp => cp.isRequired && !(contextValues[cp.name]?.trim()))
+      .map(cp => cp.displayName);
+    if (missingRequired.length > 0) {
+      toast({
+        title: "Missing Required Context",
+        description: `Please fill in: ${missingRequired.join(", ")}`,
         variant: "destructive",
       });
       return;
@@ -138,6 +170,11 @@ export default function Home() {
           source_type: sourceType.trim() || undefined,
           source_id: sourceId.trim() || undefined,
           source_text: sourceText.trim(),
+          context: Object.keys(contextValues).length > 0
+            ? Object.fromEntries(
+                Object.entries(contextValues).filter(([_, v]) => v.trim() !== "")
+              )
+            : undefined,
         }),
       });
       
@@ -238,6 +275,34 @@ export default function Home() {
                 </div>
               </div>
               
+              {contextParams.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                    Known Context
+                    <span className="text-muted-foreground font-normal">(from configured parameters)</span>
+                  </Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {contextParams.map((cp) => (
+                      <div key={cp.id} className="space-y-1">
+                        <Label htmlFor={`ctx-${cp.name}`} className="text-xs text-muted-foreground">
+                          {cp.displayName}
+                          {cp.isRequired && <span className="text-destructive ml-0.5">*</span>}
+                        </Label>
+                        <Input
+                          id={`ctx-${cp.name}`}
+                          type={cp.dataType === "number" ? "number" : cp.dataType === "date" ? "date" : "text"}
+                          placeholder={cp.description || `Enter ${cp.displayName.toLowerCase()}`}
+                          value={contextValues[cp.name] || ""}
+                          onChange={(e) => setContextValues({ ...contextValues, [cp.name]: e.target.value })}
+                          className="font-mono text-sm shadow-inner bg-background h-9"
+                          data-testid={`input-context-${cp.name}`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-2 flex-grow flex flex-col">
                 <div className="flex justify-between items-center">
                   <Label htmlFor="sourceText" className="text-sm font-semibold text-foreground">Source Text <span className="text-destructive">*</span></Label>

@@ -9,6 +9,7 @@ import Home from "@/pages/Home";
 import Reference from "@/pages/Reference";
 import Observations from "@/pages/Observations";
 import SummaryPrompt from "@/pages/SummaryPrompt";
+import ContextParameters from "@/pages/ContextParameters";
 
 function Router() {
   return (
@@ -17,6 +18,7 @@ function Router() {
         <Route path="/" component={Home} />
         <Route path="/observations" component={Observations} />
         <Route path="/summary-prompt" component={SummaryPrompt} />
+        <Route path="/context-parameters" component={ContextParameters} />
         <Route path="/reference" component={Reference} />
         <Route component={NotFound} />
       </Switch>

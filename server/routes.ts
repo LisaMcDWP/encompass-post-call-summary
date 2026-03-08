@@ -4,7 +4,7 @@ import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION } f
 import { logTooBigQuery } from "./bigquery";
 import { randomUUID } from "crypto";
 import { storage } from "./storage";
-import { insertObservationSchema, enumValueSchema } from "@shared/schema";
+import { insertObservationSchema, enumValueSchema, insertContextParameterSchema } from "@shared/schema";
 import { z } from "zod";
 
 export async function registerRoutes(
@@ -15,13 +15,14 @@ export async function registerRoutes(
   app.get("/api/prompt", async (_req, res) => {
     const activeObs = await storage.getActiveObservations();
     const summaryInstruction = await storage.getSetting("summary_instruction");
-    const prompt = buildPromptTemplate(activeObs, summaryInstruction || undefined);
+    const contextParams = await storage.getActiveContextParameters();
+    const prompt = buildPromptTemplate(activeObs, summaryInstruction || undefined, contextParams);
     res.json({ prompt });
   });
 
   app.post("/api/analyze", async (req, res) => {
     const startTime = Date.now();
-    const { care_flow_id, interaction_datetime, source_type, source_id, source_text } = req.body;
+    const { care_flow_id, interaction_datetime, source_type, source_id, source_text, context, ...rest } = req.body;
 
     if (!source_text || typeof source_text !== "string" || source_text.trim().length === 0) {
       const processingTime = Date.now() - startTime;
@@ -45,12 +46,36 @@ export async function registerRoutes(
     try {
       const activeObs = await storage.getActiveObservations();
       const summaryInstruction = await storage.getSetting("summary_instruction");
+      const contextParams = await storage.getActiveContextParameters();
+
+      const contextValues: Record<string, string> = {};
+      if (context && typeof context === "object") {
+        for (const param of contextParams) {
+          if (context[param.name] !== undefined && context[param.name] !== null) {
+            contextValues[param.name] = String(context[param.name]);
+          }
+        }
+      }
+
+      const missingRequired = contextParams
+        .filter(p => p.isRequired && !contextValues[p.name])
+        .map(p => p.displayName);
+
+      if (missingRequired.length > 0) {
+        return res.status(400).json({
+          status: "error",
+          message: `Missing required context parameters: ${missingRequired.join(", ")}`,
+        });
+      }
+
       const { analysis } = await analyzeTranscript(
         resolvedSourceId,
         source_text.trim(),
         activeObs,
         undefined,
-        summaryInstruction || undefined
+        summaryInstruction || undefined,
+        contextParams,
+        contextValues
       );
       const processingTime = Date.now() - startTime;
 
@@ -71,6 +96,7 @@ export async function registerRoutes(
           interaction_datetime: interaction_datetime || new Date().toISOString(),
           source_type: source_type || null,
           source_id: resolvedSourceId,
+          context: contextValues,
           processedAt: new Date().toISOString(),
           processingTimeMs: processingTime,
           analysis,
@@ -156,6 +182,73 @@ export async function registerRoutes(
 
     const deleted = await storage.deleteObservation(id);
     if (!deleted) return res.status(404).json({ message: "Observation not found" });
+    res.json({ success: true });
+  });
+
+  app.get("/api/context-parameters", async (_req, res) => {
+    const params = await storage.getContextParameters();
+    res.json(params);
+  });
+
+  const contextParamCreateSchema = z.object({
+    name: z.string().min(1).regex(/^[a-z][a-z0-9_]*$/, "Name must be lowercase snake_case (letters, numbers, underscores, starting with a letter)"),
+    displayName: z.string().min(1),
+    description: z.string().default(""),
+    dataType: z.enum(["string", "number", "date", "boolean"]).default("string"),
+    isRequired: z.boolean().default(false),
+    isActive: z.boolean().default(true),
+    displayOrder: z.number().int().min(0).default(0),
+  });
+
+  const contextParamUpdateSchema = contextParamCreateSchema.partial();
+
+  app.post("/api/context-parameters", async (req, res) => {
+    const parsed = contextParamCreateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.errors.map(e => e.message).join(", ") });
+    }
+    try {
+      const existing = await storage.getContextParameters();
+      if (existing.some(p => p.name === parsed.data.name)) {
+        return res.status(400).json({ message: `A context parameter with name "${parsed.data.name}" already exists.` });
+      }
+      const param = await storage.createContextParameter(parsed.data);
+      res.status(201).json(param);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/context-parameters/reorder", async (req, res) => {
+    const { orderedIds } = req.body;
+    if (!Array.isArray(orderedIds) || !orderedIds.every((id: any) => typeof id === "number")) {
+      return res.status(400).json({ message: "orderedIds must be an array of numbers" });
+    }
+    await storage.reorderContextParameters(orderedIds);
+    const params = await storage.getContextParameters();
+    res.json(params);
+  });
+
+  app.put("/api/context-parameters/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+
+    const parsed = contextParamUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.errors.map(e => e.message).join(", ") });
+    }
+
+    const param = await storage.updateContextParameter(id, parsed.data);
+    if (!param) return res.status(404).json({ message: "Context parameter not found" });
+    res.json(param);
+  });
+
+  app.delete("/api/context-parameters/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+
+    const deleted = await storage.deleteContextParameter(id);
+    if (!deleted) return res.status(404).json({ message: "Context parameter not found" });
     res.json({ success: true });
   });
 

@@ -20,10 +20,19 @@ A full-stack application that provides a Gemini-powered transcript analysis API.
 - `shared/schema.ts` — Type definitions (Observation, InsertObservation, EnumValue) + users table
 - `client/src/pages/Home.tsx` — Test interface for the API
 - `client/src/pages/Observations.tsx` — Observation definitions management UI
+- `client/src/pages/ContextParameters.tsx` — Context parameter management UI
 - `client/src/pages/Reference.tsx` — API reference documentation
 - `Dockerfile` — Multi-stage Docker build for GCP Cloud Run
 - `cloudbuild.yaml` — GCP Cloud Build CI/CD pipeline
 - `deploy.sh` — Manual deployment script for Cloud Run
+
+## Context Parameters
+Configurable input parameters stored in BigQuery (`call_information.context_parameters`) that API callers can pass alongside the transcript to give Gemini known context (e.g. patient name, diagnosis, facility).
+- `id` (INT64), `name` (key), `display_name`, `description`, `data_type` (string/number/date/boolean), `is_required`, `is_active`, `display_order`
+- Active parameters are injected into the Gemini prompt as a "KNOWN CONTEXT" section
+- Values passed via `context` object in POST /api/analyze request body
+- Required parameters are validated server-side; missing ones return 400
+- Management UI at `/context-parameters` in the Setup sidebar section
 
 ## Observations Model
 Observations are dynamic topics stored in BigQuery (`call_information.observations`) used in the Gemini analysis prompt. Each observation has:
@@ -60,6 +69,7 @@ Returns service connectivity status.
 - Dataset: `call_information`
 - Table: `api_logs` — API call logging (call_id, timestamp, transcript_length, summary, areas_for_followup, questions_count, processing_time_ms, status, error_message)
 - Table: `observations` — Observation configuration (id, name, display_name, domain, display_order, value_type, value, is_active, prompt_guidance)
+- Table: `context_parameters` — Context parameter definitions (id, name, display_name, description, data_type, is_required, is_active, display_order)
 
 ## GCP Cloud Run Deployment
 - **Dockerfile**: Multi-stage build (builder + runner) with Node 20
