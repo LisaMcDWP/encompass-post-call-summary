@@ -87,6 +87,16 @@ export default function Reference() {
       "summary": "Brief overall summary of the call...",
       "disposition_change": true | false,
       "disposition_change_note": "Current location if readmitted, or null",
+      "observations": [
+        {
+          "name": "overall_feeling",
+          "display_name": "Overall Feeling",
+          "domain": "wellness",
+          "value_type": "enum",
+          "value": "Good",
+          "detail": "Patient reports feeling well overall."
+        }
+      ],
       "transition_status": "<b>Overall Feeling:</b> <span style='...'>Good</span><br>...",
       "follow_up_areas": "<ul><li><b>Topic:</b> Detail...</li></ul>"
     }
@@ -111,6 +121,10 @@ export default function Reference() {
                 <div className="bg-[#0d1520] p-3 rounded-lg">
                   <p className="text-[#96d410] font-mono text-sm">disposition_change_note</p>
                   <p className="text-gray-400 text-sm mt-1">String or null. If readmitted, describes where the patient currently is (home, hospital, SNF, rehab, etc.). Null if no readmission.</p>
+                </div>
+                <div className="bg-[#0d1520] p-3 rounded-lg">
+                  <p className="text-[#96d410] font-mono text-sm">observations</p>
+                  <p className="text-gray-400 text-sm mt-1">Array of observation objects, one per active topic. Each object contains: <code className="text-[#0098db]">name</code> (key), <code className="text-[#0098db]">display_name</code>, <code className="text-[#0098db]">domain</code>, <code className="text-[#0098db]">value_type</code> (enum/boolean/text/number), <code className="text-[#0098db]">value</code> (extracted value or null if not discussed), and <code className="text-[#0098db]">detail</code> (brief explanation). Enum values match the labels defined in the Observations configuration.</p>
                 </div>
                 <div className="bg-[#0d1520] p-3 rounded-lg">
                   <p className="text-[#96d410] font-mono text-sm">transition_status</p>
@@ -289,6 +303,7 @@ Patient cancelled appointment due to lack of transportation.<br><br>`}
                 <p><code className="text-[#96d410]">data.analysis.summary</code> → Call Summary</p>
                 <p><code className="text-[#96d410]">data.analysis.disposition_change</code> → Readmission Flag (true/false)</p>
                 <p><code className="text-[#96d410]">data.analysis.disposition_change_note</code> → Current Location</p>
+                <p><code className="text-[#96d410]">data.analysis.observations</code> → Array of Extracted Observations</p>
                 <p><code className="text-[#96d410]">data.analysis.transition_status</code> → Transition Status Details</p>
                 <p><code className="text-[#96d410]">data.analysis.follow_up_areas</code> → Follow-Up Items</p>
               </div>

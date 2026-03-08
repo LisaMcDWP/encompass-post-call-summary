@@ -32,12 +32,22 @@ function getVertexAI(): VertexAI {
   return vertexAI;
 }
 
+export interface ObservationResult {
+  name: string;
+  display_name: string;
+  domain: string;
+  value_type: string;
+  value: string | null;
+  detail: string;
+}
+
 export interface TranscriptAnalysis {
   summary: string;
   transition_status: string;
   disposition_change: boolean;
   disposition_change_note: string | null;
   follow_up_areas: string;
+  observations: ObservationResult[];
 }
 
 const COLOR_STYLES: Record<string, string> = {
@@ -72,6 +82,20 @@ function buildSummaryTopics(obs: Observation[]): string {
     .join("; ");
 }
 
+function buildObservationsSchema(obs: Observation[]): string {
+  const entries = obs.map(o => {
+    const valuesNote = o.valueType === "enum" && Array.isArray(o.value) && o.value.length > 0
+      ? `One of: ${(o.value as EnumValue[]).map(v => `"${v.label}"`).join(", ")}, or null if not discussed`
+      : o.valueType === "boolean"
+        ? `true, false, or null if not discussed`
+        : o.valueType === "number"
+          ? `Numeric value, or null if not discussed`
+          : `Free text string, or null if not discussed`;
+    return `    { "name": "${o.name}", "display_name": "${o.displayName}", "domain": "${o.domain}", "value_type": "${o.valueType}", "value": "${valuesNote}", "detail": "Brief explanation of what was observed" }`;
+  });
+  return entries.join(",\n");
+}
+
 export function buildPromptTemplate(activeObservations: Observation[]): string {
   if (activeObservations.length === 0) {
     return `You are an expert healthcare call analyst for Guideway Care. Analyze the following patient interaction transcript and produce a structured JSON output.
@@ -81,6 +105,7 @@ Your response MUST be valid JSON with exactly this structure:
   "summary": "A brief overall summary of the call.",
   "disposition_change": true/false,
   "disposition_change_note": "Current location if readmitted, or null.",
+  "observations": [],
   "transition_status": "<p>No observation topics configured.</p>",
   "follow_up_areas": "<p>No follow-up areas identified.</p>"
 }
@@ -95,6 +120,7 @@ SOURCE TEXT:
   const statusMappings = buildStatusMappings(activeObservations);
   const summaryTopics = buildSummaryTopics(activeObservations);
   const colorStyles = buildColorStylesBlock();
+  const observationsSchema = buildObservationsSchema(activeObservations);
 
   return `You are an expert healthcare call analyst for Guideway Care. Analyze the following patient interaction transcript and produce a structured JSON output.
 
@@ -112,6 +138,9 @@ Your response MUST be valid JSON with exactly this structure:
   "summary": "A brief overall summary of the call based on the questions asked of the patient and their responses. If the patient answered the call, include the following topics at a minimum (only comment on what the patient actually responded to): ${summaryTopics}.",
   "disposition_change": true/false,
   "disposition_change_note": "If the patient was readmitted (ER, hospital, SNF, or any care facility since discharge), where are they currently? Examples: home, care facility, hospital, skilled nursing facility, rehab center, etc. Write null (JSON null) if the patient was not readmitted, if the question was not asked, or if no response was provided.",
+  "observations": [
+${observationsSchema}
+  ],
   "transition_status": "A single HTML string covering ALL ${topicCount} observation topics. This value MUST be a valid JSON string. Do NOT start with a quote character. Use inline styles for color-coded status badges. For enum topics, format as: <b>Topic:</b> <span style='INLINE_STYLE'>STATUS</span><br>Detail sentence.<br><br> For non-enum topics (text, boolean, number), format as: <b>Topic:</b><br>Detail sentence.<br><br> (no status badge needed). Use these exact inline styles for each status type: ${colorStyles} — Status-to-color mappings: ${statusMappings}. ALWAYS include all ${topicCount} topics.",
   "follow_up_areas": "A single HTML string listing follow-up areas. This value MUST be a valid JSON string. Use <ul> and <li> tags with <b> for topic names. Only include items for topics with problems or gaps. If none, use '<p>No follow-up areas identified.</p>'. Example: <ul><li><b>${activeObservations[0]?.displayName || "Topic"}:</b> Detail about the issue.</li></ul>"
 }
@@ -122,6 +151,7 @@ Guidelines:
 - summary: Provide a brief overall summary based on questions asked and the patient's responses. Only comment on what the patient actually responded to. Do not include information the patient did not discuss.
 - disposition_change: Set to true ONLY if the patient was readmitted to an ER, hospital, SNF, or any care facility since discharge. Set to false if no readmission occurred or the topic was not discussed.
 - disposition_change_note: If disposition_change is true, describe where the patient currently is (home, hospital, care facility, SNF, rehab, etc.). Return JSON null if the patient was not readmitted, the question was not asked, or no response was provided.
+- observations: Return an array with exactly ${topicCount} objects, one for each observation topic. Each object must have: name (the key), display_name, domain, value_type, value (the extracted value from the transcript — use the exact label for enum types, or null if not discussed), and detail (a brief sentence explaining what was observed). Preserve the name, display_name, domain, and value_type exactly as specified above.
 - transition_status: Return a single HTML string as a valid JSON string value. Do NOT start the string with a quote or any character before the first <b> tag. Use inline style attributes with single quotes for color-coded status badges (e.g. style='display:inline-block;padding:1px 8px;...'). Use <b> for topic labels, <span style='...'> for colored status badges, and <br> for line breaks. Include all ${topicCount} topics. The entire value must be a properly quoted JSON string. The first character of the string content must be the opening < of the first <b> tag.
 - follow_up_areas: Return a single HTML string as a valid JSON string value. Use <ul>/<li> with <b> for topic names. Use single quotes for any HTML attributes. Only include items with issues. If none, return "<p>No follow-up areas identified.</p>".
 Source ID: {{SOURCE_ID}}
@@ -176,6 +206,10 @@ export async function analyzeTranscript(
   ) {
     console.error("Gemini returned unexpected structure:", JSON.stringify(parsed).substring(0, 500));
     throw new Error("Gemini response missing required fields. Please try again.");
+  }
+
+  if (!Array.isArray(parsed.observations)) {
+    parsed.observations = [];
   }
 
   return { analysis: parsed as TranscriptAnalysis, promptUsed: prompt };

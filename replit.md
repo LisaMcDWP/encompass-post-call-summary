@@ -42,7 +42,7 @@ Observations are dynamic topics used in the Gemini analysis prompt. Each observa
 ## API Endpoints
 ### POST /api/analyze
 Input: `{ care_flow_id?, interaction_datetime?, source_type?, source_id?, source_text }`
-Output: `{ status, data: { care_flow_id, interaction_datetime, source_type, source_id, processedAt, processingTimeMs, analysis: { summary, transition_status, disposition_change, disposition_change_note, follow_up_areas } } }`
+Output: `{ status, data: { care_flow_id, interaction_datetime, source_type, source_id, processedAt, processingTimeMs, analysis: { summary, disposition_change, disposition_change_note, observations: [{ name, display_name, domain, value_type, value, detail }], transition_status, follow_up_areas } } }`
 
 ### GET /api/prompt
 Returns the dynamically generated prompt template: `{ prompt: string }`

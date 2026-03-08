@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Play, CheckCircle2, AlertCircle, FileText, ListChecks, ClipboardList, Settings2, RotateCcw, AlertTriangle, FileSearch } from "lucide-react";
+import { Loader2, Play, CheckCircle2, AlertCircle, FileText, ListChecks, ClipboardList, Settings2, RotateCcw, AlertTriangle, FileSearch, Activity } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -444,6 +444,72 @@ export default function Home() {
                     )}
                   </CardContent>
                 </Card>
+
+                {/* Observations */}
+                {result.data.analysis.observations && result.data.analysis.observations.length > 0 && (
+                  <Card className="border-border/60 bg-card shadow-md" data-testid="card-observations">
+                    <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
+                      <CardTitle className="text-lg flex items-center gap-2 text-secondary">
+                        <Activity className="h-5 w-5 text-primary" />
+                        Observations
+                        <Badge variant="outline" className="text-xs ml-2" data-testid="badge-observations-count">
+                          {result.data.analysis.observations.length} topics
+                        </Badge>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <div className="space-y-3" data-testid="list-observations">
+                        {result.data.analysis.observations.map((obs: any, index: number) => (
+                          <div
+                            key={obs.name || index}
+                            className="flex items-start gap-3 p-3 rounded-lg border border-border/50 bg-muted/20"
+                            data-testid={`observation-item-${obs.name || index}`}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-semibold text-sm text-foreground" data-testid={`observation-name-${obs.name}`}>
+                                  {obs.display_name}
+                                </span>
+                                {obs.domain && (
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
+                                    {obs.domain}
+                                  </Badge>
+                                )}
+                                {obs.value !== null && obs.value !== undefined && (
+                                  <Badge
+                                    className="text-xs"
+                                    variant={
+                                      typeof obs.value === "string" &&
+                                      ["good", "green", "yes", "true", "no concerns", "no issues"].includes(obs.value.toLowerCase())
+                                        ? "default"
+                                        : typeof obs.value === "string" &&
+                                          ["concerning", "red", "issues", "problems"].includes(obs.value.toLowerCase())
+                                          ? "destructive"
+                                          : "secondary"
+                                    }
+                                    data-testid={`observation-value-${obs.name}`}
+                                  >
+                                    {String(obs.value)}
+                                  </Badge>
+                                )}
+                                {(obs.value === null || obs.value === undefined) && (
+                                  <Badge variant="outline" className="text-xs text-muted-foreground" data-testid={`observation-value-${obs.name}`}>
+                                    Not discussed
+                                  </Badge>
+                                )}
+                              </div>
+                              {obs.detail && (
+                                <p className="text-sm text-muted-foreground leading-relaxed" data-testid={`observation-detail-${obs.name}`}>
+                                  {obs.detail}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* Follow Up Areas */}
                 {result.data.analysis.follow_up_areas && (
