@@ -6,7 +6,7 @@ A full-stack application that provides a Gemini-powered transcript analysis API.
 ## Architecture
 - **Frontend**: React + Vite + Tailwind CSS v4 + shadcn/ui components
 - **Backend**: Express.js (Node/TypeScript)
-- **Database**: PostgreSQL via Drizzle ORM (observations model)
+- **Database**: Google BigQuery (observations model + API logging)
 - **AI**: Google Vertex AI Gemini (`gemini-2.0-flash-001`) via `@google-cloud/vertexai`
 - **Logging**: Google BigQuery via `@google-cloud/bigquery`
 - **Auth**: GCP Service Account (shared between Gemini and BigQuery)
@@ -14,11 +14,10 @@ A full-stack application that provides a Gemini-powered transcript analysis API.
 ## Key Files
 - `server/routes.ts` — API endpoints (`POST /api/analyze`, `GET /api/prompt`, `GET /api/health`, observations CRUD)
 - `server/gemini.ts` — Vertex AI Gemini integration with dynamic prompt builder from observations
-- `server/bigquery.ts` — BigQuery logging (auto-creates dataset/table)
-- `server/db.ts` — PostgreSQL database connection via Drizzle
-- `server/storage.ts` — DatabaseStorage class with observation CRUD operations
-- `server/seed.ts` — Seeds default 11 observation topics on first run
-- `shared/schema.ts` — Data model: users table + observations table
+- `server/bigquery.ts` — BigQuery API call logging (dataset: `call_information`, table: `api_logs`)
+- `server/storage.ts` — BigQueryStorage class with observation CRUD operations (dataset: `call_information`, table: `observations`)
+- `server/seed.ts` — Seeds default 11 observation topics to BigQuery on first run
+- `shared/schema.ts` — Type definitions (Observation, InsertObservation, EnumValue) + users table
 - `client/src/pages/Home.tsx` — Test interface for the API
 - `client/src/pages/Observations.tsx` — Observation definitions management UI
 - `client/src/pages/Reference.tsx` — API reference documentation
@@ -27,17 +26,17 @@ A full-stack application that provides a Gemini-powered transcript analysis API.
 - `deploy.sh` — Manual deployment script for Cloud Run
 
 ## Observations Model
-Observations are dynamic topics used in the Gemini analysis prompt. Each observation has:
-- `id` (serial PK), `name` (key), `display_name`, `domain`, `display_order`, `value_type`, `value` (jsonb), `is_active`
-- For enum types, `value` contains an array of `{label, color}` objects
+Observations are dynamic topics stored in BigQuery (`call_information.observations`) used in the Gemini analysis prompt. Each observation has:
+- `id` (INT64), `name` (key), `display_name`, `domain`, `display_order`, `value_type`, `value` (JSON string), `is_active`
+- For enum types, `value` contains a JSON-serialized array of `{label, color}` objects
 - Colors: GREEN, YELLOW, RED, BLUE, GRAY — mapped to inline HTML styles
 - The prompt is dynamically built from active observations at analysis time
 - Default seed: 11 post-discharge topics (Overall Feeling, Disposition Change, Prescription Pickup, etc.)
+- Service account: `encompass-dashboard-app@encompass-476415.iam.gserviceaccount.com`
 
 ## Environment Variables (Secrets)
-- `GCP_PROJECT_ID` — Google Cloud project ID
+- `GCP_PROJECT_ID` — Google Cloud project ID (`encompass-476415`)
 - `GCP_SERVICE_ACCOUNT_KEY` — Full JSON service account key (needs Vertex AI User, BigQuery Data Editor, BigQuery Job User roles)
-- `DATABASE_URL` — PostgreSQL connection string (auto-provisioned by Replit)
 
 ## API Endpoints
 ### POST /api/analyze
@@ -58,9 +57,9 @@ Returns service connectivity status.
 - `PUT /api/observations/reorder` — Reorder observations
 
 ## BigQuery Schema
-- Dataset: `transcript_analysis`
-- Table: `api_logs`
-- Fields: call_id, timestamp, transcript_length, summary, areas_for_followup, questions_count, processing_time_ms, status, error_message
+- Dataset: `call_information`
+- Table: `api_logs` — API call logging (call_id, timestamp, transcript_length, summary, areas_for_followup, questions_count, processing_time_ms, status, error_message)
+- Table: `observations` — Observation configuration (id, name, display_name, domain, display_order, value_type, value, is_active)
 
 ## GCP Cloud Run Deployment
 - **Dockerfile**: Multi-stage build (builder + runner) with Node 20
