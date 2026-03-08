@@ -147,6 +147,16 @@ async function ensureObservationsTable(): Promise<void> {
     }
   }
 
+  try {
+    await client.query({
+      query: `ALTER TABLE \`${fullTable}\` ADD COLUMN IF NOT EXISTS description STRING`,
+    });
+  } catch (err: any) {
+    if (!err.message?.includes("Already Exists") && !err.message?.includes("Duplicate column")) {
+      console.log(`Note: Could not add description column (may already exist): ${err.message}`);
+    }
+  }
+
   tableInitialized = true;
 }
 
@@ -155,6 +165,7 @@ function rowToObservation(row: any): Observation {
     id: row.id,
     name: row.name,
     displayName: row.display_name,
+    description: row.description || "",
     domain: row.domain,
     displayOrder: row.display_order,
     valueType: row.value_type,
@@ -233,6 +244,7 @@ export class BigQueryStorage implements IStorage {
       id,
       name: observation.name,
       display_name: observation.displayName,
+      description: observation.description || "",
       domain: observation.domain || "general",
       display_order: observation.displayOrder ?? 0,
       value_type: observation.valueType || "enum",
@@ -242,7 +254,7 @@ export class BigQueryStorage implements IStorage {
     };
 
     await client.query({
-      query: `INSERT INTO ${table} (id, name, display_name, domain, display_order, value_type, value, is_active, prompt_guidance) VALUES (@id, @name, @display_name, @domain, @display_order, @value_type, @value, @is_active, @prompt_guidance)`,
+      query: `INSERT INTO ${table} (id, name, display_name, description, domain, display_order, value_type, value, is_active, prompt_guidance) VALUES (@id, @name, @display_name, @description, @domain, @display_order, @value_type, @value, @is_active, @prompt_guidance)`,
       params: row,
     });
 
@@ -262,6 +274,7 @@ export class BigQueryStorage implements IStorage {
 
     if (data.name !== undefined) { setClauses.push("name = @name"); params.name = data.name; }
     if (data.displayName !== undefined) { setClauses.push("display_name = @displayName"); params.displayName = data.displayName; }
+    if (data.description !== undefined) { setClauses.push("description = @description"); params.description = data.description; }
     if (data.domain !== undefined) { setClauses.push("domain = @domain"); params.domain = data.domain; }
     if (data.displayOrder !== undefined) { setClauses.push("display_order = @displayOrder"); params.displayOrder = data.displayOrder; }
     if (data.valueType !== undefined) { setClauses.push("value_type = @valueType"); params.valueType = data.valueType; }

@@ -20,6 +20,7 @@ interface Observation {
   id: number;
   name: string;
   displayName: string;
+  description: string;
   domain: string;
   displayOrder: number;
   valueType: string;
@@ -42,6 +43,7 @@ const VALUE_TYPE_OPTIONS = ["enum", "boolean", "text", "number"];
 const emptyForm = {
   name: "",
   displayName: "",
+  description: "",
   domain: "general",
   valueType: "enum",
   value: [] as EnumValue[],
@@ -81,6 +83,7 @@ export default function Observations() {
     setForm({
       name: obs.name,
       displayName: obs.displayName,
+      description: obs.description || "",
       domain: obs.domain,
       valueType: obs.valueType,
       value: [...(obs.value || [])],
@@ -100,6 +103,7 @@ export default function Observations() {
     const payload = {
       name: form.name.trim(),
       displayName: form.displayName.trim(),
+      description: form.description.trim(),
       domain: form.domain,
       valueType: form.valueType,
       value: form.valueType === "enum" ? form.value : [],
@@ -242,6 +246,9 @@ export default function Observations() {
                       <Badge variant="outline" className="text-[10px] px-1.5">{obs.valueType}</Badge>
                       <span className="text-xs text-muted-foreground font-mono">{obs.name}</span>
                     </div>
+                    {obs.description && (
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{obs.description}</p>
+                    )}
                     {obs.valueType === "enum" && obs.value && obs.value.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mt-1">
                         {(obs.value as EnumValue[]).map((v, i) => {
@@ -321,6 +328,21 @@ export default function Observations() {
                   data-testid="input-obs-display-name"
                 />
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="obs-description" className="text-sm font-semibold">
+                Description
+                <span className="text-muted-foreground font-normal ml-1">(optional)</span>
+              </Label>
+              <Input
+                id="obs-description"
+                placeholder="e.g. Whether the patient has picked up their prescriptions since discharge"
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                className="text-sm"
+                data-testid="input-obs-description"
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">

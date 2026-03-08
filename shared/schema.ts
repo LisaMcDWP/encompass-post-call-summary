@@ -50,6 +50,7 @@ export type EnumValue = z.infer<typeof enumValueSchema>;
 export const insertObservationSchema = z.object({
   name: z.string(),
   displayName: z.string(),
+  description: z.string().optional().default(""),
   domain: z.string().default("general"),
   displayOrder: z.number().int().default(0),
   valueType: z.string().default("enum"),
@@ -64,6 +65,7 @@ export interface Observation {
   id: number;
   name: string;
   displayName: string;
+  description: string;
   domain: string;
   displayOrder: number;
   valueType: string;
