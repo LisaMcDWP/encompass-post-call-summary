@@ -12,9 +12,9 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: "Setup",
     items: [
-      { label: "Observations", href: "/observations", icon: <Settings className="h-4 w-4" />, section: "setup" },
       { label: "Summary Prompt", href: "/summary-prompt", icon: <FileText className="h-4 w-4" />, section: "setup" },
       { label: "Context Parameters", href: "/context-parameters", icon: <Variable className="h-4 w-4" />, section: "setup" },
+      { label: "Observations", href: "/observations", icon: <Settings className="h-4 w-4" />, section: "setup" },
       { label: "Generated Prompt", href: "/generated-prompt", icon: <Eye className="h-4 w-4" />, section: "setup" },
     ],
   },
