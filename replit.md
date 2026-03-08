@@ -27,7 +27,7 @@ A full-stack application that provides a Gemini-powered transcript analysis API.
 
 ## Observations Model
 Observations are dynamic topics stored in BigQuery (`call_information.observations`) used in the Gemini analysis prompt. Each observation has:
-- `id` (INT64), `name` (key), `display_name`, `domain`, `display_order`, `value_type`, `value` (JSON string), `is_active`
+- `id` (INT64), `name` (key), `display_name`, `domain`, `display_order`, `value_type`, `value` (JSON string), `is_active`, `prompt_guidance` (optional per-observation Gemini instruction)
 - For enum types, `value` contains a JSON-serialized array of `{label, color}` objects
 - Colors: GREEN, YELLOW, RED, BLUE, GRAY — mapped to inline HTML styles
 - The prompt is dynamically built from active observations at analysis time
@@ -59,7 +59,7 @@ Returns service connectivity status.
 ## BigQuery Schema
 - Dataset: `call_information`
 - Table: `api_logs` — API call logging (call_id, timestamp, transcript_length, summary, areas_for_followup, questions_count, processing_time_ms, status, error_message)
-- Table: `observations` — Observation configuration (id, name, display_name, domain, display_order, value_type, value, is_active)
+- Table: `observations` — Observation configuration (id, name, display_name, domain, display_order, value_type, value, is_active, prompt_guidance)
 
 ## GCP Cloud Run Deployment
 - **Dockerfile**: Multi-stage build (builder + runner) with Node 20

@@ -91,7 +91,10 @@ function buildObservationsSchema(obs: Observation[]): string {
         : o.valueType === "number"
           ? `Numeric value, or null if not discussed`
           : `Free text string, or null if not discussed`;
-    return `    { "name": "${o.name}", "display_name": "${o.displayName}", "domain": "${o.domain}", "value_type": "${o.valueType}", "value": "${valuesNote}", "detail": "Brief explanation of what was observed" }`;
+    const detailNote = o.promptGuidance
+      ? o.promptGuidance
+      : "Brief explanation of what was observed";
+    return `    { "name": "${o.name}", "display_name": "${o.displayName}", "domain": "${o.domain}", "value_type": "${o.valueType}", "value": "${valuesNote}", "detail": "${detailNote}" }`;
   });
   return entries.join(",\n");
 }

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -24,6 +25,7 @@ interface Observation {
   valueType: string;
   value: EnumValue[];
   isActive: boolean;
+  promptGuidance: string;
 }
 
 const COLOR_MAP: Record<string, { bg: string; text: string; border: string; label: string }> = {
@@ -44,6 +46,7 @@ const emptyForm = {
   valueType: "enum",
   value: [] as EnumValue[],
   isActive: true,
+  promptGuidance: "",
 };
 
 export default function Observations() {
@@ -82,6 +85,7 @@ export default function Observations() {
       valueType: obs.valueType,
       value: [...(obs.value || [])],
       isActive: obs.isActive,
+      promptGuidance: obs.promptGuidance || "",
     });
     setNewEnumLabel("");
     setIsDialogOpen(true);
@@ -100,6 +104,7 @@ export default function Observations() {
       valueType: form.valueType,
       value: form.valueType === "enum" ? form.value : [],
       isActive: form.isActive,
+      promptGuidance: form.promptGuidance.trim(),
     };
 
     let res;
@@ -253,6 +258,11 @@ export default function Observations() {
                         })}
                       </div>
                     )}
+                    {obs.promptGuidance && (
+                      <p className="text-[11px] text-muted-foreground mt-1.5 italic" data-testid={`text-guidance-${obs.id}`}>
+                        Guidance: {obs.promptGuidance.length > 120 ? obs.promptGuidance.slice(0, 120) + "..." : obs.promptGuidance}
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     <Switch
@@ -340,6 +350,25 @@ export default function Observations() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="obs-prompt-guidance" className="text-sm font-semibold">
+                Prompt Guidance
+                <span className="text-muted-foreground font-normal ml-1">(optional)</span>
+              </Label>
+              <Textarea
+                id="obs-prompt-guidance"
+                placeholder="e.g. Focus on whether the patient picked up all prescriptions and note any barriers like cost or prior authorization issues."
+                value={form.promptGuidance}
+                onChange={(e) => setForm({ ...form, promptGuidance: e.target.value })}
+                rows={3}
+                className="text-sm"
+                data-testid="textarea-prompt-guidance"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Extra instructions for Gemini on how to evaluate this observation. If blank, Gemini uses a generic instruction.
+              </p>
             </div>
 
             {form.valueType === "enum" && (

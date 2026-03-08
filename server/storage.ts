@@ -67,7 +67,8 @@ async function ensureObservationsTable(): Promise<void> {
         display_order INT64 NOT NULL,
         value_type STRING NOT NULL,
         value STRING,
-        is_active BOOL NOT NULL
+        is_active BOOL NOT NULL,
+        prompt_guidance STRING
       )`,
     });
     console.log(`BigQuery table ${DATASET_ID}.${TABLE_ID} ready.`);
@@ -76,6 +77,16 @@ async function ensureObservationsTable(): Promise<void> {
       console.log(`BigQuery table ${DATASET_ID}.${TABLE_ID} already exists.`);
     } else {
       throw err;
+    }
+  }
+
+  try {
+    await client.query({
+      query: `ALTER TABLE \`${fullTable}\` ADD COLUMN IF NOT EXISTS prompt_guidance STRING`,
+    });
+  } catch (err: any) {
+    if (!err.message?.includes("Already Exists") && !err.message?.includes("Duplicate column")) {
+      console.log(`Note: Could not add prompt_guidance column (may already exist): ${err.message}`);
     }
   }
 
@@ -92,6 +103,7 @@ function rowToObservation(row: any): Observation {
     valueType: row.value_type,
     value: row.value ? JSON.parse(row.value) : [],
     isActive: row.is_active,
+    promptGuidance: row.prompt_guidance || "",
   };
 }
 
@@ -162,10 +174,11 @@ export class BigQueryStorage implements IStorage {
       value_type: observation.valueType || "enum",
       value: JSON.stringify(observation.value || []),
       is_active: observation.isActive !== false,
+      prompt_guidance: observation.promptGuidance || "",
     };
 
     await client.query({
-      query: `INSERT INTO ${table} (id, name, display_name, domain, display_order, value_type, value, is_active) VALUES (@id, @name, @display_name, @domain, @display_order, @value_type, @value, @is_active)`,
+      query: `INSERT INTO ${table} (id, name, display_name, domain, display_order, value_type, value, is_active, prompt_guidance) VALUES (@id, @name, @display_name, @domain, @display_order, @value_type, @value, @is_active, @prompt_guidance)`,
       params: row,
     });
 
@@ -190,6 +203,7 @@ export class BigQueryStorage implements IStorage {
     if (data.valueType !== undefined) { setClauses.push("value_type = @valueType"); params.valueType = data.valueType; }
     if (data.value !== undefined) { setClauses.push("value = @value"); params.value = JSON.stringify(data.value); }
     if (data.isActive !== undefined) { setClauses.push("is_active = @isActive"); params.isActive = data.isActive; }
+    if (data.promptGuidance !== undefined) { setClauses.push("prompt_guidance = @promptGuidance"); params.promptGuidance = data.promptGuidance; }
 
     if (setClauses.length === 0) return existing;
 

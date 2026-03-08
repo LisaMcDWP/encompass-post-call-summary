@@ -32,6 +32,7 @@ export const insertObservationSchema = z.object({
   valueType: z.string().default("enum"),
   value: z.array(enumValueSchema).default([]),
   isActive: z.boolean().default(true),
+  promptGuidance: z.string().optional().default(""),
 });
 
 export type InsertObservation = z.infer<typeof insertObservationSchema>;
@@ -45,4 +46,5 @@ export interface Observation {
   valueType: string;
   value: EnumValue[];
   isActive: boolean;
+  promptGuidance: string;
 }
