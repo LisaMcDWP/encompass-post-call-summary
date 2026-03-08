@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
-const SAMPLE_TRANSCRIPTS: Record<string, { label: string; transcript: string }> = {
+const SAMPLE_TRANSCRIPTS: Record<string, { label: string; transcript: string; context?: Record<string, string> }> = {
   struggling: {
     label: "Struggling Patient",
     transcript: `Care Guide: Hello, this is Maria from Guideway Care. Am I speaking with Mrs. Thompson?
@@ -61,8 +61,9 @@ Patient: Honestly, it was excellent. The staff were incredibly kind and professi
 Care Guide: That's wonderful feedback, Mr. Rodriguez. It sounds like you're doing really well. I'll check back in with you next week. Take care!
 Patient: Thank you, James. I appreciate the call.`,
   },
-  brief_checkin: {
-    label: "Brief Check-in (No DME/HH)",
+  no_dme_hh: {
+    label: "No DME/HH Ordered",
+    context: { dme_ordered: "false", home_health_ordered: "false" },
     transcript: `Care Guide: Hi, this is Laura from Guideway Care. Am I speaking with Mrs. Davis?
 Patient: Yes, this is Patricia.
 Care Guide: Hi Patricia. I'm calling to check in on you since your discharge from Encompass last week. How have you been feeling overall?
@@ -82,8 +83,9 @@ Patient: It was good. Everyone was professional and caring. I felt well taken ca
 Care Guide: That's great to hear. Thank you for your time, Patricia. We'll check in again next week.
 Patient: Thank you, Laura.`,
   },
-  medication_focus: {
-    label: "Medication Issues (No DME/HH)",
+  med_issues_no_dme: {
+    label: "Med Issues, No DME",
+    context: { dme_ordered: "false", home_health_ordered: "false" },
     transcript: `Care Guide: Hello, this is David from Guideway Care. Am I speaking with Mr. Jackson?
 Patient: Yes, speaking.
 Care Guide: Hi Mr. Jackson. I'm calling to follow up after your discharge from Encompass Rehabilitation. How are you feeling overall?
@@ -105,8 +107,9 @@ Patient: Mixed. The therapy sessions were really helpful but the communication b
 Care Guide: Thank you for that feedback, Mr. Jackson. I'll get the medication issue flagged right away. Take care.
 Patient: Thanks, David.`,
   },
-  caregiver_quick: {
-    label: "Caregiver Quick Call (No DME/HH)",
+  caregiver_no_dme: {
+    label: "Caregiver, No DME",
+    context: { dme_ordered: "false", home_health_ordered: "false" },
     transcript: `Care Guide: Hi, this is Monica from Guideway Care. I'm calling for Mrs. Chen. Am I speaking with a family member?
 Patient's Son: Yes, this is her son, Kevin. Mom doesn't speak much English so I handle these calls.
 Care Guide: Thank you, Kevin. I'm checking in on your mother since her discharge from Encompass. How has she been feeling overall?
@@ -357,14 +360,19 @@ export default function Home() {
               <div className="space-y-2 flex-grow flex flex-col">
                 <div className="flex justify-between items-center">
                   <Label htmlFor="sourceText" className="text-sm font-semibold text-foreground">Source Text <span className="text-destructive">*</span></Label>
-                  <div className="flex gap-1.5">
+                  <div className="flex flex-wrap gap-1.5">
                     {Object.entries(SAMPLE_TRANSCRIPTS).map(([key, sample]) => (
                       <Button
                         key={key}
                         variant="outline"
                         size="sm"
                         className="h-7 text-xs px-3 border-primary/20 text-primary hover:bg-primary hover:text-white transition-colors"
-                        onClick={() => setSourceText(sample.transcript)}
+                        onClick={() => {
+                          setSourceText(sample.transcript);
+                          if (sample.context) {
+                            setContextValues(prev => ({ ...prev, ...sample.context }));
+                          }
+                        }}
                         data-testid={`button-load-sample-${key}`}
                       >
                         {sample.label}
