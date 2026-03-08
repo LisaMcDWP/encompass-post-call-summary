@@ -63,7 +63,7 @@ Patient: Thank you, James. I appreciate the call.`,
   },
   no_dme_hh: {
     label: "No DME/HH Ordered",
-    context: { dme_ordered: "false", home_health_ordered: "false" },
+    context: { dme_or_supplies_ordered: "false", home_health_ordered: "false" },
     transcript: `Care Guide: Hi, this is Laura from Guideway Care. Am I speaking with Mrs. Davis?
 Patient: Yes, this is Patricia.
 Care Guide: Hi Patricia. I'm calling to check in on you since your discharge from Encompass last week. How have you been feeling overall?
@@ -85,7 +85,7 @@ Patient: Thank you, Laura.`,
   },
   med_issues_no_dme: {
     label: "Med Issues, No DME",
-    context: { dme_ordered: "false", home_health_ordered: "false" },
+    context: { dme_or_supplies_ordered: "false", home_health_ordered: "false" },
     transcript: `Care Guide: Hello, this is David from Guideway Care. Am I speaking with Mr. Jackson?
 Patient: Yes, speaking.
 Care Guide: Hi Mr. Jackson. I'm calling to follow up after your discharge from Encompass Rehabilitation. How are you feeling overall?
@@ -109,7 +109,7 @@ Patient: Thanks, David.`,
   },
   caregiver_no_dme: {
     label: "Caregiver, No DME",
-    context: { dme_ordered: "false", home_health_ordered: "false" },
+    context: { dme_or_supplies_ordered: "false", home_health_ordered: "false" },
     transcript: `Care Guide: Hi, this is Monica from Guideway Care. I'm calling for Mrs. Chen. Am I speaking with a family member?
 Patient's Son: Yes, this is her son, Kevin. Mom doesn't speak much English so I handle these calls.
 Care Guide: Thank you, Kevin. I'm checking in on your mother since her discharge from Encompass. How has she been feeling overall?
@@ -165,6 +165,7 @@ interface ContextParam {
   displayName: string;
   description: string;
   dataType: string;
+  enumValues?: string[];
   isActive: boolean;
 }
 
@@ -342,15 +343,30 @@ export default function Home() {
                         <Label htmlFor={`ctx-${cp.name}`} className="text-xs text-muted-foreground">
                           {cp.displayName}
                         </Label>
-                        <Input
-                          id={`ctx-${cp.name}`}
-                          type={cp.dataType === "number" ? "number" : cp.dataType === "date" ? "date" : "text"}
-                          placeholder={cp.description || `Enter ${cp.displayName.toLowerCase()}`}
-                          value={contextValues[cp.name] || ""}
-                          onChange={(e) => setContextValues({ ...contextValues, [cp.name]: e.target.value })}
-                          className="font-mono text-sm shadow-inner bg-background h-9"
-                          data-testid={`input-context-${cp.name}`}
-                        />
+                        {cp.dataType === "enum" && cp.enumValues && cp.enumValues.length > 0 ? (
+                          <select
+                            id={`ctx-${cp.name}`}
+                            value={contextValues[cp.name] || ""}
+                            onChange={(e) => setContextValues({ ...contextValues, [cp.name]: e.target.value })}
+                            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-inner font-mono transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                            data-testid={`input-context-${cp.name}`}
+                          >
+                            <option value="">-- Select --</option>
+                            {cp.enumValues.map((val) => (
+                              <option key={val} value={val}>{val}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <Input
+                            id={`ctx-${cp.name}`}
+                            type={cp.dataType === "number" ? "number" : cp.dataType === "date" ? "date" : "text"}
+                            placeholder={cp.description || `Enter ${cp.displayName.toLowerCase()}`}
+                            value={contextValues[cp.name] || ""}
+                            onChange={(e) => setContextValues({ ...contextValues, [cp.name]: e.target.value })}
+                            className="font-mono text-sm shadow-inner bg-background h-9"
+                            data-testid={`input-context-${cp.name}`}
+                          />
+                        )}
                       </div>
                     ))}
                   </div>
