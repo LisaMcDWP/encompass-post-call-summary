@@ -145,11 +145,13 @@ export async function registerRoutes(
   const observationCreateSchema = z.object({
     name: z.string().min(1),
     displayName: z.string().min(1),
+    description: z.string().default(""),
     domain: z.string().min(1),
     displayOrder: z.number().int().min(0),
     valueType: z.enum(["enum", "boolean", "text", "number"]),
     value: z.array(enumValueSchema).default([]),
     isActive: z.boolean().default(true),
+    promptGuidance: z.string().default(""),
   });
 
   const observationUpdateSchema = observationCreateSchema.partial();
