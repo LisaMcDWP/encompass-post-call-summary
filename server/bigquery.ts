@@ -60,8 +60,10 @@ async function ensureDatasetAndTable() {
 
 async function ensureObservationsTable() {
   const client = getBigQueryClient();
+  const projectId = process.env.GCP_PROJECT_ID!;
   const dataset = client.dataset(DATASET_ID);
   const table = dataset.table(OBSERVATIONS_TABLE_ID);
+  const fullTable = `\`${projectId}.${DATASET_ID}.${OBSERVATIONS_TABLE_ID}\``;
   const [tableExists] = await table.exists();
   if (!tableExists) {
     await dataset.createTable(OBSERVATIONS_TABLE_ID, {
@@ -92,7 +94,17 @@ async function ensureObservationsTable() {
       },
     });
     console.log(`Created BigQuery table: ${DATASET_ID}.${OBSERVATIONS_TABLE_ID}`);
+  } else {
+    const newColumns = ["observation_evidence", "observation_confidence"];
+    for (const col of newColumns) {
+      try {
+        await client.query({ query: `ALTER TABLE ${fullTable} ADD COLUMN IF NOT EXISTS ${col} STRING` });
+      } catch (err: any) {
+        console.log(`Note: Could not add ${col} column (may already exist): ${err.message}`);
+      }
+    }
   }
+  console.log(`BigQuery table ${DATASET_ID}.${OBSERVATIONS_TABLE_ID} ready.`);
 }
 
 let observationsTableInitialized = false;
