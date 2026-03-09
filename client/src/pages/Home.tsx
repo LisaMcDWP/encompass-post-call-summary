@@ -129,8 +129,33 @@ Patient's Son: She said it was positive. She really liked her physical therapist
 Care Guide: Thank you, Kevin. I'll note the medication concern and follow up. Take care.
 Patient's Son: Thank you, Monica.`,
   },
+  still_in_hospital: {
+    label: "Still in Hospital",
+    transcript: `Care Guide: Hello, this is Angela from Guideway Care. Am I speaking with Mrs. Franklin?
+Patient's Daughter: No, this is her daughter, Brenda. Mom can't come to the phone right now.
+Care Guide: Thank you, Brenda. I'm calling to check in on your mother since she was discharged from Encompass Rehabilitation Hospital about ten days ago. How has she been feeling?
+Patient's Daughter: Well, things took a bad turn. She started running a high fever last Thursday and was vomiting. We took her to the ER at St. Luke's and they admitted her. She's still there now.
+Care Guide: I'm so sorry to hear that. Can you tell me a little more about what happened?
+Patient's Daughter: They said she has a urinary tract infection that got into her bloodstream — sepsis, they called it. She's been on IV antibiotics since Friday. The doctors say she's improving but they want to keep her at least a few more days for monitoring.
+Care Guide: I'm glad she's getting the care she needs. So she's currently still at St. Luke's Hospital?
+Patient's Daughter: Yes, she's in room 412. She's been here since last Thursday night, so almost a week now.
+Care Guide: Before the readmission, had you been able to pick up her prescriptions from after the Encompass discharge?
+Patient's Daughter: Yes, we had all of those. She was taking everything as prescribed. No issues with the medications from Encompass.
+Care Guide: That's good. Had she been able to attend any follow-up appointments before this happened?
+Patient's Daughter: She had one scheduled for this past Monday with her primary care doctor but obviously we had to cancel it since she's in the hospital. We'll need to reschedule once she's out.
+Care Guide: Understood. Was home health visiting before the readmission?
+Patient's Daughter: Yes, they came twice. The nurse came on Monday and Wednesday of last week. Everything seemed fine at those visits, which is why the fever on Thursday was such a surprise.
+Care Guide: Were any equipment or supplies delivered to the home?
+Patient's Daughter: Yes, the walker and the bedside commode were both delivered and she was using them. I don't know what will happen with those now — she might need different things when she eventually comes home from St. Luke's.
+Care Guide: Do you have any questions about her care or discharge instructions?
+Patient's Daughter: I'm confused about what happens next. When she leaves St. Luke's, does she go back to Encompass for more rehab, or does she come home? And will she get new discharge instructions that replace the old ones? It's all very overwhelming.
+Care Guide: Those are really important questions and I'll make sure the care team addresses them. How was your mother's experience at Encompass before all of this?
+Patient's Daughter: She liked Encompass. The therapists were great and she felt like she was making progress. It's just devastating that this infection set her back so much.
+Care Guide: Thank you for sharing all of this, Brenda. I'm going to coordinate with the care team regarding your mother's current hospitalization and make sure we have a plan for when she's ready to transition out of St. Luke's. I'll follow up with you in a couple of days.
+Patient's Daughter: Thank you, Angela. That would be very helpful.`,
+  },
   readmitted: {
-    label: "Readmitted Patient",
+    label: "Readmitted (Back Home)",
     transcript: `Care Guide: Hello, this is Sarah from Guideway Care. Am I speaking with Mr. Williams?
 Patient: No, this is his wife, Denise. Harold is here but he's resting.
 Care Guide: Thank you, Denise. I'm calling to check in on Harold since he was discharged from Encompass Rehabilitation Hospital two weeks ago. How has he been feeling overall?
