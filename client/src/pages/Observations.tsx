@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, GripVertical, X, Save, Loader2, Info, GripVertical as Grip } from "lucide-react";
+import { Plus, Pencil, Trash2, GripVertical, X, Save, Loader2, Info, GripVertical as Grip, ArrowUp, ArrowDown } from "lucide-react";
 
 interface EnumValue {
   label: string;
@@ -211,6 +211,14 @@ export default function Observations() {
       ...form,
       value: form.value.filter((_, i) => i !== index),
     });
+  };
+
+  const moveEnumValue = (index: number, direction: "up" | "down") => {
+    const newIndex = direction === "up" ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= form.value.length) return;
+    const updated = [...form.value];
+    [updated[index], updated[newIndex]] = [updated[newIndex], updated[index]];
+    setForm({ ...form, value: updated });
   };
 
   const handleDragStart = (id: number) => {
@@ -474,7 +482,29 @@ export default function Observations() {
                   {form.value.map((v, i) => {
                     const c = COLOR_MAP[v.color] || COLOR_MAP.GRAY;
                     return (
-                      <div key={i} className="flex items-center gap-2 group">
+                      <div key={i} className="flex items-center gap-1.5 group">
+                        <div className="flex flex-col">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => moveEnumValue(i, "up")}
+                            disabled={i === 0}
+                            className="h-5 w-5 p-0 opacity-40 hover:opacity-100 disabled:opacity-10"
+                            data-testid={`button-enum-up-${i}`}
+                          >
+                            <ArrowUp className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => moveEnumValue(i, "down")}
+                            disabled={i === form.value.length - 1}
+                            className="h-5 w-5 p-0 opacity-40 hover:opacity-100 disabled:opacity-10"
+                            data-testid={`button-enum-down-${i}`}
+                          >
+                            <ArrowDown className="h-3 w-3" />
+                          </Button>
+                        </div>
                         <span className={`w-3 h-3 rounded-full shrink-0 ${c.bg} border ${c.border}`} />
                         <Input
                           value={v.label}
