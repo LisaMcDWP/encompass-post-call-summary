@@ -116,8 +116,6 @@ export async function registerRoutes(
         promptVersionDate: promptVersionDate,
         contextValues,
         summary: analysis.summary,
-        dispositionChange: analysis.disposition_change,
-        dispositionChangeNote: analysis.disposition_change_note,
         observations: analysis.observations,
       });
 

@@ -46,8 +46,6 @@ export interface ObservationResult {
 export interface TranscriptAnalysis {
   summary: string;
   transition_status: string;
-  disposition_change: boolean;
-  disposition_change_note: string | null;
   follow_up_areas: string;
   observations: ObservationResult[];
 }
@@ -135,8 +133,6 @@ ${contextBlock}
 Your response MUST be valid JSON with exactly this structure:
 {
   "summary": "${resolvedInstruction}",
-  "disposition_change": true/false,
-  "disposition_change_note": "Current location if readmitted, or null.",
   "observations": [],
   "transition_status": "<p>No observation topics configured.</p>",
   "follow_up_areas": "<p>No follow-up areas identified.</p>"
@@ -169,8 +165,6 @@ ${contextBlock}
 Your response MUST be valid JSON with exactly this structure:
 {
   "summary": "${resolvedSummaryInstruction}",
-  "disposition_change": true/false,
-  "disposition_change_note": "If the patient was readmitted (ER, hospital, SNF, or any care facility since discharge), where are they currently? Examples: home, care facility, hospital, skilled nursing facility, rehab center, etc. Write null (JSON null) if the patient was not readmitted, if the question was not asked, or if no response was provided.",
   "observations": [
 ${observationsSchema}
   ],
@@ -182,8 +176,6 @@ Guidelines:
 - All output must use third person perspective. Use "Patient reports..." when the patient answered directly, or "Patient's [relationship] reports..." when a family member or caregiver answered. Never use first person or second person.
 - Present information objectively. Report exactly what was stated without interpretation. Maintain a factual tone without emotional language.
 - summary: Provide a brief overall summary based on questions asked and the patient's responses. Only comment on what the patient actually responded to. Do not include information the patient did not discuss.
-- disposition_change: Set to true ONLY if the patient was readmitted to an ER, hospital, SNF, or any care facility since discharge. Set to false if no readmission occurred or the topic was not discussed.
-- disposition_change_note: If disposition_change is true, describe where the patient currently is (home, hospital, care facility, SNF, rehab, etc.). Return JSON null if the patient was not readmitted, the question was not asked, or no response was provided.
 - observations: Return an array with exactly ${topicCount} objects, one for each observation topic. Each object must have: name (the key), display_name, domain, value_type, value (the extracted value from the transcript — use the exact label for enum types, or null if not discussed), detail (a brief sentence explaining what was observed), evidence (a direct quote or specific reference from the transcript that supports the value — use null if the topic was not discussed), and confidence (one of "high", "medium", or "low" based on how clear and direct the transcript evidence is — use "high" when the patient explicitly stated something, "medium" when it was implied, "low" when inferred from limited information, or null if not discussed). Preserve the name, display_name, domain, and value_type exactly as specified above.${observationsGuidance ? `\n- GENERAL OBSERVATIONS GUIDANCE: ${observationsGuidance}` : ""}
 - transition_status: Return a single HTML string as a valid JSON string value. Do NOT start the string with a quote or any character before the first <b> tag. Use inline style attributes with single quotes for color-coded status badges (e.g. style='display:inline-block;padding:1px 8px;...'). Use <b> for topic labels, <span style='...'> for colored status badges, and <br> for line breaks. The text inside each <span> badge MUST be the actual enum value chosen for that observation (e.g. "Fair", "Picked Up", "Not Discussed") — NEVER use the color name (GREEN, YELLOW, RED, etc.) as badge text. Include all ${topicCount} topics. The entire value must be a properly quoted JSON string. The first character of the string content must be the opening < of the first <b> tag. IMPORTANT: List all discussed topics first, then group any "Not Discussed" topics together at the bottom of the output.
 - follow_up_areas: Return a single HTML string as a valid JSON string value. Use <ul>/<li> with <b> for topic names. Use single quotes for any HTML attributes. Only include items with issues. If none, return "<p>No follow-up areas identified.</p>".

@@ -80,8 +80,6 @@ async function ensureObservationsTable() {
           { name: "prompt_version_date", type: "TIMESTAMP", mode: "NULLABLE" },
           { name: "context_values", type: "STRING", mode: "NULLABLE" },
           { name: "summary", type: "STRING", mode: "NULLABLE" },
-          { name: "disposition_change", type: "BOOLEAN", mode: "NULLABLE" },
-          { name: "disposition_change_note", type: "STRING", mode: "NULLABLE" },
           { name: "observation_name", type: "STRING", mode: "REQUIRED" },
           { name: "observation_display_name", type: "STRING", mode: "NULLABLE" },
           { name: "observation_domain", type: "STRING", mode: "NULLABLE" },
@@ -121,8 +119,6 @@ export interface CallObservationEntry {
   promptVersionDate?: string | null;
   contextValues?: Record<string, string>;
   summary?: string;
-  dispositionChange?: boolean;
-  dispositionChangeNote?: string | null;
   observations: ObservationResult[];
 }
 
@@ -148,8 +144,6 @@ export async function insertCallObservations(entry: CallObservationEntry): Promi
       prompt_version_date: entry.promptVersionDate || null,
       context_values: entry.contextValues ? JSON.stringify(entry.contextValues) : null,
       summary: entry.summary || null,
-      disposition_change: entry.dispositionChange ?? null,
-      disposition_change_note: entry.dispositionChangeNote || null,
       observation_name: obs.name,
       observation_display_name: obs.display_name,
       observation_domain: obs.domain,
