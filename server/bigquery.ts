@@ -75,7 +75,18 @@ async function ensureCallInfoTable() {
   const dataset = await ensureDataset();
   const table = dataset.table(CALL_INFO_TABLE_ID);
   const [tableExists] = await table.exists();
-  if (!tableExists) {
+  if (tableExists) {
+    const [metadata] = await table.getMetadata();
+    const fieldNames = (metadata.schema?.fields || []).map((f: any) => f.name);
+    if (fieldNames.includes("interaction_datetime") || !fieldNames.includes("processed_datetime")) {
+      console.log(`Recreating ${CALL_INFO_TABLE_ID} table due to schema change...`);
+      await table.delete();
+      await new Promise(r => setTimeout(r, 2000));
+    } else {
+      return;
+    }
+  }
+  {
     await dataset.createTable(CALL_INFO_TABLE_ID, {
       schema: {
         fields: [
@@ -111,7 +122,18 @@ async function ensureObservationsTable() {
   const dataset = await ensureDataset();
   const table = dataset.table(OBSERVATIONS_TABLE_ID);
   const [tableExists] = await table.exists();
-  if (!tableExists) {
+  if (tableExists) {
+    const [metadata] = await table.getMetadata();
+    const fieldNames = (metadata.schema?.fields || []).map((f: any) => f.name);
+    if (fieldNames.includes("processed_at") || fieldNames.includes("processing_time_ms") || fieldNames.includes("source_id")) {
+      console.log(`Recreating ${OBSERVATIONS_TABLE_ID} table due to schema change...`);
+      await table.delete();
+      await new Promise(r => setTimeout(r, 2000));
+    } else {
+      return;
+    }
+  }
+  {
     await dataset.createTable(OBSERVATIONS_TABLE_ID, {
       schema: {
         fields: [
@@ -137,7 +159,7 @@ let observationsInitialized = false;
 export interface CallInfoEntry {
   callId: string;
   careFlowId?: string | null;
-  interactionDatetime?: string | null;
+  processedDatetime?: string | null;
   sourceType?: string | null;
   sourceId?: string | null;
   processedAt: string;
@@ -168,7 +190,7 @@ export async function insertCallInfo(entry: CallInfoEntry): Promise<void> {
     const row = {
       call_id: entry.callId,
       care_flow_id: entry.careFlowId || null,
-      processed_datetime: entry.interactionDatetime || null,
+      processed_datetime: entry.processedDatetime || null,
       source_type: entry.sourceType || null,
       source_id: entry.sourceId || null,
       processed_at: entry.processedAt,

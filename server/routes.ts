@@ -97,7 +97,7 @@ export async function registerRoutes(
       await insertCallInfo({
         callId: resolvedSourceId,
         careFlowId: care_flow_id || null,
-        interactionDatetime: processed_datetime || processedAt,
+        processedDatetime: processed_datetime || processedAt,
         sourceType: source_type || null,
         sourceId: resolvedSourceId,
         processedAt,
