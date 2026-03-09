@@ -76,15 +76,7 @@ async function ensureCallInfoTable() {
   const table = dataset.table(CALL_INFO_TABLE_ID);
   const [tableExists] = await table.exists();
   if (tableExists) {
-    const [metadata] = await table.getMetadata();
-    const fieldNames = (metadata.schema?.fields || []).map((f: any) => f.name);
-    if (fieldNames.includes("interaction_datetime") || !fieldNames.includes("processed_datetime")) {
-      console.log(`Recreating ${CALL_INFO_TABLE_ID} table due to schema change...`);
-      await table.delete();
-      await new Promise(r => setTimeout(r, 2000));
-    } else {
-      return;
-    }
+    return;
   }
   {
     await dataset.createTable(CALL_INFO_TABLE_ID, {
@@ -123,15 +115,7 @@ async function ensureObservationsTable() {
   const table = dataset.table(OBSERVATIONS_TABLE_ID);
   const [tableExists] = await table.exists();
   if (tableExists) {
-    const [metadata] = await table.getMetadata();
-    const fieldNames = (metadata.schema?.fields || []).map((f: any) => f.name);
-    if (fieldNames.includes("processed_at") || fieldNames.includes("processing_time_ms") || fieldNames.includes("source_id")) {
-      console.log(`Recreating ${OBSERVATIONS_TABLE_ID} table due to schema change...`);
-      await table.delete();
-      await new Promise(r => setTimeout(r, 2000));
-    } else {
-      return;
-    }
+    return;
   }
   {
     await dataset.createTable(OBSERVATIONS_TABLE_ID, {
