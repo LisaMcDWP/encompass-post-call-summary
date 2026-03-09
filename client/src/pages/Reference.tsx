@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { BookOpen, Code2, Webhook, Server, Key, Activity, Database, Settings } from "lucide-react";
+import { BookOpen, Code2, Webhook, Server, Key, Activity, Database, Settings, Phone } from "lucide-react";
 
 export default function Reference() {
   return (
@@ -52,10 +52,11 @@ export default function Reference() {
               <p className="text-muted-foreground text-sm mb-2">Content-Type: application/json</p>
               <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-2 mb-4">
                 <p className="text-foreground"><span className="text-primary font-semibold">care_flow_id</span> <span className="text-muted-foreground">(string, optional)</span> — Identifier for the care flow or pathway.</p>
-                <p className="text-foreground"><span className="text-primary font-semibold">processed_datetime</span> <span className="text-muted-foreground">(string, optional)</span> — ISO 8601 datetime of the interaction. Defaults to current time.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">processed_datetime</span> <span className="text-muted-foreground">(string, optional)</span> — ISO 8601 datetime. Defaults to current time if omitted.</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">source_type</span> <span className="text-muted-foreground">(string, optional)</span> — Type of source (e.g. phone_call, chat, note).</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">source_id</span> <span className="text-muted-foreground">(string, optional)</span> — Unique identifier for the source. Auto-generated if omitted.</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">source_text</span> <span className="text-muted-foreground">(string, required)</span> — The full patient call transcript or interaction text.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">context</span> <span className="text-muted-foreground">(object, optional)</span> — Key-value pairs matching active context parameters (e.g. <code className="text-primary">{`{ "home_health_ordered": "true" }`}</code>). Injected into the prompt as known context.</p>
               </div>
               <h4 className="text-foreground font-semibold mb-2 text-sm">Example Request Body</h4>
               <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto" data-testid="text-request-body">
@@ -64,7 +65,11 @@ export default function Reference() {
   "processed_datetime": "2026-03-06T10:30:00Z",
   "source_type": "phone_call",
   "source_id": "call_987654321",
-  "source_text": "Care Guide: Hello, this is Maria from Guideway Care. Am I speaking with Mrs. Thompson?\\nPatient: Yes, this is she.\\nCare Guide: I'm calling to check in on you since you were discharged. How have you been feeling?\\nPatient: I'm doing much better, thank you. Still a little sore but getting around okay."
+  "source_text": "Care Guide: Hello, this is Maria from Guideway Care...",
+  "context": {
+    "home_health_ordered": "true",
+    "dme_or_supplies_ordered": "false"
+  }
 }`}
               </pre>
             </div>
@@ -83,10 +88,10 @@ export default function Reference() {
     "source_id": "call_987654321",
     "processedAt": "2026-03-06T12:00:00.000Z",
     "processingTimeMs": 1234,
+    "prompt_version": 42,
+    "prompt_version_date": "2026-03-06T10:00:00.000Z",
     "analysis": {
       "summary": "Brief overall summary of the call...",
-      "disposition_change": true | false,
-      "disposition_change_note": "Current location if readmitted, or null",
       "observations": [
         {
           "name": "overall_feeling",
@@ -94,11 +99,19 @@ export default function Reference() {
           "domain": "clinical",
           "value_type": "enum",
           "value": "Good",
-          "detail": "Patient reports feeling well overall."
+          "detail": "Patient reports feeling well overall.",
+          "evidence": "I'm doing much better, thank you.",
+          "confidence": "high"
         }
       ],
-      "transition_status": "<b>Overall Feeling:</b> <span style='...'>Good</span><br>...",
+      "transition_status": "<b>Overall Feeling:</b> <span style='...'>Good</span>...",
       "follow_up_areas": "<ul><li><b>Topic:</b> Detail...</li></ul>"
+    },
+    "tokenUsage": {
+      "promptTokens": 2450,
+      "completionTokens": 850,
+      "totalTokens": 3300,
+      "estimatedCost": 0.000585
     }
   }
 }`}
@@ -115,24 +128,16 @@ export default function Reference() {
                   <p className="text-muted-foreground text-sm mt-1">Brief overview of the call based on the topics discussed. Content is driven by the configurable summary instruction (see Summary Prompt settings). Only covers what the patient actually responded to.</p>
                 </div>
                 <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
-                  <p className="text-primary font-mono text-sm">disposition_change</p>
-                  <p className="text-muted-foreground text-sm mt-1">Boolean. True only if the patient was readmitted to an ER, hospital, SNF, or care facility since discharge.</p>
-                </div>
-                <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
-                  <p className="text-primary font-mono text-sm">disposition_change_note</p>
-                  <p className="text-muted-foreground text-sm mt-1">String or null. If readmitted, describes where the patient currently is (home, hospital, SNF, rehab, etc.). Null if no readmission.</p>
-                </div>
-                <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
                   <p className="text-primary font-mono text-sm">observations</p>
-                  <p className="text-muted-foreground text-sm mt-1">Array of observation objects, one per active topic configured in the Observations setup. Each object contains: <code className="text-primary">name</code> (key), <code className="text-primary">display_name</code>, <code className="text-primary">domain</code>, <code className="text-primary">value_type</code> (enum/boolean/text/number), <code className="text-primary">value</code> (extracted value or null if not discussed), and <code className="text-primary">detail</code> (explanation guided by the observation's prompt guidance, or a generic description if none is set). Enum values match the labels defined in each observation's configuration.</p>
+                  <p className="text-muted-foreground text-sm mt-1">Array of observation objects, one per active topic. Each contains: <code className="text-primary">name</code> (key), <code className="text-primary">display_name</code>, <code className="text-primary">domain</code>, <code className="text-primary">value_type</code>, <code className="text-primary">value</code> (extracted value or null), <code className="text-primary">detail</code> (explanation), <code className="text-primary">evidence</code> (direct transcript quote supporting the finding), and <code className="text-primary">confidence</code> (high/medium/low).</p>
                 </div>
                 <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
                   <p className="text-primary font-mono text-sm">transition_status</p>
-                  <p className="text-muted-foreground text-sm mt-1">HTML-formatted rich text covering all active observation topics. Uses inline styles for color-coded status badges. Format: <code className="text-primary">&lt;b&gt;</code> for topic labels, <code className="text-primary">&lt;span style='...'&gt;</code> for colored badges, <code className="text-primary">&lt;br&gt;</code> for line breaks. Discussed topics appear first; "Not Discussed" topics are grouped at the bottom.</p>
+                  <p className="text-muted-foreground text-sm mt-1">HTML-formatted rich text covering all active observation topics. Uses inline styles for color-coded status badges. Discussed topics appear first; "Not Discussed" topics are grouped at the bottom.</p>
                 </div>
                 <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
                   <p className="text-primary font-mono text-sm">follow_up_areas</p>
-                  <p className="text-muted-foreground text-sm mt-1">HTML-formatted rich text using <code className="text-primary">&lt;ul&gt;</code> and <code className="text-primary">&lt;li&gt;</code> tags with <code className="text-primary">&lt;b&gt;</code> for topic names. Only includes items for topics that had problems or gaps.</p>
+                  <p className="text-muted-foreground text-sm mt-1">HTML-formatted list of items needing follow-up. Only includes topics that had problems or gaps.</p>
                 </div>
               </div>
             </div>
@@ -140,8 +145,20 @@ export default function Reference() {
             <Separator />
 
             <div>
+              <h3 className="text-foreground font-semibold mb-2">Token Usage & Cost</h3>
+              <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-2">
+                <p className="text-foreground"><span className="text-primary font-semibold">promptTokens</span> — Input tokens sent to Gemini.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">completionTokens</span> — Output tokens returned by Gemini.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">totalTokens</span> — Sum of prompt + completion tokens.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">estimatedCost</span> — USD cost estimate (gemini-2.0-flash-001: $0.10/1M input, $0.40/1M output).</p>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div>
               <h3 className="text-foreground font-semibold mb-2">Inline Status Badge Colors</h3>
-              <p className="text-muted-foreground text-sm mb-3">The <code className="text-primary">transition_status</code> field uses inline styles for color-coded status badges. Colors are assigned based on each observation's enum value configuration:</p>
+              <p className="text-muted-foreground text-sm mb-3">The <code className="text-primary">transition_status</code> field uses inline styles for color-coded status badges:</p>
               <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-3">
                 <div className="flex items-center gap-3">
                   <span style={{display:'inline-block',padding:'1px 8px',borderRadius:'9999px',fontSize:'11px',fontWeight:600,background:'#dcfce7',color:'#166534',border:'1px solid #bbf7d0'}}>Good</span>
@@ -164,23 +181,6 @@ export default function Reference() {
                   <span className="text-muted-foreground text-xs">GRAY — not discussed / unknown</span>
                 </div>
               </div>
-              <h4 className="text-foreground font-semibold mb-2 mt-4 text-sm">Example HTML Output</h4>
-              <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-xs overflow-x-auto">
-{`<b>Overall Feeling:</b> <span style='display:inline-block;padding:1px 8px;
-  border-radius:9999px;font-size:11px;font-weight:600;
-  background:#fee2e2;color:#991b1b;border:1px solid #fecaca;'>Poor</span><br>
-Patient reports weakness and dizziness since discharge.<br><br>
-
-<b>Prescription Pickup:</b> <span style='display:inline-block;padding:1px 8px;
-  border-radius:9999px;font-size:11px;font-weight:600;
-  background:#fef9c3;color:#854d0e;border:1px solid #fde68a;'>Partially Picked Up</span><br>
-Patient's daughter reports most prescriptions picked up but blood thinner
-pending prior authorization.<br><br>`}
-              </pre>
-              <div className="bg-primary/5 border border-primary/20 p-4 rounded-lg mt-4">
-                <p className="text-primary font-semibold text-sm mb-2">Dynamic Configuration</p>
-                <p className="text-muted-foreground text-sm">Status values and color mappings are defined per observation in the Observations setup page. Each enum value has an assigned color (GREEN, YELLOW, RED, BLUE, GRAY) that determines its inline style in the output.</p>
-              </div>
             </div>
 
             <Separator />
@@ -194,7 +194,11 @@ pending prior authorization.<br><br>`}
     "care_flow_id": "cf_abc123",
     "source_type": "phone_call",
     "source_id": "call_987654321",
-    "source_text": "Care Guide: Hello, this is Maria from Guideway Care..."
+    "source_text": "Care Guide: Hello, this is Maria from Guideway Care...",
+    "context": {
+      "home_health_ordered": "true",
+      "dme_or_supplies_ordered": "false"
+    }
   }'`}
               </pre>
             </div>
@@ -216,6 +220,83 @@ pending prior authorization.<br><br>`}
         <Card className="border-border/60 shadow-sm mb-6">
           <CardHeader>
             <CardTitle className="text-foreground flex items-center gap-2">
+              <Phone className="h-5 w-5 text-primary" />
+              Call History
+              <Badge className="bg-primary/10 text-primary border-primary/20 ml-2">Analytics</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <p className="text-muted-foreground">Query processed calls and their extracted observations from BigQuery.</p>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">GET /api/calls</h3>
+              <p className="text-muted-foreground text-sm mb-2">Returns recent processed calls ordered by processed_at descending.</p>
+              <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-2 mb-3">
+                <p className="text-foreground"><span className="text-primary font-semibold">limit</span> <span className="text-muted-foreground">(query param, optional)</span> — Max rows to return (default 100, max 500).</p>
+              </div>
+              <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`[
+  {
+    "call_id": "call_987654321",
+    "care_flow_id": "cf_abc123",
+    "processed_datetime": "2026-03-06T10:30:00Z",
+    "source_type": "phone_call",
+    "processed_at": "2026-03-06T12:00:00.000Z",
+    "processing_time_ms": 1234,
+    "prompt_version": 42,
+    "total_tokens": 3300,
+    "estimated_cost": 0.000585,
+    "status": "success",
+    "summary": "Brief summary..."
+  }
+]`}
+              </pre>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">GET /api/calls/:callId</h3>
+              <p className="text-muted-foreground text-sm mb-2">Returns full detail for a single call including all extracted observations.</p>
+              <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`{
+  "callInfo": {
+    "call_id": "call_987654321",
+    "care_flow_id": "cf_abc123",
+    "summary": "...",
+    "follow_up_areas": "<ul>...</ul>",
+    "transition_status": "<b>...</b>",
+    "context_values": { "home_health_ordered": "true" },
+    "prompt_tokens": 2450,
+    "completion_tokens": 850,
+    "total_tokens": 3300,
+    "estimated_cost": 0.000585,
+    "status": "success"
+  },
+  "observations": [
+    {
+      "call_id": "call_987654321",
+      "observation_name": "overall_feeling",
+      "observation_display_name": "Overall Feeling",
+      "observation_domain": "clinical",
+      "observation_value_type": "enum",
+      "observation_value": "Good",
+      "observation_detail": "Patient reports feeling well.",
+      "observation_evidence": "I'm doing much better.",
+      "observation_confidence": "high"
+    }
+  ]
+}`}
+              </pre>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/60 shadow-sm mb-6">
+          <CardHeader>
+            <CardTitle className="text-foreground flex items-center gap-2">
               <Activity className="h-5 w-5 text-primary" />
               GET /api/health
             </CardTitle>
@@ -225,8 +306,12 @@ pending prior authorization.<br><br>`}
             <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto" data-testid="text-health-response">
 {`{
   "status": "ok",
-  "service": "guideway-care-api",
-  "timestamp": "2026-03-06T12:00:00.000Z"
+  "timestamp": "2026-03-06T12:00:00.000Z",
+  "services": {
+    "gemini": true,
+    "bigquery": true,
+    "projectId": true
+  }
 }`}
             </pre>
           </CardContent>
@@ -240,10 +325,12 @@ pending prior authorization.<br><br>`}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground mb-3">Returns the dynamically generated prompt template built from the active observations and the configured summary instruction.</p>
+            <p className="text-muted-foreground mb-3">Returns the dynamically generated prompt template, version hash, and version date.</p>
             <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
 {`{
-  "prompt": "You are an expert healthcare call analyst..."
+  "prompt": "You are an expert healthcare call analyst...",
+  "version": 42,
+  "versionDate": "2026-03-06T10:00:00.000Z"
 }`}
             </pre>
           </CardContent>
@@ -304,7 +391,7 @@ pending prior authorization.<br><br>`}
     { "label": "Severe", "color": "RED" }
   ],
   "isActive": true,
-  "promptGuidance": "Note the location and severity of pain, and whether it has improved or worsened since discharge."
+  "promptGuidance": "Note the location and severity of pain."
 }`}
               </pre>
             </div>
@@ -326,7 +413,7 @@ pending prior authorization.<br><br>`}
 
             <div>
               <h3 className="text-foreground font-semibold mb-2">DELETE /api/observations/:id</h3>
-              <p className="text-muted-foreground text-sm">Permanently deletes an observation by ID. Returns 204 on success.</p>
+              <p className="text-muted-foreground text-sm">Permanently deletes an observation by ID.</p>
             </div>
 
             <Separator />
@@ -336,7 +423,7 @@ pending prior authorization.<br><br>`}
               <p className="text-muted-foreground text-sm mb-2">Reorder observations by providing an array of IDs in the desired order.</p>
               <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
 {`{
-  "ids": [3, 1, 5, 2, 4]
+  "orderedIds": [3, 1, 5, 2, 4]
 }`}
               </pre>
             </div>
@@ -354,7 +441,7 @@ pending prior authorization.<br><br>`}
                 <p className="text-foreground"><span className="text-primary font-semibold">valueType</span> <span className="text-muted-foreground">(string)</span> — One of: enum, boolean, text, number.</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">value</span> <span className="text-muted-foreground">(array)</span> — For enum types, array of <code className="text-primary">{`{ label, color }`}</code> objects. Colors: GREEN, YELLOW, RED, BLUE, GRAY.</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">isActive</span> <span className="text-muted-foreground">(boolean)</span> — Whether this observation is included in the analysis prompt.</p>
-                <p className="text-foreground"><span className="text-primary font-semibold">promptGuidance</span> <span className="text-muted-foreground">(string, optional)</span> — Custom instruction for Gemini on how to evaluate the detail field for this observation. If empty, a generic instruction ("Brief explanation of what was observed") is used.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">promptGuidance</span> <span className="text-muted-foreground">(string, optional)</span> — Custom instruction for Gemini on how to evaluate this observation.</p>
               </div>
             </div>
           </CardContent>
@@ -364,46 +451,103 @@ pending prior authorization.<br><br>`}
           <CardHeader>
             <CardTitle className="text-foreground flex items-center gap-2">
               <Settings className="h-5 w-5 text-primary" />
-              Summary Instruction Settings
+              Context Parameters CRUD
               <Badge className="bg-[#96d410]/10 text-[#4d6d08] border-[#96d410]/30 ml-2">Setup</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <p className="text-muted-foreground">Configure the instruction Gemini uses to generate the <code className="text-primary">summary</code> field. Stored in BigQuery (<code className="text-primary">call_information.settings</code>).</p>
+            <p className="text-muted-foreground">Manage context parameters that API callers can pass alongside transcripts to give Gemini known context. Stored in BigQuery (<code className="text-primary">call_information.context_parameters</code>).</p>
 
             <Separator />
 
             <div>
-              <h3 className="text-foreground font-semibold mb-2">GET /api/settings/summary-instruction</h3>
-              <p className="text-muted-foreground text-sm mb-2">Returns the current summary instruction. Falls back to the default if none is configured.</p>
+              <h3 className="text-foreground font-semibold mb-2">GET /api/context-parameters</h3>
+              <p className="text-muted-foreground text-sm mb-2">Returns all context parameters ordered by display_order.</p>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">POST /api/context-parameters</h3>
+              <p className="text-muted-foreground text-sm mb-2">Create a new context parameter.</p>
               <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
 {`{
-  "value": "A brief overall summary of the call based on the questions asked of the patient and their responses. If the patient answered the call, include the following topics at a minimum (only comment on what the patient actually responded to): {{SUMMARY_TOPICS}}.",
-  "isDefault": true
+  "name": "home_health_ordered",
+  "displayName": "Home health ordered",
+  "description": "",
+  "dataType": "enum",
+  "enumValues": ["true", "false"],
+  "isActive": true,
+  "displayOrder": 0
 }`}
               </pre>
-              <div className="bg-primary/5 border border-primary/20 p-3 rounded-lg mt-3">
-                <p className="text-muted-foreground text-sm"><code className="text-primary">{`{{SUMMARY_TOPICS}}`}</code> is a placeholder that gets replaced at prompt-build time with the display names of all active observations (e.g. "overall feeling; disposition change; prescription pickup").</p>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">PUT /api/context-parameters/:id</h3>
+              <p className="text-muted-foreground text-sm">Update an existing context parameter. Partial updates supported.</p>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">DELETE /api/context-parameters/:id</h3>
+              <p className="text-muted-foreground text-sm">Permanently deletes a context parameter by ID.</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/60 shadow-sm mb-6">
+          <CardHeader>
+            <CardTitle className="text-foreground flex items-center gap-2">
+              <Settings className="h-5 w-5 text-primary" />
+              Prompt Settings
+              <Badge className="bg-[#96d410]/10 text-[#4d6d08] border-[#96d410]/30 ml-2">Setup</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <p className="text-muted-foreground">Configure prompt instructions stored in BigQuery (<code className="text-primary">call_information.settings</code>).</p>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">Summary Instruction</h3>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-foreground text-sm font-medium">GET /api/settings/summary-instruction</p>
+                  <p className="text-muted-foreground text-sm">Returns the current summary instruction. Falls back to default if none is configured.</p>
+                </div>
+                <div>
+                  <p className="text-foreground text-sm font-medium">PUT /api/settings/summary-instruction</p>
+                  <p className="text-muted-foreground text-sm">Set or update the summary instruction. Use <code className="text-primary">{`{{SUMMARY_TOPICS}}`}</code> placeholder for dynamic topic injection.</p>
+                </div>
+                <div>
+                  <p className="text-foreground text-sm font-medium">DELETE /api/settings/summary-instruction</p>
+                  <p className="text-muted-foreground text-sm">Revert to the default summary instruction.</p>
+                </div>
               </div>
             </div>
 
             <Separator />
 
             <div>
-              <h3 className="text-foreground font-semibold mb-2">PUT /api/settings/summary-instruction</h3>
-              <p className="text-muted-foreground text-sm mb-2">Set or update the summary instruction.</p>
-              <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
-{`{
-  "value": "Summarize the call focusing on clinical outcomes and patient concerns. Topics: {{SUMMARY_TOPICS}}."
-}`}
-              </pre>
-            </div>
-
-            <Separator />
-
-            <div>
-              <h3 className="text-foreground font-semibold mb-2">DELETE /api/settings/summary-instruction</h3>
-              <p className="text-muted-foreground text-sm">Removes the custom summary instruction and reverts to the default. Returns 204 on success.</p>
+              <h3 className="text-foreground font-semibold mb-2">Observations Guidance</h3>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-foreground text-sm font-medium">GET /api/settings/observations-guidance</p>
+                  <p className="text-muted-foreground text-sm">Returns the global guidance instruction applied to all observations.</p>
+                </div>
+                <div>
+                  <p className="text-foreground text-sm font-medium">PUT /api/settings/observations-guidance</p>
+                  <p className="text-muted-foreground text-sm">Set or update the global observations guidance.</p>
+                </div>
+                <div>
+                  <p className="text-foreground text-sm font-medium">DELETE /api/settings/observations-guidance</p>
+                  <p className="text-muted-foreground text-sm">Remove custom observations guidance.</p>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -438,7 +582,11 @@ pending prior authorization.<br><br>`}
   "processed_datetime": "{{awell.processed_datetime}}",
   "source_type": "{{awell.source_type}}",
   "source_id": "{{awell.source_id}}",
-  "source_text": "{{awell.source_text}}"
+  "source_text": "{{awell.source_text}}",
+  "context": {
+    "home_health_ordered": "{{awell.home_health_ordered}}",
+    "dme_or_supplies_ordered": "{{awell.dme_or_supplies_ordered}}"
+  }
 }`}
                 </pre>
               </div>
@@ -447,11 +595,10 @@ pending prior authorization.<br><br>`}
               <p className="text-primary font-semibold text-sm mb-2">Mapping Response Fields in Awell</p>
               <div className="text-muted-foreground text-sm space-y-1">
                 <p><code className="text-primary">data.analysis.summary</code> → Call Summary</p>
-                <p><code className="text-primary">data.analysis.disposition_change</code> → Readmission Flag (true/false)</p>
-                <p><code className="text-primary">data.analysis.disposition_change_note</code> → Current Location</p>
                 <p><code className="text-primary">data.analysis.observations</code> → Array of Extracted Observations</p>
                 <p><code className="text-primary">data.analysis.transition_status</code> → Transition Status Details (HTML)</p>
                 <p><code className="text-primary">data.analysis.follow_up_areas</code> → Follow-Up Items (HTML)</p>
+                <p><code className="text-primary">data.tokenUsage</code> → Token usage and cost metrics</p>
               </div>
             </div>
           </CardContent>
@@ -479,7 +626,7 @@ pending prior authorization.<br><br>`}
               <h3 className="text-foreground font-semibold mb-2">Service Account Roles Required</h3>
               <ul className="text-muted-foreground text-sm space-y-1 list-disc list-inside">
                 <li>Vertex AI User (for Gemini API)</li>
-                <li>BigQuery Data Editor (for observations, settings, and API logging)</li>
+                <li>BigQuery Data Editor (for observations, settings, and analytics logging)</li>
                 <li>BigQuery Job User (for running queries)</li>
               </ul>
             </div>
@@ -499,9 +646,11 @@ pending prior authorization.<br><br>`}
                 <p className="text-foreground"><span className="text-primary font-semibold">Dataset:</span> call_information</p>
                 <p className="text-foreground mt-1"><span className="text-primary font-semibold">Tables:</span></p>
                 <ul className="text-muted-foreground text-sm list-disc list-inside ml-2 mt-1 space-y-1">
-                  <li><code className="text-primary">api_logs</code> — API call logging (call_id, timestamp, transcript, summary, processing_time, status)</li>
-                  <li><code className="text-primary">observations</code> — Observation configuration (id, name, display_name, domain, display_order, value_type, value, is_active, prompt_guidance)</li>
-                  <li><code className="text-primary">settings</code> — Key-value settings store (key, value)</li>
+                  <li><code className="text-primary">call_info</code> — One row per API call (metadata, summary, tokens, cost, status)</li>
+                  <li><code className="text-primary">call_observations</code> — One row per observation per call (name, value, detail, evidence, confidence)</li>
+                  <li><code className="text-primary">observations</code> — Observation configuration (id, name, display_name, domain, value_type, value, is_active, prompt_guidance)</li>
+                  <li><code className="text-primary">context_parameters</code> — Context parameter definitions (id, name, display_name, data_type, enum_values, is_active)</li>
+                  <li><code className="text-primary">settings</code> — Key-value settings store (summary_instruction, observations_guidance)</li>
                 </ul>
               </div>
             </div>
