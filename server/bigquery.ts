@@ -71,8 +71,11 @@ async function ensureDatasetAndTable() {
     for (const col of newCols) {
       try {
         await client.query({ query: `ALTER TABLE ${fullTable} ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}` });
+        await new Promise(r => setTimeout(r, 2000));
       } catch (err: any) {
-        console.log(`Note: Could not add ${col.name} to ${TABLE_ID} (may already exist): ${err.message}`);
+        if (!err.message?.includes("already exists")) {
+          console.log(`Note: Could not add ${col.name} to ${TABLE_ID}: ${err.message}`);
+        }
       }
     }
   }
@@ -128,8 +131,11 @@ async function ensureObservationsTable() {
     for (const col of newColumns) {
       try {
         await client.query({ query: `ALTER TABLE ${fullTable} ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}` });
+        await new Promise(r => setTimeout(r, 2000));
       } catch (err: any) {
-        console.log(`Note: Could not add ${col.name} column (may already exist): ${err.message}`);
+        if (!err.message?.includes("already exists")) {
+          console.log(`Note: Could not add ${col.name} column to ${OBSERVATIONS_TABLE_ID}: ${err.message}`);
+        }
       }
     }
   }
