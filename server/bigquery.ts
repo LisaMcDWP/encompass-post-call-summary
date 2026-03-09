@@ -156,6 +156,19 @@ async function ensureObservationsTable() {
 let callInfoInitialized = false;
 let observationsInitialized = false;
 
+export async function initializeCallTables(): Promise<void> {
+  try {
+    await ensureCallInfoTable();
+    callInfoInitialized = true;
+    console.log("BigQuery table call_info ready.");
+    await ensureObservationsTable();
+    observationsInitialized = true;
+    console.log("BigQuery table call_observations ready.");
+  } catch (err: any) {
+    console.error("Failed to initialize call tables:", err.message);
+  }
+}
+
 export interface CallInfoEntry {
   callId: string;
   careFlowId?: string | null;
