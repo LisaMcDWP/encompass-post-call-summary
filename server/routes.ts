@@ -43,7 +43,7 @@ export async function registerRoutes(
 
   app.post("/api/analyze", async (req, res) => {
     const startTime = Date.now();
-    const { care_flow_id, interaction_datetime, source_type, source_id, source_text, context, ...rest } = req.body;
+    const { care_flow_id, processed_datetime, source_type, source_id, source_text, context, ...rest } = req.body;
 
     if (!source_text || typeof source_text !== "string" || source_text.trim().length === 0) {
       const processingTime = Date.now() - startTime;
@@ -97,7 +97,7 @@ export async function registerRoutes(
       await insertCallInfo({
         callId: resolvedSourceId,
         careFlowId: care_flow_id || null,
-        interactionDatetime: interaction_datetime || processedAt,
+        interactionDatetime: processed_datetime || processedAt,
         sourceType: source_type || null,
         sourceId: resolvedSourceId,
         processedAt,
@@ -122,7 +122,7 @@ export async function registerRoutes(
         status: "success",
         data: {
           care_flow_id: care_flow_id || null,
-          interaction_datetime: interaction_datetime || new Date().toISOString(),
+          processed_datetime: processed_datetime || new Date().toISOString(),
           source_type: source_type || null,
           source_id: resolvedSourceId,
           context: contextValues,

@@ -8,7 +8,7 @@ const OBSERVATIONS_TABLE_ID = "call_observations";
 export interface CallInfoRow {
   call_id: string;
   care_flow_id: string | null;
-  interaction_datetime: { value: string } | string | null;
+  processed_datetime: { value: string } | string | null;
   source_type: string | null;
   source_id: string | null;
   processed_at: { value: string } | string;
@@ -81,7 +81,7 @@ async function ensureCallInfoTable() {
         fields: [
           { name: "call_id", type: "STRING", mode: "REQUIRED" },
           { name: "care_flow_id", type: "STRING", mode: "NULLABLE" },
-          { name: "interaction_datetime", type: "TIMESTAMP", mode: "NULLABLE" },
+          { name: "processed_datetime", type: "TIMESTAMP", mode: "NULLABLE" },
           { name: "source_type", type: "STRING", mode: "NULLABLE" },
           { name: "source_id", type: "STRING", mode: "NULLABLE" },
           { name: "processed_at", type: "TIMESTAMP", mode: "REQUIRED" },
@@ -168,7 +168,7 @@ export async function insertCallInfo(entry: CallInfoEntry): Promise<void> {
     const row = {
       call_id: entry.callId,
       care_flow_id: entry.careFlowId || null,
-      interaction_datetime: entry.interactionDatetime || null,
+      processed_datetime: entry.interactionDatetime || null,
       source_type: entry.sourceType || null,
       source_id: entry.sourceId || null,
       processed_at: entry.processedAt,
@@ -256,7 +256,7 @@ export async function getCallInfoList(limit = 100): Promise<any[]> {
   return (rows as CallInfoRow[]).map(row => ({
     call_id: row.call_id,
     care_flow_id: row.care_flow_id,
-    interaction_datetime: extractTimestamp(row.interaction_datetime),
+    processed_datetime: extractTimestamp(row.processed_datetime),
     source_type: row.source_type,
     source_id: row.source_id,
     processed_at: extractTimestamp(row.processed_at),
@@ -299,7 +299,7 @@ export async function getCallDetail(callId: string): Promise<{ callInfo: any | n
   const callInfo = row ? {
     call_id: row.call_id,
     care_flow_id: row.care_flow_id,
-    interaction_datetime: extractTimestamp(row.interaction_datetime),
+    processed_datetime: extractTimestamp(row.processed_datetime),
     source_type: row.source_type,
     source_id: row.source_id,
     processed_at: extractTimestamp(row.processed_at),

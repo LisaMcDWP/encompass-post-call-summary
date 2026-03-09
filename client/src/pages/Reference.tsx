@@ -52,7 +52,7 @@ export default function Reference() {
               <p className="text-muted-foreground text-sm mb-2">Content-Type: application/json</p>
               <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-2 mb-4">
                 <p className="text-foreground"><span className="text-primary font-semibold">care_flow_id</span> <span className="text-muted-foreground">(string, optional)</span> — Identifier for the care flow or pathway.</p>
-                <p className="text-foreground"><span className="text-primary font-semibold">interaction_datetime</span> <span className="text-muted-foreground">(string, optional)</span> — ISO 8601 datetime of the interaction. Defaults to current time.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">processed_datetime</span> <span className="text-muted-foreground">(string, optional)</span> — ISO 8601 datetime of the interaction. Defaults to current time.</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">source_type</span> <span className="text-muted-foreground">(string, optional)</span> — Type of source (e.g. phone_call, chat, note).</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">source_id</span> <span className="text-muted-foreground">(string, optional)</span> — Unique identifier for the source. Auto-generated if omitted.</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">source_text</span> <span className="text-muted-foreground">(string, required)</span> — The full patient call transcript or interaction text.</p>
@@ -61,7 +61,7 @@ export default function Reference() {
               <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto" data-testid="text-request-body">
 {`{
   "care_flow_id": "cf_abc123",
-  "interaction_datetime": "2026-03-06T10:30:00Z",
+  "processed_datetime": "2026-03-06T10:30:00Z",
   "source_type": "phone_call",
   "source_id": "call_987654321",
   "source_text": "Care Guide: Hello, this is Maria from Guideway Care. Am I speaking with Mrs. Thompson?\\nPatient: Yes, this is she.\\nCare Guide: I'm calling to check in on you since you were discharged. How have you been feeling?\\nPatient: I'm doing much better, thank you. Still a little sore but getting around okay."
@@ -78,7 +78,7 @@ export default function Reference() {
   "status": "success",
   "data": {
     "care_flow_id": "cf_abc123",
-    "interaction_datetime": "2026-03-06T10:30:00Z",
+    "processed_datetime": "2026-03-06T10:30:00Z",
     "source_type": "phone_call",
     "source_id": "call_987654321",
     "processedAt": "2026-03-06T12:00:00.000Z",
@@ -435,7 +435,7 @@ pending prior authorization.<br><br>`}
                 <pre className="text-foreground text-sm mt-1">
 {`{
   "care_flow_id": "{{awell.care_flow_id}}",
-  "interaction_datetime": "{{awell.interaction_datetime}}",
+  "processed_datetime": "{{awell.processed_datetime}}",
   "source_type": "{{awell.source_type}}",
   "source_id": "{{awell.source_id}}",
   "source_text": "{{awell.source_text}}"

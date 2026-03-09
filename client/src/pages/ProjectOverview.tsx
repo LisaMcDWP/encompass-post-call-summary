@@ -27,7 +27,7 @@ const EPICS: Epic[] = [
       {
         id: "E1-S1",
         title: "POST /api/analyze endpoint",
-        description: "Accepts source_text, care_flow_id, interaction_datetime, source_type, source_id, and a context object. Validates required fields and invokes Gemini for analysis.",
+        description: "Accepts source_text, care_flow_id, processed_datetime, source_type, source_id, and a context object. Validates required fields and invokes Gemini for analysis.",
       },
       {
         id: "E1-S2",
@@ -159,7 +159,7 @@ const EPICS: Epic[] = [
       {
         id: "E5-S1",
         title: "call_info table",
-        description: "One row per API call capturing: call_id, care_flow_id, interaction_datetime, source_type, source_id, processed_at, processing_time_ms, prompt_version, context_values (JSON), transcript_length, summary, follow_up_areas, transition_status, token counts, estimated_cost, status, and error_message.",
+        description: "One row per API call capturing: call_id, care_flow_id, processed_datetime, source_type, source_id, processed_at, processing_time_ms, prompt_version, context_values (JSON), transcript_length, summary, follow_up_areas, transition_status, token counts, estimated_cost, status, and error_message.",
       },
       {
         id: "E5-S2",

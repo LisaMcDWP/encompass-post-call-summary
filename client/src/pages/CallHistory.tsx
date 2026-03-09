@@ -8,7 +8,7 @@ import { Loader2, Phone, Clock, Coins, ChevronRight, X, FileText, Activity, List
 interface CallInfo {
   call_id: string;
   care_flow_id: string | null;
-  interaction_datetime: string | null;
+  processed_datetime: string | null;
   source_type: string | null;
   source_id: string | null;
   processed_at: string;

@@ -247,7 +247,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           care_flow_id: careFlowId.trim() || undefined,
-          interaction_datetime: interactionDatetime.trim() || undefined,
+          processed_datetime: interactionDatetime.trim() || undefined,
           source_type: sourceType.trim() || undefined,
           source_id: sourceId.trim() || undefined,
           source_text: sourceText.trim(),
