@@ -67,7 +67,7 @@ Returns service connectivity status.
 
 ## BigQuery Schema
 - Dataset: `call_information`
-- Table: `post_call_info` — One row per API call (call_id, care_flow_id, interaction_datetime, source_type, source_id, processed_at, processing_time_ms, prompt_version, prompt_version_date, context_values JSON, transcript_length, summary, follow_up_areas, transition_status, prompt_tokens, completion_tokens, total_tokens, estimated_cost, status, error_message)
+- Table: `call_info` — One row per API call (call_id, care_flow_id, interaction_datetime, source_type, source_id, processed_at, processing_time_ms, prompt_version, prompt_version_date, context_values JSON, transcript_length, summary, follow_up_areas, transition_status, prompt_tokens, completion_tokens, total_tokens, estimated_cost, status, error_message)
 - Table: `call_observations` — One row per observation per call (call_id, observation_name, observation_display_name, observation_domain, observation_value_type, observation_value, observation_detail, observation_evidence, observation_confidence)
 - Table: `observations` — Observation configuration (id, name, display_name, domain, display_order, value_type, value, is_active, prompt_guidance)
 - Table: `context_parameters` — Context parameter definitions (id, name, display_name, description, data_type, is_required, is_active, display_order)

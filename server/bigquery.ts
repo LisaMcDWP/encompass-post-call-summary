@@ -2,7 +2,7 @@ import { BigQuery } from "@google-cloud/bigquery";
 import type { ObservationResult } from "./gemini";
 
 const DATASET_ID = "call_information";
-const CALL_INFO_TABLE_ID = "post_call_info";
+const CALL_INFO_TABLE_ID = "call_info";
 const OBSERVATIONS_TABLE_ID = "call_observations";
 
 export interface CallInfoRow {
