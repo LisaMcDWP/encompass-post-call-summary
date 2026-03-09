@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION } from "./gemini";
-import { logTooBigQuery, insertCallObservations } from "./bigquery";
+import { insertCallInfo, insertCallObservations } from "./bigquery";
 import { randomUUID, createHash } from "crypto";
 import { storage } from "./storage";
 import { insertObservationSchema, enumValueSchema, insertContextParameterSchema } from "@shared/schema";
@@ -92,23 +92,9 @@ export async function registerRoutes(
       );
       const processingTime = Date.now() - startTime;
 
-      await logTooBigQuery({
-        callId: resolvedSourceId,
-        transcriptLength: source_text.length,
-        summary: analysis.summary,
-        areasForFollowUp: [analysis.follow_up_areas],
-        questionsCount: 0,
-        processingTimeMs: processingTime,
-        promptTokens: tokenUsage.promptTokens,
-        completionTokens: tokenUsage.completionTokens,
-        totalTokens: tokenUsage.totalTokens,
-        estimatedCost: tokenUsage.estimatedCost,
-        status: "success",
-      });
-
       const processedAt = new Date().toISOString();
 
-      await insertCallObservations({
+      await insertCallInfo({
         callId: resolvedSourceId,
         careFlowId: care_flow_id || null,
         interactionDatetime: interaction_datetime || processedAt,
@@ -119,13 +105,18 @@ export async function registerRoutes(
         promptVersion: promptVersion,
         promptVersionDate: promptVersionDate,
         contextValues,
+        transcriptLength: source_text.length,
         summary: analysis.summary,
+        followUpAreas: analysis.follow_up_areas,
+        transitionStatus: analysis.transition_status,
         promptTokens: tokenUsage.promptTokens,
         completionTokens: tokenUsage.completionTokens,
         totalTokens: tokenUsage.totalTokens,
         estimatedCost: tokenUsage.estimatedCost,
-        observations: analysis.observations,
+        status: "success",
       });
+
+      await insertCallObservations(resolvedSourceId, analysis.observations);
 
       return res.json({
         status: "success",
@@ -146,10 +137,11 @@ export async function registerRoutes(
     } catch (error: any) {
       const processingTime = Date.now() - startTime;
 
-      await logTooBigQuery({
+      await insertCallInfo({
         callId: resolvedSourceId,
-        transcriptLength: source_text.length,
+        processedAt: new Date().toISOString(),
         processingTimeMs: processingTime,
+        transcriptLength: source_text.length,
         status: "error",
         errorMessage: error.message,
       });

@@ -14,7 +14,7 @@ A full-stack application that provides a Gemini-powered transcript analysis API.
 ## Key Files
 - `server/routes.ts` — API endpoints (`POST /api/analyze`, `GET /api/prompt`, `GET /api/health`, observations CRUD)
 - `server/gemini.ts` — Vertex AI Gemini integration with dynamic prompt builder from observations
-- `server/bigquery.ts` — BigQuery API call logging (dataset: `call_information`, table: `api_logs`)
+- `server/bigquery.ts` — BigQuery logging: `call_info` (one row per call) + `call_observations` (one row per observation)
 - `server/storage.ts` — BigQueryStorage class with observation CRUD operations (dataset: `call_information`, table: `observations`)
 - `server/seed.ts` — Seeds default 11 observation topics to BigQuery on first run
 - `shared/schema.ts` — Type definitions (Observation, InsertObservation, EnumValue) + users table
@@ -50,7 +50,7 @@ Observations are dynamic topics stored in BigQuery (`call_information.observatio
 ## API Endpoints
 ### POST /api/analyze
 Input: `{ care_flow_id?, interaction_datetime?, source_type?, source_id?, source_text }`
-Output: `{ status, data: { care_flow_id, interaction_datetime, source_type, source_id, processedAt, processingTimeMs, analysis: { summary, disposition_change, disposition_change_note, observations: [{ name, display_name, domain, value_type, value, detail }], transition_status, follow_up_areas } } }`
+Output: `{ status, data: { care_flow_id, interaction_datetime, source_type, source_id, processedAt, processingTimeMs, analysis: { summary, observations: [{ name, display_name, domain, value_type, value, detail, evidence, confidence }], transition_status, follow_up_areas }, tokenUsage: { promptTokens, completionTokens, totalTokens, estimatedCost } } }`
 
 ### GET /api/prompt
 Returns the dynamically generated prompt template: `{ prompt: string }`
@@ -67,7 +67,8 @@ Returns service connectivity status.
 
 ## BigQuery Schema
 - Dataset: `call_information`
-- Table: `api_logs` — API call logging (call_id, timestamp, transcript_length, summary, areas_for_followup, questions_count, processing_time_ms, status, error_message)
+- Table: `call_info` — One row per API call (call_id, care_flow_id, interaction_datetime, source_type, source_id, processed_at, processing_time_ms, prompt_version, prompt_version_date, context_values JSON, transcript_length, summary, follow_up_areas, transition_status, prompt_tokens, completion_tokens, total_tokens, estimated_cost, status, error_message)
+- Table: `call_observations` — One row per observation per call (call_id, observation_name, observation_display_name, observation_domain, observation_value_type, observation_value, observation_detail, observation_evidence, observation_confidence)
 - Table: `observations` — Observation configuration (id, name, display_name, domain, display_order, value_type, value, is_active, prompt_guidance)
 - Table: `context_parameters` — Context parameter definitions (id, name, display_name, description, data_type, is_required, is_active, display_order)
 
