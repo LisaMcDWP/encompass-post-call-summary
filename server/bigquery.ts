@@ -86,6 +86,8 @@ async function ensureObservationsTable() {
           { name: "observation_value_type", type: "STRING", mode: "NULLABLE" },
           { name: "observation_value", type: "STRING", mode: "NULLABLE" },
           { name: "observation_detail", type: "STRING", mode: "NULLABLE" },
+          { name: "observation_evidence", type: "STRING", mode: "NULLABLE" },
+          { name: "observation_confidence", type: "STRING", mode: "NULLABLE" },
         ],
       },
     });
@@ -142,6 +144,8 @@ export async function insertCallObservations(entry: CallObservationEntry): Promi
       observation_value_type: obs.value_type,
       observation_value: obs.value !== null && obs.value !== undefined ? String(obs.value) : null,
       observation_detail: obs.detail || null,
+      observation_evidence: obs.evidence || null,
+      observation_confidence: obs.confidence || null,
     }));
 
     await client

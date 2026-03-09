@@ -671,6 +671,24 @@ export default function Home() {
                                   {obs.detail}
                                 </p>
                               )}
+                              {obs.evidence && (
+                                <p className="text-xs text-muted-foreground/70 mt-1 italic" data-testid={`observation-evidence-${obs.name}`}>
+                                  Evidence: "{obs.evidence}"
+                                </p>
+                              )}
+                              {obs.confidence && (
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[10px] mt-1 ${
+                                    obs.confidence === "high" ? "border-green-300 text-green-700" :
+                                    obs.confidence === "medium" ? "border-amber-300 text-amber-700" :
+                                    "border-red-300 text-red-700"
+                                  }`}
+                                  data-testid={`observation-confidence-${obs.name}`}
+                                >
+                                  {obs.confidence} confidence
+                                </Badge>
+                              )}
                             </div>
                           </div>
                         ))}
