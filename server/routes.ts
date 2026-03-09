@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION } from "./gemini";
-import { insertCallInfo, insertCallObservations } from "./bigquery";
+import { insertCallInfo, insertCallObservations, getCallInfoList, getCallDetail } from "./bigquery";
 import { randomUUID, createHash } from "crypto";
 import { storage } from "./storage";
 import { insertObservationSchema, enumValueSchema, insertContextParameterSchema } from "@shared/schema";
@@ -379,6 +379,29 @@ export async function registerRoutes(
         params: { key: "observations_prompt_guidance" },
       });
       res.json({ success: true, guidance: "" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/calls", async (req, res) => {
+    try {
+      const rawLimit = parseInt(req.query.limit as string) || 100;
+      const limit = Math.max(1, Math.min(rawLimit, 500));
+      const calls = await getCallInfoList(limit);
+      res.json(calls);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/calls/:callId", async (req, res) => {
+    try {
+      const result = await getCallDetail(req.params.callId);
+      if (!result.callInfo) {
+        return res.status(404).json({ message: "Call not found" });
+      }
+      res.json(result);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

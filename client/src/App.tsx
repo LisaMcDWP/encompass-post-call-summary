@@ -11,12 +11,14 @@ import Observations from "@/pages/Observations";
 import SummaryPrompt from "@/pages/SummaryPrompt";
 import ContextParameters from "@/pages/ContextParameters";
 import GeneratedPrompt from "@/pages/GeneratedPrompt";
+import CallHistory from "@/pages/CallHistory";
 
 function Router() {
   return (
     <AppLayout>
       <Switch>
         <Route path="/" component={Home} />
+        <Route path="/calls" component={CallHistory} />
         <Route path="/observations" component={Observations} />
         <Route path="/summary-prompt" component={SummaryPrompt} />
         <Route path="/context-parameters" component={ContextParameters} />

@@ -5,6 +5,41 @@ const DATASET_ID = "call_information";
 const CALL_INFO_TABLE_ID = "call_info";
 const OBSERVATIONS_TABLE_ID = "call_observations";
 
+export interface CallInfoRow {
+  call_id: string;
+  care_flow_id: string | null;
+  interaction_datetime: { value: string } | string | null;
+  source_type: string | null;
+  source_id: string | null;
+  processed_at: { value: string } | string;
+  processing_time_ms: number;
+  prompt_version: number | null;
+  prompt_version_date: { value: string } | string | null;
+  context_values: string | null;
+  transcript_length: number | null;
+  summary: string | null;
+  follow_up_areas: string | null;
+  transition_status: string | null;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  total_tokens: number | null;
+  estimated_cost: number | null;
+  status: string;
+  error_message: string | null;
+}
+
+export interface CallObservationRow {
+  call_id: string;
+  observation_name: string;
+  observation_display_name: string | null;
+  observation_domain: string | null;
+  observation_value_type: string | null;
+  observation_value: string | null;
+  observation_detail: string | null;
+  observation_evidence: string | null;
+  observation_confidence: string | null;
+}
+
 let bigquery: BigQuery | null = null;
 
 function getBigQueryClient(): BigQuery {
@@ -201,4 +236,88 @@ export async function insertCallObservations(callId: string, observations: Obser
       console.error("BigQuery errors:", JSON.stringify(error.errors));
     }
   }
+}
+
+function extractTimestamp(val: { value: string } | string | null | undefined): string | null {
+  if (!val) return null;
+  if (typeof val === "object" && "value" in val) return val.value;
+  return String(val);
+}
+
+export async function getCallInfoList(limit = 100): Promise<any[]> {
+  const client = getBigQueryClient();
+  const query = `
+    SELECT *
+    FROM \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\`
+    ORDER BY processed_at DESC
+    LIMIT @limit
+  `;
+  const [rows] = await client.query({ query, params: { limit }, location: "US" });
+  return (rows as CallInfoRow[]).map(row => ({
+    call_id: row.call_id,
+    care_flow_id: row.care_flow_id,
+    interaction_datetime: extractTimestamp(row.interaction_datetime),
+    source_type: row.source_type,
+    source_id: row.source_id,
+    processed_at: extractTimestamp(row.processed_at),
+    processing_time_ms: row.processing_time_ms,
+    prompt_version: row.prompt_version,
+    prompt_version_date: extractTimestamp(row.prompt_version_date),
+    context_values: row.context_values ? JSON.parse(row.context_values) : null,
+    transcript_length: row.transcript_length,
+    summary: row.summary,
+    follow_up_areas: row.follow_up_areas,
+    transition_status: row.transition_status,
+    prompt_tokens: row.prompt_tokens,
+    completion_tokens: row.completion_tokens,
+    total_tokens: row.total_tokens,
+    estimated_cost: row.estimated_cost,
+    status: row.status,
+    error_message: row.error_message,
+  }));
+}
+
+export async function getCallDetail(callId: string): Promise<{ callInfo: any | null; observations: CallObservationRow[] }> {
+  const client = getBigQueryClient();
+
+  const infoQuery = `
+    SELECT *
+    FROM \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\`
+    WHERE call_id = @callId
+    LIMIT 1
+  `;
+  const [infoRows] = await client.query({ query: infoQuery, params: { callId }, location: "US" });
+  const row = (infoRows as CallInfoRow[])[0] || null;
+
+  const obsQuery = `
+    SELECT *
+    FROM \`${client.projectId}.${DATASET_ID}.${OBSERVATIONS_TABLE_ID}\`
+    WHERE call_id = @callId
+  `;
+  const [obsRows] = await client.query({ query: obsQuery, params: { callId }, location: "US" });
+
+  const callInfo = row ? {
+    call_id: row.call_id,
+    care_flow_id: row.care_flow_id,
+    interaction_datetime: extractTimestamp(row.interaction_datetime),
+    source_type: row.source_type,
+    source_id: row.source_id,
+    processed_at: extractTimestamp(row.processed_at),
+    processing_time_ms: row.processing_time_ms,
+    prompt_version: row.prompt_version,
+    prompt_version_date: extractTimestamp(row.prompt_version_date),
+    context_values: row.context_values ? JSON.parse(row.context_values) : null,
+    transcript_length: row.transcript_length,
+    summary: row.summary,
+    follow_up_areas: row.follow_up_areas,
+    transition_status: row.transition_status,
+    prompt_tokens: row.prompt_tokens,
+    completion_tokens: row.completion_tokens,
+    total_tokens: row.total_tokens,
+    estimated_cost: row.estimated_cost,
+    status: row.status,
+    error_message: row.error_message,
+  } : null;
+
+  return { callInfo, observations: obsRows as CallObservationRow[] };
 }
