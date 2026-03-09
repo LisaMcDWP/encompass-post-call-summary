@@ -49,12 +49,32 @@ async function ensureDatasetAndTable() {
           { name: "areas_for_followup", type: "STRING", mode: "REPEATED" },
           { name: "questions_count", type: "INTEGER", mode: "NULLABLE" },
           { name: "processing_time_ms", type: "INTEGER", mode: "NULLABLE" },
+          { name: "prompt_tokens", type: "INTEGER", mode: "NULLABLE" },
+          { name: "completion_tokens", type: "INTEGER", mode: "NULLABLE" },
+          { name: "total_tokens", type: "INTEGER", mode: "NULLABLE" },
+          { name: "estimated_cost", type: "FLOAT", mode: "NULLABLE" },
           { name: "status", type: "STRING", mode: "REQUIRED" },
           { name: "error_message", type: "STRING", mode: "NULLABLE" },
         ],
       },
     });
     console.log(`Created BigQuery table: ${DATASET_ID}.${TABLE_ID}`);
+  } else {
+    const projectId = process.env.GCP_PROJECT_ID!;
+    const fullTable = `\`${projectId}.${DATASET_ID}.${TABLE_ID}\``;
+    const newCols = [
+      { name: "prompt_tokens", type: "INT64" },
+      { name: "completion_tokens", type: "INT64" },
+      { name: "total_tokens", type: "INT64" },
+      { name: "estimated_cost", type: "FLOAT64" },
+    ];
+    for (const col of newCols) {
+      try {
+        await client.query({ query: `ALTER TABLE ${fullTable} ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}` });
+      } catch (err: any) {
+        console.log(`Note: Could not add ${col.name} to ${TABLE_ID} (may already exist): ${err.message}`);
+      }
+    }
   }
 }
 
@@ -88,17 +108,28 @@ async function ensureObservationsTable() {
           { name: "observation_detail", type: "STRING", mode: "NULLABLE" },
           { name: "observation_evidence", type: "STRING", mode: "NULLABLE" },
           { name: "observation_confidence", type: "STRING", mode: "NULLABLE" },
+          { name: "prompt_tokens", type: "INTEGER", mode: "NULLABLE" },
+          { name: "completion_tokens", type: "INTEGER", mode: "NULLABLE" },
+          { name: "total_tokens", type: "INTEGER", mode: "NULLABLE" },
+          { name: "estimated_cost", type: "FLOAT", mode: "NULLABLE" },
         ],
       },
     });
     console.log(`Created BigQuery table: ${DATASET_ID}.${OBSERVATIONS_TABLE_ID}`);
   } else {
-    const newColumns = ["observation_evidence", "observation_confidence"];
+    const newColumns = [
+      { name: "observation_evidence", type: "STRING" },
+      { name: "observation_confidence", type: "STRING" },
+      { name: "prompt_tokens", type: "INT64" },
+      { name: "completion_tokens", type: "INT64" },
+      { name: "total_tokens", type: "INT64" },
+      { name: "estimated_cost", type: "FLOAT64" },
+    ];
     for (const col of newColumns) {
       try {
-        await client.query({ query: `ALTER TABLE ${fullTable} ADD COLUMN IF NOT EXISTS ${col} STRING` });
+        await client.query({ query: `ALTER TABLE ${fullTable} ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}` });
       } catch (err: any) {
-        console.log(`Note: Could not add ${col} column (may already exist): ${err.message}`);
+        console.log(`Note: Could not add ${col.name} column (may already exist): ${err.message}`);
       }
     }
   }
@@ -119,6 +150,10 @@ export interface CallObservationEntry {
   promptVersionDate?: string | null;
   contextValues?: Record<string, string>;
   summary?: string;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  estimatedCost?: number;
   observations: ObservationResult[];
 }
 
@@ -152,6 +187,10 @@ export async function insertCallObservations(entry: CallObservationEntry): Promi
       observation_detail: obs.detail || null,
       observation_evidence: obs.evidence || null,
       observation_confidence: obs.confidence || null,
+      prompt_tokens: entry.promptTokens ?? null,
+      completion_tokens: entry.completionTokens ?? null,
+      total_tokens: entry.totalTokens ?? null,
+      estimated_cost: entry.estimatedCost ?? null,
     }));
 
     await client
@@ -177,6 +216,10 @@ export interface LogEntry {
   areasForFollowUp?: string[];
   questionsCount?: number;
   processingTimeMs: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  estimatedCost?: number;
   status: "success" | "error";
   errorMessage?: string;
 }
@@ -197,6 +240,10 @@ export async function logTooBigQuery(entry: LogEntry): Promise<void> {
       areas_for_followup: entry.areasForFollowUp || [],
       questions_count: entry.questionsCount ?? null,
       processing_time_ms: entry.processingTimeMs,
+      prompt_tokens: entry.promptTokens ?? null,
+      completion_tokens: entry.completionTokens ?? null,
+      total_tokens: entry.totalTokens ?? null,
+      estimated_cost: entry.estimatedCost ?? null,
       status: entry.status,
       error_message: entry.errorMessage || null,
     };

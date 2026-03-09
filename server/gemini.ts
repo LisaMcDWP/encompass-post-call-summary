@@ -194,7 +194,7 @@ export async function analyzeTranscript(
   contextParams?: ContextParameter[],
   contextValues?: Record<string, string>,
   observationsGuidance?: string
-): Promise<{ analysis: TranscriptAnalysis; promptUsed: string }> {
+): Promise<{ analysis: TranscriptAnalysis; promptUsed: string; tokenUsage: { promptTokens: number; completionTokens: number; totalTokens: number; estimatedCost: number } }> {
   const vertex = getVertexAI();
 
   const model = vertex.getGenerativeModel({
@@ -220,6 +220,12 @@ export async function analyzeTranscript(
 
   const result = await model.generateContent(prompt);
   const response = result.response;
+
+  const usageMetadata = response.usageMetadata;
+  const promptTokens = usageMetadata?.promptTokenCount || 0;
+  const completionTokens = usageMetadata?.candidatesTokenCount || 0;
+  const totalTokens = usageMetadata?.totalTokenCount || 0;
+  const estimatedCost = (promptTokens * 0.10 / 1_000_000) + (completionTokens * 0.40 / 1_000_000);
 
   const text =
     response.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -249,5 +255,9 @@ export async function analyzeTranscript(
     parsed.observations = [];
   }
 
-  return { analysis: parsed as TranscriptAnalysis, promptUsed: prompt };
+  return {
+    analysis: parsed as TranscriptAnalysis,
+    promptUsed: prompt,
+    tokenUsage: { promptTokens, completionTokens, totalTokens, estimatedCost },
+  };
 }

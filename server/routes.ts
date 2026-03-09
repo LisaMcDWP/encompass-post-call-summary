@@ -80,7 +80,7 @@ export async function registerRoutes(
         }
       }
 
-      const { analysis } = await analyzeTranscript(
+      const { analysis, tokenUsage } = await analyzeTranscript(
         resolvedSourceId,
         source_text.trim(),
         activeObs,
@@ -99,6 +99,10 @@ export async function registerRoutes(
         areasForFollowUp: [analysis.follow_up_areas],
         questionsCount: 0,
         processingTimeMs: processingTime,
+        promptTokens: tokenUsage.promptTokens,
+        completionTokens: tokenUsage.completionTokens,
+        totalTokens: tokenUsage.totalTokens,
+        estimatedCost: tokenUsage.estimatedCost,
         status: "success",
       });
 
@@ -116,6 +120,10 @@ export async function registerRoutes(
         promptVersionDate: promptVersionDate,
         contextValues,
         summary: analysis.summary,
+        promptTokens: tokenUsage.promptTokens,
+        completionTokens: tokenUsage.completionTokens,
+        totalTokens: tokenUsage.totalTokens,
+        estimatedCost: tokenUsage.estimatedCost,
         observations: analysis.observations,
       });
 
@@ -132,6 +140,7 @@ export async function registerRoutes(
           prompt_version: promptVersion,
           prompt_version_date: promptVersionDate,
           analysis,
+          tokenUsage,
         },
       });
     } catch (error: any) {

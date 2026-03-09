@@ -268,7 +268,7 @@ export default function Home() {
       setResult(data);
       toast({
         title: "Analysis Complete",
-        description: `Processed in ${data.data.processingTimeMs}ms via Gemini.`,
+        description: `Processed in ${data.data.processingTimeMs}ms · ${data.data.tokenUsage?.totalTokens?.toLocaleString() || 0} tokens · $${data.data.tokenUsage?.estimatedCost?.toFixed(6) || '0.000000'}`,
       });
     } catch (error: any) {
       toast({
@@ -589,13 +589,42 @@ export default function Home() {
                         processedAt: result.data.processedAt,
                         processingTimeMs: result.data.processingTimeMs,
                         status: "success",
-                        model: "gemini-2.0-flash"
+                        model: "gemini-2.0-flash",
+                        tokenUsage: result.data.tokenUsage
                       }, null, 2)}</pre>
                     </CardContent>
                   )}
                 </Card>
 
                 {/* Summary */}
+                {result.data.tokenUsage && (
+                  <div className="flex flex-wrap gap-3 text-xs" data-testid="metrics-bar">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/40 border border-border/40">
+                      <span className="text-muted-foreground">Processing:</span>
+                      <span className="font-semibold text-foreground" data-testid="metric-processing-time">{(result.data.processingTimeMs / 1000).toFixed(1)}s</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/40 border border-border/40">
+                      <span className="text-muted-foreground">Input:</span>
+                      <span className="font-semibold text-foreground" data-testid="metric-prompt-tokens">{result.data.tokenUsage.promptTokens?.toLocaleString()}</span>
+                      <span className="text-muted-foreground">tokens</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/40 border border-border/40">
+                      <span className="text-muted-foreground">Output:</span>
+                      <span className="font-semibold text-foreground" data-testid="metric-completion-tokens">{result.data.tokenUsage.completionTokens?.toLocaleString()}</span>
+                      <span className="text-muted-foreground">tokens</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/40 border border-border/40">
+                      <span className="text-muted-foreground">Total:</span>
+                      <span className="font-semibold text-foreground" data-testid="metric-total-tokens">{result.data.tokenUsage.totalTokens?.toLocaleString()}</span>
+                      <span className="text-muted-foreground">tokens</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary/10 border border-primary/20">
+                      <span className="text-muted-foreground">Est. Cost:</span>
+                      <span className="font-semibold text-primary" data-testid="metric-cost">${result.data.tokenUsage.estimatedCost?.toFixed(6)}</span>
+                    </div>
+                  </div>
+                )}
+
                 <Card className="border-border/60 bg-card shadow-md">
                   <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
                     <CardTitle className="text-lg flex items-center gap-2 text-secondary">
