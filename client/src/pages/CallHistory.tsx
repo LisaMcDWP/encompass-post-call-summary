@@ -293,12 +293,11 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-4">
-                <p
-                  className="bg-muted/30 p-4 rounded-lg border border-border/50 text-sm leading-relaxed whitespace-pre-wrap"
+                <div
+                  className="bg-muted/30 p-4 rounded-lg border border-border/50 text-sm leading-relaxed"
                   data-testid="detail-follow-up"
-                >
-                  {info.follow_up_areas}
-                </p>
+                  dangerouslySetInnerHTML={{ __html: info.follow_up_areas }}
+                />
               </CardContent>
             </Card>
           )}
@@ -312,12 +311,11 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-4">
-                <p
-                  className="bg-muted/30 p-4 rounded-lg border border-border/50 text-sm leading-relaxed whitespace-pre-wrap"
+                <div
+                  className="bg-muted/30 p-4 rounded-lg border border-border/50 text-sm leading-relaxed"
                   data-testid="detail-transition"
-                >
-                  {info.transition_status}
-                </p>
+                  dangerouslySetInnerHTML={{ __html: info.transition_status }}
+                />
               </CardContent>
             </Card>
           )}
