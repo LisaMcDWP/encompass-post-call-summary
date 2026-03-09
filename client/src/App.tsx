@@ -12,6 +12,7 @@ import SummaryPrompt from "@/pages/SummaryPrompt";
 import ContextParameters from "@/pages/ContextParameters";
 import GeneratedPrompt from "@/pages/GeneratedPrompt";
 import CallHistory from "@/pages/CallHistory";
+import ProjectOverview from "@/pages/ProjectOverview";
 
 function Router() {
   return (
@@ -19,6 +20,7 @@ function Router() {
       <Switch>
         <Route path="/" component={Home} />
         <Route path="/calls" component={CallHistory} />
+        <Route path="/overview" component={ProjectOverview} />
         <Route path="/observations" component={Observations} />
         <Route path="/summary-prompt" component={SummaryPrompt} />
         <Route path="/context-parameters" component={ContextParameters} />
