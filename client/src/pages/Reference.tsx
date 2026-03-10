@@ -1,18 +1,77 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { BookOpen, Code2, Webhook, Server, Key, Activity, Database, Settings, Phone } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { BookOpen, Code2, Webhook, Server, Key, Activity, Database, Settings, Phone, Download } from "lucide-react";
+import { useRef } from "react";
+
+function exportToHtml(contentEl: HTMLElement) {
+  const clone = contentEl.cloneNode(true) as HTMLElement;
+  const styles = Array.from(document.styleSheets)
+    .map((sheet) => {
+      try {
+        return Array.from(sheet.cssRules).map((r) => r.cssText).join("\n");
+      } catch {
+        return "";
+      }
+    })
+    .join("\n");
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guideway Care — API Reference</title>
+<style>
+${styles}
+body { background: #0f1729; color: #e2e8f0; font-family: 'Inter', system-ui, sans-serif; margin: 0; padding: 2rem; }
+</style>
+</head>
+<body>
+${clone.innerHTML}
+</body>
+</html>`;
+
+  const blob = new Blob([html], { type: "text/html" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "guideway-care-api-reference.html";
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export default function Reference() {
+  const contentRef = useRef<HTMLDivElement>(null);
   return (
     <div className="h-full overflow-y-auto bg-background">
-      <div className="max-w-4xl mx-auto px-6 py-8">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <BookOpen className="h-6 w-6 text-primary" />
-            API Reference
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">Guideway Care Post-Call Analysis API</p>
+      <div className="max-w-4xl mx-auto px-6 py-8" ref={contentRef}>
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+              <BookOpen className="h-6 w-6 text-primary" />
+              API Reference
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1">Guideway Care Post-Call Analysis API</p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            data-testid="button-export-html"
+            className="export-hide"
+            onClick={() => {
+              if (contentRef.current) {
+                const btn = contentRef.current.querySelector('.export-hide') as HTMLElement;
+                if (btn) btn.style.display = 'none';
+                exportToHtml(contentRef.current);
+                if (btn) btn.style.display = '';
+              }
+            }}
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Export HTML
+          </Button>
         </div>
 
         <Card className="border-border/60 shadow-sm mb-6">
@@ -210,7 +269,7 @@ export default function Reference() {
               <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
 {`{
   "status": "error",
-  "error": "Description of what went wrong"
+  "message": "Description of what went wrong"
 }`}
               </pre>
             </div>
@@ -329,8 +388,8 @@ export default function Reference() {
             <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
 {`{
   "prompt": "You are an expert healthcare call analyst...",
-  "version": 42,
-  "versionDate": "2026-03-06T10:00:00.000Z"
+  "promptVersion": 42,
+  "promptVersionDate": "2026-03-06T10:00:00.000Z"
 }`}
             </pre>
           </CardContent>
@@ -488,6 +547,18 @@ export default function Reference() {
             <div>
               <h3 className="text-foreground font-semibold mb-2">PUT /api/context-parameters/:id</h3>
               <p className="text-muted-foreground text-sm">Update an existing context parameter. Partial updates supported.</p>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">PUT /api/context-parameters/reorder</h3>
+              <p className="text-muted-foreground text-sm mb-2">Reorder context parameters by providing an array of IDs in the desired order.</p>
+              <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`{
+  "orderedIds": [2, 1, 3]
+}`}
+              </pre>
             </div>
 
             <Separator />
