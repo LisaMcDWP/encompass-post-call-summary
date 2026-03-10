@@ -13,6 +13,7 @@ import ContextParameters from "@/pages/ContextParameters";
 import GeneratedPrompt from "@/pages/GeneratedPrompt";
 import CallHistory from "@/pages/CallHistory";
 import ProjectOverview from "@/pages/ProjectOverview";
+import ApiReference from "@/pages/ApiReference";
 
 function Router() {
   return (
@@ -25,6 +26,7 @@ function Router() {
         <Route path="/summary-prompt" component={SummaryPrompt} />
         <Route path="/context-parameters" component={ContextParameters} />
         <Route path="/generated-prompt" component={GeneratedPrompt} />
+        <Route path="/api-reference" component={ApiReference} />
         <Route path="/reference" component={Reference} />
         <Route component={NotFound} />
       </Switch>

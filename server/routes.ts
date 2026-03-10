@@ -48,8 +48,9 @@ export async function registerRoutes(
     if (!source_text || typeof source_text !== "string" || source_text.trim().length === 0) {
       const processingTime = Date.now() - startTime;
       const logId = source_id || care_flow_id || `call_${randomUUID().slice(0, 12)}`;
-      await logTooBigQuery({
+      await insertCallInfo({
         callId: logId,
+        processedAt: new Date().toISOString(),
         transcriptLength: 0,
         processingTimeMs: processingTime,
         status: "error",
