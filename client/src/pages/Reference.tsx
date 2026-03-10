@@ -98,16 +98,16 @@ export default function Reference() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-muted-foreground">The <code className="text-primary">POST /api/analyze</code> endpoint requires API key authentication when the <code className="text-primary">GUIDEWAY_API_KEY</code> environment variable is configured.</p>
+            <p className="text-muted-foreground">The <code className="text-primary">POST /api/analyze</code> endpoint requires API key authentication when the <code className="text-primary">GWC_OBSERVATION_SUMMARIZATION_API_KEY</code> environment variable is configured.</p>
             <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-2">
               <p className="text-foreground"><span className="text-primary font-semibold">Header</span>: <code className="text-primary">X-API-Key: your-api-key</code></p>
-              <p className="text-foreground"><span className="text-primary font-semibold">Source</span>: GCP API key (APIs & Services → Credentials → API key), stored in Secret Manager and passed to Cloud Run as the <code className="text-primary">GUIDEWAY_API_KEY</code> environment variable.</p>
+              <p className="text-foreground"><span className="text-primary font-semibold">Source</span>: GCP API key (APIs & Services → Credentials → API key), stored in Secret Manager and passed to Cloud Run as the <code className="text-primary">GWC_OBSERVATION_SUMMARIZATION_API_KEY</code> environment variable.</p>
             </div>
             <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm">
               <p className="text-foreground font-semibold mb-1">Unauthorized Response (401)</p>
               <pre className="text-gray-400">{`{ "status": "error", "message": "Invalid or missing API key" }`}</pre>
             </div>
-            <p className="text-muted-foreground text-sm">If <code className="text-primary">GUIDEWAY_API_KEY</code> is not set, the endpoint is open (no authentication required). All other endpoints (observations, settings, health) do not require authentication.</p>
+            <p className="text-muted-foreground text-sm">If <code className="text-primary">GWC_OBSERVATION_SUMMARIZATION_API_KEY</code> is not set, the endpoint is open (no authentication required). All other endpoints (observations, settings, health) do not require authentication.</p>
           </CardContent>
         </Card>
 
@@ -730,7 +730,7 @@ export default function Reference() {
               <div className="bg-muted/30 border border-border/50 p-3 rounded-lg text-sm">
                 <p className="text-foreground"><span className="text-primary font-semibold">GCP_PROJECT_ID</span> — Your Google Cloud project ID</p>
                 <p className="text-foreground mt-1"><span className="text-primary font-semibold">GCP_SERVICE_ACCOUNT_KEY</span> — Full JSON service account key (via Secret Manager)</p>
-                <p className="text-foreground mt-1"><span className="text-primary font-semibold">GUIDEWAY_API_KEY</span> — GCP API key for authenticating POST /api/analyze (via Secret Manager)</p>
+                <p className="text-foreground mt-1"><span className="text-primary font-semibold">GWC_OBSERVATION_SUMMARIZATION_API_KEY</span> — GCP API key for authenticating POST /api/analyze (via Secret Manager)</p>
                 <p className="text-foreground mt-1"><span className="text-primary font-semibold">PORT</span> — Set automatically by Cloud Run (default 8080)</p>
               </div>
             </div>

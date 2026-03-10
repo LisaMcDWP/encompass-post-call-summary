@@ -42,7 +42,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/analyze", async (req, res) => {
-    const apiKey = process.env.GUIDEWAY_API_KEY;
+    const apiKey = process.env.GWC_OBSERVATION_SUMMARIZATION_API_KEY;
     if (apiKey) {
       const provided = req.headers["x-api-key"];
       if (!provided || provided !== apiKey) {
