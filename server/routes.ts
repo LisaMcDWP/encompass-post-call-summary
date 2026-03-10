@@ -42,6 +42,14 @@ export async function registerRoutes(
   });
 
   app.post("/api/analyze", async (req, res) => {
+    const apiKey = process.env.API_KEY;
+    if (apiKey) {
+      const provided = req.headers["x-api-key"];
+      if (!provided || provided !== apiKey) {
+        return res.status(401).json({ status: "error", message: "Invalid or missing API key" });
+      }
+    }
+
     const startTime = Date.now();
     const { care_flow_id, processed_datetime, source_type, source_id, source_text, context, ...rest } = req.body;
 

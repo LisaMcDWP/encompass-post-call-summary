@@ -93,6 +93,27 @@ export default function Reference() {
         <Card className="border-border/60 shadow-sm mb-6">
           <CardHeader>
             <CardTitle className="text-foreground flex items-center gap-2">
+              <Key className="h-5 w-5 text-primary" />
+              Authentication
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-muted-foreground">The <code className="text-primary">POST /api/analyze</code> endpoint requires API key authentication when the <code className="text-primary">API_KEY</code> environment variable is configured.</p>
+            <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-2">
+              <p className="text-foreground"><span className="text-primary font-semibold">Header</span>: <code className="text-primary">X-API-Key: your-api-key</code></p>
+              <p className="text-foreground"><span className="text-primary font-semibold">Source</span>: GCP API key (APIs & Services → Credentials → API key), stored in Secret Manager and passed to Cloud Run as the <code className="text-primary">API_KEY</code> environment variable.</p>
+            </div>
+            <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm">
+              <p className="text-foreground font-semibold mb-1">Unauthorized Response (401)</p>
+              <pre className="text-gray-400">{`{ "status": "error", "message": "Invalid or missing API key" }`}</pre>
+            </div>
+            <p className="text-muted-foreground text-sm">If <code className="text-primary">API_KEY</code> is not set, the endpoint is open (no authentication required). All other endpoints (observations, settings, health) do not require authentication.</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/60 shadow-sm mb-6">
+          <CardHeader>
+            <CardTitle className="text-foreground flex items-center gap-2">
               <Code2 className="h-5 w-5 text-primary" />
               POST /api/analyze
               <Badge className="bg-primary/10 text-primary border-primary/20 ml-2">Primary Endpoint</Badge>
@@ -249,6 +270,7 @@ export default function Reference() {
               <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto" data-testid="text-curl-example">
 {`curl -X POST https://YOUR-CLOUD-RUN-URL/api/analyze \\
   -H "Content-Type: application/json" \\
+  -H "X-API-Key: YOUR_API_KEY" \\
   -d '{
     "care_flow_id": "cf_abc123",
     "source_type": "phone_call",
@@ -644,6 +666,7 @@ export default function Reference() {
               <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
                 <p className="text-primary font-mono text-sm mb-1">Headers</p>
                 <p className="text-foreground text-sm">Content-Type: application/json</p>
+                <p className="text-foreground text-sm">X-API-Key: your-gcp-api-key</p>
               </div>
               <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
                 <p className="text-primary font-mono text-sm mb-1">Body</p>

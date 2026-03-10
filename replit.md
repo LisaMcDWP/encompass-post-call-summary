@@ -46,6 +46,7 @@ Observations are dynamic topics stored in BigQuery (`call_information.observatio
 ## Environment Variables (Secrets)
 - `GCP_PROJECT_ID` — Google Cloud project ID (`encompass-476415`)
 - `GCP_SERVICE_ACCOUNT_KEY` — Full JSON service account key (needs Vertex AI User, BigQuery Data Editor, BigQuery Job User roles)
+- `API_KEY` — GCP API key for authenticating POST /api/analyze requests (managed via GCP Console → APIs & Services → Credentials). Passed as `X-API-Key` header. If not set, the endpoint is open.
 
 ## API Endpoints
 ### POST /api/analyze
