@@ -98,7 +98,7 @@ export default function Reference() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-muted-foreground">The <code className="text-primary">POST /api/analyze</code> endpoint requires API key authentication when the <code className="text-primary">GWC_OBSERVATION_SUMMARIZATION_API_KEY</code> environment variable is configured.</p>
+            <p className="text-muted-foreground">The secured endpoint <code className="text-primary">POST /gwc_observation_summarization</code> requires API key authentication. The legacy <code className="text-primary">POST /api/analyze</code> endpoint remains open (no auth) for backward compatibility.</p>
             <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-2">
               <p className="text-foreground"><span className="text-primary font-semibold">Header</span>: <code className="text-primary">X-API-Key: your-api-key</code></p>
               <p className="text-foreground"><span className="text-primary font-semibold">Source</span>: GCP API key (APIs & Services → Credentials → API key), stored in Secret Manager and passed to Cloud Run as the <code className="text-primary">GWC_OBSERVATION_SUMMARIZATION_API_KEY</code> environment variable.</p>
@@ -107,7 +107,7 @@ export default function Reference() {
               <p className="text-foreground font-semibold mb-1">Unauthorized Response (401)</p>
               <pre className="text-gray-400">{`{ "status": "error", "message": "Invalid or missing API key" }`}</pre>
             </div>
-            <p className="text-muted-foreground text-sm">If <code className="text-primary">GWC_OBSERVATION_SUMMARIZATION_API_KEY</code> is not set, the endpoint is open (no authentication required). All other endpoints (observations, settings, health) do not require authentication.</p>
+            <p className="text-muted-foreground text-sm">If <code className="text-primary">GWC_OBSERVATION_SUMMARIZATION_API_KEY</code> is not set, the secured endpoint falls back to open access. All other endpoints (observations, settings, health) do not require authentication.</p>
           </CardContent>
         </Card>
 
@@ -115,14 +115,16 @@ export default function Reference() {
           <CardHeader>
             <CardTitle className="text-foreground flex items-center gap-2">
               <Code2 className="h-5 w-5 text-primary" />
-              POST /api/analyze
+              POST /gwc_observation_summarization
               <Badge className="bg-primary/10 text-primary border-primary/20 ml-2">Primary Endpoint</Badge>
+              <Badge className="bg-green-500/10 text-green-600 border-green-500/20 ml-1">Secured</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             <div>
               <h3 className="text-foreground font-semibold mb-2">Description</h3>
-              <p className="text-muted-foreground">Accepts source text with contextual metadata (care flow, source type), processes it through Gemini AI, and returns structured clinical analysis with HTML-formatted output. The analysis prompt is dynamically built from the active observations configured in the Observations setup page.</p>
+              <p className="text-muted-foreground">Accepts source text with contextual metadata (care flow, source type), processes it through Gemini AI, and returns structured clinical analysis with HTML-formatted output. Requires <code className="text-primary">X-API-Key</code> header. The analysis prompt is dynamically built from the active observations configured in the Observations setup page.</p>
+              <p className="text-muted-foreground text-sm mt-2">Legacy endpoint <code className="text-primary">POST /api/analyze</code> is also available (identical functionality, no authentication required).</p>
             </div>
 
             <Separator />
@@ -268,7 +270,7 @@ export default function Reference() {
             <div>
               <h3 className="text-foreground font-semibold mb-2">Example cURL</h3>
               <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto" data-testid="text-curl-example">
-{`curl -X POST https://YOUR-CLOUD-RUN-URL/api/analyze \\
+{`curl -X POST https://YOUR-CLOUD-RUN-URL/gwc_observation_summarization \\
   -H "Content-Type: application/json" \\
   -H "X-API-Key: YOUR_API_KEY" \\
   -d '{
@@ -657,7 +659,7 @@ export default function Reference() {
             <div className="space-y-3">
               <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
                 <p className="text-primary font-mono text-sm mb-1">URL</p>
-                <p className="text-foreground text-sm">https://YOUR-CLOUD-RUN-URL/api/analyze</p>
+                <p className="text-foreground text-sm">https://YOUR-CLOUD-RUN-URL/gwc_observation_summarization</p>
               </div>
               <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
                 <p className="text-primary font-mono text-sm mb-1">Method</p>

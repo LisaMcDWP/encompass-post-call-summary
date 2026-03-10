@@ -49,7 +49,12 @@ Observations are dynamic topics stored in BigQuery (`call_information.observatio
 - `GWC_OBSERVATION_SUMMARIZATION_API_KEY` — GCP API key for authenticating POST /api/analyze requests (managed via GCP Console → APIs & Services → Credentials). Passed as `X-API-Key` header. If not set, the endpoint is open.
 
 ## API Endpoints
-### POST /api/analyze
+### POST /gwc_observation_summarization (Primary — Secured)
+Requires `X-API-Key` header matching `GWC_OBSERVATION_SUMMARIZATION_API_KEY` env var.
+
+### POST /api/analyze (Legacy — Open)
+Identical functionality, no authentication. Kept for backward compatibility with existing Awell integration.
+
 Input: `{ care_flow_id?, processed_datetime?, source_type?, source_id?, source_text }`
 Output: `{ status, data: { care_flow_id, processed_datetime, source_type, source_id, processedAt, processingTimeMs, analysis: { summary, observations: [{ name, display_name, domain, value_type, value, detail, evidence, confidence }], transition_status, follow_up_areas }, tokenUsage: { promptTokens, completionTokens, totalTokens, estimatedCost } } }`
 

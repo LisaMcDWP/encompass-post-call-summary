@@ -41,15 +41,7 @@ export async function registerRoutes(
     res.json({ prompt, promptVersion, promptVersionDate });
   });
 
-  app.post("/api/analyze", async (req, res) => {
-    const apiKey = process.env.GWC_OBSERVATION_SUMMARIZATION_API_KEY;
-    if (apiKey) {
-      const provided = req.headers["x-api-key"];
-      if (!provided || provided !== apiKey) {
-        return res.status(401).json({ status: "error", message: "Invalid or missing API key" });
-      }
-    }
-
+  async function handleAnalyze(req: any, res: any) {
     const startTime = Date.now();
     const { care_flow_id, processed_datetime, source_type, source_id, source_text, context, ...rest } = req.body;
 
@@ -161,6 +153,19 @@ export async function registerRoutes(
         message: "Failed to analyze transcript. " + error.message,
       });
     }
+  }
+
+  app.post("/api/analyze", handleAnalyze);
+
+  app.post("/gwc_observation_summarization", (req, res) => {
+    const apiKey = process.env.GWC_OBSERVATION_SUMMARIZATION_API_KEY;
+    if (apiKey) {
+      const provided = req.headers["x-api-key"];
+      if (!provided || provided !== apiKey) {
+        return res.status(401).json({ status: "error", message: "Invalid or missing API key" });
+      }
+    }
+    return handleAnalyze(req, res);
   });
 
   app.get("/api/observations", async (_req, res) => {
