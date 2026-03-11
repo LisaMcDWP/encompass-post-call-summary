@@ -84,9 +84,9 @@ export default function Reference() {
           <CardContent>
             <p className="text-foreground mb-3">Replace with your Cloud Run URL after deployment:</p>
             <pre className="bg-[#172938] text-[#96d410] p-4 rounded-lg text-sm overflow-x-auto" data-testid="text-base-url">
-{`https://guideway-care-api-XXXXXXXX-uc.a.run.app`}
+{`https://guideway-care-api-855188300685.us-central1.run.app`}
             </pre>
-            <p className="text-muted-foreground text-sm mt-3">Find your URL in GCP Console → Cloud Run → guideway-care-api → URL at the top of the page.</p>
+            <p className="text-muted-foreground text-sm mt-3">Cloud Run deployment: guideway-care-api (us-central1)</p>
           </CardContent>
         </Card>
 
@@ -262,7 +262,7 @@ export default function Reference() {
             <div>
               <h3 className="text-foreground font-semibold mb-2">Example cURL</h3>
               <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto" data-testid="text-curl-example">
-{`curl -X POST https://YOUR-CLOUD-RUN-URL/api/analyze \\
+{`curl -X POST https://guideway-care-api-855188300685.us-central1.run.app/api/analyze \\
   -H "Content-Type: application/json" \\
   -d '{
     "care_flow_id": "cf_abc123",
@@ -650,7 +650,7 @@ export default function Reference() {
             <div className="space-y-3">
               <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
                 <p className="text-primary font-mono text-sm mb-1">URL</p>
-                <p className="text-foreground text-sm">https://YOUR-CLOUD-RUN-URL/api/analyze</p>
+                <p className="text-foreground text-sm">https://guideway-care-api-855188300685.us-central1.run.app/api/analyze</p>
               </div>
               <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
                 <p className="text-primary font-mono text-sm mb-1">Method</p>

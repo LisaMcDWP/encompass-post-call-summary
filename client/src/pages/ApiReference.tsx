@@ -88,9 +88,9 @@ export default function ApiReference() {
             </div>
             <p className="text-muted-foreground text-sm">Full URL (replace with your Cloud Run deployment):</p>
             <pre className="bg-[#172938] text-[#96d410] p-4 rounded-lg text-sm overflow-x-auto" data-testid="text-api-url">
-{`https://guideway-care-api-XXXXXXXX-uc.a.run.app/gwc_observation_summarization`}
+{`https://guideway-care-api-855188300685.us-central1.run.app/gwc_observation_summarization`}
             </pre>
-            <p className="text-muted-foreground text-xs">Find your URL: GCP Console → Cloud Run → guideway-care-api → URL at the top of the page.</p>
+            <p className="text-muted-foreground text-xs">Cloud Run deployment: guideway-care-api (us-central1)</p>
           </CardContent>
         </Card>
 
@@ -316,7 +316,7 @@ export default function ApiReference() {
           </CardHeader>
           <CardContent>
             <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto" data-testid="text-api-curl">
-{`curl -X POST https://YOUR-CLOUD-RUN-URL/gwc_observation_summarization \\
+{`curl -X POST https://guideway-care-api-855188300685.us-central1.run.app/gwc_observation_summarization \\
   -H "Content-Type: application/json" \\
   -H "X-API-Key: YOUR_API_KEY" \\
   -d '{
@@ -345,7 +345,7 @@ export default function ApiReference() {
             <div className="space-y-3">
               <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
                 <p className="text-primary font-mono text-sm mb-1">URL</p>
-                <p className="text-foreground text-sm">https://YOUR-CLOUD-RUN-URL/gwc_observation_summarization</p>
+                <p className="text-foreground text-sm">https://guideway-care-api-855188300685.us-central1.run.app/gwc_observation_summarization</p>
               </div>
               <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
                 <p className="text-primary font-mono text-sm mb-1">Method</p>
