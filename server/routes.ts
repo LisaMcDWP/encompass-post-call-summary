@@ -158,7 +158,7 @@ export async function registerRoutes(
 
   app.post("/api/analyze", handleAnalyze);
 
-  app.post("/gwc_observation_summarization", (req, res) => {
+  app.post("/gwc_observation_summarization", async (req, res) => {
     const apiKey = process.env.GWC_OBSERVATION_SUMMARIZATION_API_KEY;
     if (apiKey) {
       const provided = req.headers["x-api-key"];
@@ -166,6 +166,24 @@ export async function registerRoutes(
         return res.status(401).json({ status: "error", message: "Invalid or missing API key" });
       }
     }
+    const originalJson = res.json.bind(res);
+    res.json = (body: any) => {
+      if (body?.data?.analysis) {
+        const { transition_status, follow_up_areas, ...restAnalysis } = body.data.analysis;
+        body = {
+          ...body,
+          data: {
+            ...body.data,
+            analysis: {
+              ...restAnalysis,
+              observations_summary_formatted: transition_status,
+              followup_formatted: follow_up_areas,
+            },
+          },
+        };
+      }
+      return originalJson(body);
+    };
     return handleAnalyze(req, res);
   });
 

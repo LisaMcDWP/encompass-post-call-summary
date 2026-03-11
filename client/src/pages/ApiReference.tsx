@@ -201,8 +201,8 @@ export default function ApiReference() {
           "confidence": "high"
         }
       ],
-      "transition_status": "<b>Overall Feeling:</b> <span>Good</span>...",
-      "follow_up_areas": "<ul><li><b>Topic:</b> Detail...</li></ul>"
+      "observations_summary_formatted": "<b>Overall Feeling:</b> <span>Good</span>...",
+      "followup_formatted": "<ul><li><b>Topic:</b> Detail...</li></ul>"
     },
     "tokenUsage": {
       "promptTokens": 2450,
@@ -228,11 +228,11 @@ export default function ApiReference() {
                   <p className="text-muted-foreground text-sm mt-1">Array of observation objects, one per active topic. Each contains: <code className="text-primary">name</code>, <code className="text-primary">display_name</code>, <code className="text-primary">domain</code>, <code className="text-primary">value_type</code>, <code className="text-primary">value</code> (extracted value or null), <code className="text-primary">detail</code> (explanation), <code className="text-primary">evidence</code> (direct transcript quote), and <code className="text-primary">confidence</code> (high/medium/low).</p>
                 </div>
                 <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
-                  <p className="text-primary font-mono text-sm">analysis.transition_status</p>
+                  <p className="text-primary font-mono text-sm">analysis.observations_summary_formatted</p>
                   <p className="text-muted-foreground text-sm mt-1">HTML-formatted rich text covering all observation topics with inline color-coded status badges.</p>
                 </div>
                 <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
-                  <p className="text-primary font-mono text-sm">analysis.follow_up_areas</p>
+                  <p className="text-primary font-mono text-sm">analysis.followup_formatted</p>
                   <p className="text-muted-foreground text-sm mt-1">HTML-formatted list of items needing follow-up. Only includes topics with problems or gaps.</p>
                 </div>
                 <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
@@ -246,7 +246,7 @@ export default function ApiReference() {
 
             <div>
               <h3 className="text-foreground font-semibold mb-2">Status Badge Colors</h3>
-              <p className="text-muted-foreground text-sm mb-3">The <code className="text-primary">transition_status</code> field uses inline styles for color-coded badges:</p>
+              <p className="text-muted-foreground text-sm mb-3">The <code className="text-primary">observations_summary_formatted</code> field uses inline styles for color-coded badges:</p>
               <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-3">
                 <div className="flex items-center gap-3">
                   <span style={{display:'inline-block',padding:'1px 8px',borderRadius:'9999px',fontSize:'11px',fontWeight:600,background:'#dcfce7',color:'#166534',border:'1px solid #bbf7d0'}}>Good</span>
