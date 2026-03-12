@@ -132,25 +132,32 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
             </div>
           </div>
 
-          {info.care_flow_id && (
+          <div>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 block mb-1.5">Input Fields</span>
             <div className="flex flex-wrap gap-3 text-xs">
               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/40 border border-border/40">
                 <span className="text-muted-foreground">Care Flow:</span>
-                <span className="font-medium" data-testid="detail-care-flow">{info.care_flow_id}</span>
+                <span className="font-medium" data-testid="detail-care-flow">{info.care_flow_id || "—"}</span>
               </div>
-              {info.source_type && (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/40 border border-border/40">
-                  <span className="text-muted-foreground">Source:</span>
-                  <span className="font-medium">{info.source_type}</span>
-                </div>
-              )}
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/40 border border-border/40">
+                <span className="text-muted-foreground">Source Type:</span>
+                <span className="font-medium" data-testid="detail-source-type">{info.source_type || "—"}</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/40 border border-border/40">
+                <span className="text-muted-foreground">Source ID:</span>
+                <span className="font-medium font-mono" data-testid="detail-source-id">{info.source_id || "—"}</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/40 border border-border/40">
+                <span className="text-muted-foreground">Datetime:</span>
+                <span className="font-medium" data-testid="detail-processed-datetime">{formatDate(info.processed_datetime)}</span>
+              </div>
               {info.prompt_version && (
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/40 border border-border/40">
                   <span className="text-muted-foreground">Prompt v{info.prompt_version}</span>
                 </div>
               )}
             </div>
-          )}
+          </div>
 
           {info.total_tokens && (
             <div className="flex flex-wrap gap-3 text-xs" data-testid="detail-tokens">
@@ -369,8 +376,10 @@ export default function CallHistory() {
 
       {calls && calls.length > 0 && (
         <div className="space-y-2" data-testid="list-calls">
-          <div className="grid grid-cols-[1fr_120px_100px_90px_80px_32px] gap-3 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+          <div className="grid grid-cols-[1fr_1fr_100px_120px_100px_90px_80px_32px] gap-3 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
             <span>Call ID</span>
+            <span>Care Flow</span>
+            <span>Source</span>
             <span>Processed</span>
             <span>Status</span>
             <span>Tokens</span>
@@ -380,7 +389,7 @@ export default function CallHistory() {
           {calls.map((call) => (
             <div
               key={call.call_id}
-              className="grid grid-cols-[1fr_120px_100px_90px_80px_32px] gap-3 items-center px-4 py-3 rounded-lg border border-border/50 bg-card hover:bg-muted/30 cursor-pointer transition-colors shadow-sm"
+              className="grid grid-cols-[1fr_1fr_100px_120px_100px_90px_80px_32px] gap-3 items-center px-4 py-3 rounded-lg border border-border/50 bg-card hover:bg-muted/30 cursor-pointer transition-colors shadow-sm"
               onClick={() => setSelectedCallId(call.call_id)}
               data-testid={`row-call-${call.call_id}`}
             >
@@ -388,11 +397,14 @@ export default function CallHistory() {
                 <p className="text-sm font-mono truncate text-foreground" data-testid={`text-call-id-${call.call_id}`}>
                   {call.call_id}
                 </p>
-                {call.care_flow_id && (
-                  <p className="text-[11px] text-muted-foreground truncate">
-                    {call.care_flow_id}
-                  </p>
-                )}
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-mono truncate text-muted-foreground" data-testid={`text-care-flow-${call.call_id}`}>
+                  {call.care_flow_id || "—"}
+                </p>
+              </div>
+              <div className="text-xs text-muted-foreground" data-testid={`text-source-type-${call.call_id}`}>
+                {call.source_type || "—"}
               </div>
               <div className="text-xs text-muted-foreground" data-testid={`text-processed-${call.call_id}`}>
                 {formatDate(call.processed_at)}
