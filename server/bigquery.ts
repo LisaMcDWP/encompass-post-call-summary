@@ -26,6 +26,7 @@ export interface CallInfoRow {
   estimated_cost: number | null;
   status: string;
   error_message: string | null;
+  request_body: string | null;
 }
 
 export interface CallObservationRow {
@@ -140,6 +141,26 @@ async function ensureObservationsTable() {
 let callInfoInitialized = false;
 let observationsInitialized = false;
 
+async function migrateCallInfoColumns(): Promise<void> {
+  try {
+    const client = getBigQueryClient();
+    const dataset = client.dataset(DATASET_ID);
+    const table = dataset.table(CALL_INFO_TABLE_ID);
+    const [metadata] = await table.getMetadata();
+    const fields = metadata.schema?.fields || [];
+    const hasRequestBody = fields.some((f: any) => f.name === "request_body");
+    if (!hasRequestBody) {
+      await client.query({
+        query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\` ADD COLUMN request_body STRING`,
+        location: "US",
+      });
+      console.log("Added request_body column to call_info table.");
+    }
+  } catch (err: any) {
+    console.error("Migration check for call_info columns:", err.message);
+  }
+}
+
 export async function initializeCallTables(): Promise<void> {
   try {
     await ensureCallInfoTable();
@@ -148,6 +169,7 @@ export async function initializeCallTables(): Promise<void> {
     await ensureObservationsTable();
     observationsInitialized = true;
     console.log("BigQuery table call_observations ready.");
+    await migrateCallInfoColumns();
   } catch (err: any) {
     console.error("Failed to initialize call tables:", err.message);
   }
@@ -168,6 +190,7 @@ export interface CallInfoEntry {
   summary?: string;
   followUpAreas?: string;
   transitionStatus?: string;
+  requestBody?: string;
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
@@ -205,6 +228,7 @@ export async function insertCallInfo(entry: CallInfoEntry): Promise<void> {
       estimated_cost: entry.estimatedCost ?? null,
       status: entry.status,
       error_message: entry.errorMessage || null,
+      request_body: entry.requestBody || null,
     };
 
     await client
@@ -293,6 +317,7 @@ export async function getCallInfoList(limit = 100): Promise<any[]> {
     estimated_cost: row.estimated_cost,
     status: row.status,
     error_message: row.error_message,
+    request_body: row.request_body ? JSON.parse(row.request_body) : null,
   }));
 }
 
@@ -336,6 +361,7 @@ export async function getCallDetail(callId: string): Promise<{ callInfo: any | n
     estimated_cost: row.estimated_cost,
     status: row.status,
     error_message: row.error_message,
+    request_body: row.request_body ? JSON.parse(row.request_body) : null,
   } : null;
 
   return { callInfo, observations: obsRows as CallObservationRow[] };

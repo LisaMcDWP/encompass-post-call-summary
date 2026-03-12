@@ -25,6 +25,7 @@ interface CallInfo {
   estimated_cost: number | null;
   status: string;
   error_message: string | null;
+  request_body: Record<string, any> | null;
 }
 
 interface CallObservation {
@@ -158,6 +159,16 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
               )}
             </div>
           </div>
+
+          {info.request_body && (
+            <div>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 block mb-1.5">Request JSON</span>
+              <pre
+                className="bg-[#172938] text-gray-300 p-4 rounded-lg text-xs overflow-x-auto max-h-48 overflow-y-auto"
+                data-testid="detail-request-body"
+              >{JSON.stringify(info.request_body, null, 2)}</pre>
+            </div>
+          )}
 
           {info.total_tokens && (
             <div className="flex flex-wrap gap-3 text-xs" data-testid="detail-tokens">

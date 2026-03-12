@@ -44,6 +44,8 @@ export async function registerRoutes(
   async function handleAnalyze(req: any, res: any) {
     const startTime = Date.now();
     const { care_flow_id, processed_datetime, source_type, source_id, source_text, context, ...rest } = req.body;
+    const { source_text: _omit, ...requestMeta } = req.body;
+    const requestBodyJson = JSON.stringify(requestMeta);
 
     if (!source_text || typeof source_text !== "string" || source_text.trim().length === 0) {
       const processingTime = Date.now() - startTime;
@@ -115,6 +117,7 @@ export async function registerRoutes(
         totalTokens: tokenUsage.totalTokens,
         estimatedCost: tokenUsage.estimatedCost,
         status: "success",
+        requestBody: requestBodyJson,
       });
 
       await insertCallObservations(resolvedSourceId, analysis.observations);
@@ -145,6 +148,7 @@ export async function registerRoutes(
         transcriptLength: source_text.length,
         status: "error",
         errorMessage: error.message,
+        requestBody: requestBodyJson,
       });
 
       console.error("Transcript analysis failed:", error);
