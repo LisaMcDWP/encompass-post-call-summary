@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, GripVertical, X, Save, Loader2, Info, GripVertical as Grip, ArrowUp, ArrowDown } from "lucide-react";
+import { Plus, Pencil, Trash2, GripVertical, X, Save, Loader2, Info, GripVertical as Grip, ArrowUp, ArrowDown, Sparkles, Send, MessageCircle } from "lucide-react";
 
 interface EnumValue {
   label: string;
@@ -62,6 +62,10 @@ export default function Observations() {
   const [generalGuidance, setGeneralGuidance] = useState("");
   const [savedGuidance, setSavedGuidance] = useState("");
   const [guidanceSaving, setGuidanceSaving] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiMessage, setAiMessage] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiHistory, setAiHistory] = useState<{ role: string; text: string }[]>([]);
   const { toast } = useToast();
 
   const fetchObservations = async () => {
@@ -101,6 +105,34 @@ export default function Observations() {
       toast({ title: "Error", description: "Failed to save guidance.", variant: "destructive" });
     } finally {
       setGuidanceSaving(false);
+    }
+  };
+
+  const aiChatRef = { current: null as HTMLDivElement | null };
+
+  const sendAiMessage = async () => {
+    if (!aiMessage.trim() || aiLoading) return;
+    const userMsg = aiMessage.trim();
+    setAiMessage("");
+    const newHistory = [...aiHistory, { role: "user", text: userMsg }];
+    setAiHistory(newHistory);
+    setAiLoading(true);
+    try {
+      const res = await fetch("/api/observations/ai-suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: userMsg, history: aiHistory }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setAiHistory([...newHistory, { role: "assistant", text: data.response }]);
+      } else {
+        setAiHistory([...newHistory, { role: "assistant", text: "Error: " + (data.error || "Failed to get response") }]);
+      }
+    } catch {
+      setAiHistory([...newHistory, { role: "assistant", text: "Error: Failed to connect to AI assistant." }]);
+    } finally {
+      setAiLoading(false);
     }
   };
 
@@ -266,10 +298,135 @@ export default function Observations() {
               Define the observation topics used in the Gemini analysis prompt. Drag to reorder.
             </p>
           </div>
-          <Button onClick={openCreate} className="bg-primary hover:bg-primary/90" data-testid="button-add-observation">
-            <Plus className="h-4 w-4 mr-2" /> Add Observation
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setAiOpen(!aiOpen)}
+              className={aiOpen ? "border-primary text-primary" : ""}
+              data-testid="button-ai-assistant"
+            >
+              <Sparkles className="h-4 w-4 mr-2" /> AI Assistant
+            </Button>
+            <Button onClick={openCreate} className="bg-primary hover:bg-primary/90" data-testid="button-add-observation">
+              <Plus className="h-4 w-4 mr-2" /> Add Observation
+            </Button>
+          </div>
         </div>
+
+        {aiOpen && (
+          <Card className="border-primary/30 shadow-md bg-gradient-to-br from-primary/5 to-background" data-testid="panel-ai-assistant">
+            <CardContent className="py-4 px-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-semibold text-foreground">AI Observation Assistant</span>
+                  <span className="text-[10px] text-muted-foreground">(powered by Gemini)</span>
+                </div>
+                <div className="flex gap-1.5">
+                  {aiHistory.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setAiHistory([])}
+                      className="h-7 text-xs text-muted-foreground"
+                      data-testid="button-ai-clear"
+                    >
+                      Clear
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="sm" onClick={() => setAiOpen(false)} className="h-7 w-7 p-0" data-testid="button-ai-close">
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+
+              {aiHistory.length === 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">Ask me to suggest new observations, improve prompt guidance, review your setup, or provide examples. I can see your current observations.</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      "Review my current observations and suggest improvements",
+                      "Suggest new observations for post-discharge care",
+                      "Write better prompt guidance for my existing observations",
+                      "What observations am I missing?",
+                    ].map((suggestion) => (
+                      <button
+                        key={suggestion}
+                        className="text-[11px] px-2.5 py-1 rounded-full border border-primary/20 text-primary hover:bg-primary/10 transition-colors"
+                        onClick={() => { setAiMessage(suggestion); }}
+                        data-testid={`button-ai-suggestion`}
+                      >
+                        {suggestion}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {aiHistory.length > 0 && (
+                <div
+                  className="space-y-3 max-h-80 overflow-y-auto pr-1"
+                  ref={(el) => {
+                    if (el) {
+                      aiChatRef.current = el;
+                      el.scrollTop = el.scrollHeight;
+                    }
+                  }}
+                  data-testid="ai-chat-history"
+                >
+                  {aiHistory.map((msg, i) => (
+                    <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                      <div
+                        className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
+                          msg.role === "user"
+                            ? "bg-primary text-white"
+                            : "bg-muted/50 border border-border/50 text-foreground"
+                        }`}
+                      >
+                        {msg.role === "assistant" ? (
+                          <div className="whitespace-pre-wrap text-[13px] leading-relaxed" dangerouslySetInnerHTML={{
+                            __html: msg.text
+                              .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                              .replace(/\n/g, '<br/>')
+                          }} />
+                        ) : (
+                          <span>{msg.text}</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {aiLoading && (
+                    <div className="flex justify-start">
+                      <div className="bg-muted/50 border border-border/50 rounded-lg px-3 py-2">
+                        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <Input
+                  value={aiMessage}
+                  onChange={(e) => setAiMessage(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendAiMessage(); } }}
+                  placeholder="Ask about observations..."
+                  className="text-sm"
+                  disabled={aiLoading}
+                  data-testid="input-ai-message"
+                />
+                <Button
+                  onClick={sendAiMessage}
+                  disabled={!aiMessage.trim() || aiLoading}
+                  className="bg-primary hover:bg-primary/90 shrink-0"
+                  data-testid="button-ai-send"
+                >
+                  {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="border-border/60 shadow-sm">
           <CardContent className="py-4 px-5 space-y-3">

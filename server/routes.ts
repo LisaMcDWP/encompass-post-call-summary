@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION } from "./gemini";
+import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, aiObservationAssistant } from "./gemini";
 import { insertCallInfo, insertCallObservations, getCallInfoList, getCallDetail } from "./bigquery";
 import { randomUUID, createHash } from "crypto";
 import { storage } from "./storage";
@@ -189,6 +189,21 @@ export async function registerRoutes(
       return originalJson(body);
     };
     return handleAnalyze(req, res);
+  });
+
+  app.post("/api/observations/ai-suggest", async (req, res) => {
+    try {
+      const { message, history } = req.body;
+      if (!message || typeof message !== "string") {
+        return res.status(400).json({ error: "Message is required" });
+      }
+      const observations = await storage.getObservations();
+      const response = await aiObservationAssistant(observations, message, history || []);
+      return res.json({ response });
+    } catch (error: any) {
+      console.error("AI observation assistant error:", error.message);
+      return res.status(500).json({ error: "AI assistant failed: " + error.message });
+    }
   });
 
   app.get("/api/observations", async (_req, res) => {

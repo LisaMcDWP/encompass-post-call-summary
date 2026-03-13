@@ -261,3 +261,77 @@ export async function analyzeTranscript(
     tokenUsage: { promptTokens, completionTokens, totalTokens, estimatedCost },
   };
 }
+
+export async function aiObservationAssistant(
+  currentObservations: Observation[],
+  userMessage: string,
+  conversationHistory: { role: string; text: string }[] = []
+): Promise<string> {
+  const ai = getVertexAI();
+  const model = ai.getGenerativeModel({ model: "gemini-2.0-flash-001" });
+
+  const obsSnapshot = currentObservations.map(o => ({
+    name: o.name,
+    displayName: o.displayName,
+    description: o.description,
+    domain: o.domain,
+    valueType: o.valueType,
+    value: o.value,
+    isActive: o.isActive,
+    promptGuidance: o.promptGuidance,
+  }));
+
+  const systemPrompt = `You are an AI assistant helping a healthcare operations team configure observation topics for a post-call analysis system.
+
+The system uses these observations to analyze patient call transcripts via Gemini AI. Each observation has:
+- name (snake_case key)
+- displayName (human-readable)
+- description (what it measures)
+- domain (clinical, medication, appointment, equipment, discharge, experience, general)
+- valueType (enum, boolean, text, number)
+- value (for enum type: array of {label, color} where color is GREEN/YELLOW/RED/BLUE/GRAY)
+- isActive (whether it's included in analysis)
+- promptGuidance (extra instructions for Gemini on how to evaluate this observation)
+
+Current observations configured:
+${JSON.stringify(obsSnapshot, null, 2)}
+
+Your role:
+1. Help suggest new observation topics relevant to post-discharge care transitions
+2. Improve existing observation descriptions and prompt guidance
+3. Suggest better enum values and color mappings
+4. Provide examples of what good prompt guidance looks like
+5. Recommend which observations might be missing based on healthcare best practices
+
+When suggesting a new observation or changes, format them clearly so the user can copy the values. Use this format for new observations:
+**Name:** snake_case_name
+**Display Name:** Human Readable Name
+**Description:** What this observation measures
+**Domain:** category
+**Value Type:** enum
+**Values:** Good (GREEN), Fair (YELLOW), Poor (RED), Not Discussed (GRAY)
+**Prompt Guidance:** Specific instructions for the AI...
+
+Be concise, practical, and focused on post-discharge patient care transitions. Keep responses short and actionable.`;
+
+  const contents: any[] = [];
+
+  contents.push({ role: "user", parts: [{ text: systemPrompt + "\n\nUser: " + (conversationHistory.length === 0 ? userMessage : conversationHistory[0]?.text || userMessage) }] });
+
+  if (conversationHistory.length > 0) {
+    for (let i = 0; i < conversationHistory.length; i++) {
+      const msg = conversationHistory[i];
+      if (i === 0) continue;
+      contents.push({
+        role: msg.role === "assistant" ? "model" : "user",
+        parts: [{ text: msg.text }],
+      });
+    }
+    contents.push({ role: "user", parts: [{ text: userMessage }] });
+  }
+
+  const result = await model.generateContent({ contents });
+  const response = result.response;
+  const text = response.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, I couldn't generate a response.";
+  return text;
+}
