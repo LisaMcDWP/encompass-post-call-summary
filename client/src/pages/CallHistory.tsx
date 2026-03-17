@@ -134,40 +134,60 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
           </div>
 
           <div>
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 block mb-1.5">Input Fields</span>
-            <div className="flex flex-wrap gap-3 text-xs">
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/40 border border-border/40">
-                <span className="text-muted-foreground">Care Flow:</span>
-                <span className="font-medium" data-testid="detail-care-flow">{info.care_flow_id || "—"}</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 block mb-1.5">API Request Fields</span>
+            <div className="bg-muted/20 rounded-lg border border-border/40 divide-y divide-border/30">
+              <div className="grid grid-cols-[140px_1fr] text-xs">
+                <span className="text-muted-foreground px-3 py-2 font-medium">Call ID</span>
+                <span className="font-mono px-3 py-2" data-testid="detail-call-id-field">{info.call_id}</span>
               </div>
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/40 border border-border/40">
-                <span className="text-muted-foreground">Source Type:</span>
-                <span className="font-medium" data-testid="detail-source-type">{info.source_type || "—"}</span>
+              <div className="grid grid-cols-[140px_1fr] text-xs">
+                <span className="text-muted-foreground px-3 py-2 font-medium">Care Flow ID</span>
+                <span className="font-mono px-3 py-2" data-testid="detail-care-flow">{info.care_flow_id || <span className="text-muted-foreground/50 italic">not provided</span>}</span>
               </div>
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/40 border border-border/40">
-                <span className="text-muted-foreground">Source ID:</span>
-                <span className="font-medium font-mono" data-testid="detail-source-id">{info.source_id || "—"}</span>
+              <div className="grid grid-cols-[140px_1fr] text-xs">
+                <span className="text-muted-foreground px-3 py-2 font-medium">Source Type</span>
+                <span className="font-mono px-3 py-2" data-testid="detail-source-type">{info.source_type || <span className="text-muted-foreground/50 italic">not provided</span>}</span>
               </div>
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/40 border border-border/40">
-                <span className="text-muted-foreground">Datetime:</span>
-                <span className="font-medium" data-testid="detail-processed-datetime">{formatDate(info.processed_datetime)}</span>
+              <div className="grid grid-cols-[140px_1fr] text-xs">
+                <span className="text-muted-foreground px-3 py-2 font-medium">Source ID</span>
+                <span className="font-mono px-3 py-2" data-testid="detail-source-id">{info.source_id || <span className="text-muted-foreground/50 italic">not provided</span>}</span>
               </div>
+              <div className="grid grid-cols-[140px_1fr] text-xs">
+                <span className="text-muted-foreground px-3 py-2 font-medium">Processed Datetime</span>
+                <span className="px-3 py-2" data-testid="detail-processed-datetime">{formatDate(info.processed_datetime)}</span>
+              </div>
+              {info.context_values && Object.keys(info.context_values).length > 0 && (
+                <div className="grid grid-cols-[140px_1fr] text-xs">
+                  <span className="text-muted-foreground px-3 py-2 font-medium">Context</span>
+                  <div className="px-3 py-2 flex flex-wrap gap-1.5">
+                    {Object.entries(info.context_values).map(([k, v]) => (
+                      <Badge key={k} variant="outline" className="text-[11px] font-mono">
+                        {k}: {v || <span className="text-muted-foreground/50">empty</span>}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
               {info.prompt_version && (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/40 border border-border/40">
-                  <span className="text-muted-foreground">Prompt v{info.prompt_version}</span>
+                <div className="grid grid-cols-[140px_1fr] text-xs">
+                  <span className="text-muted-foreground px-3 py-2 font-medium">Prompt Version</span>
+                  <span className="px-3 py-2">v{info.prompt_version}</span>
                 </div>
               )}
             </div>
           </div>
 
           {info.request_body && (
-            <div>
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 block mb-1.5">Request JSON</span>
+            <details className="group">
+              <summary className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 cursor-pointer hover:text-muted-foreground mb-1.5 list-none flex items-center gap-1">
+                <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
+                Raw Request JSON
+              </summary>
               <pre
-                className="bg-[#172938] text-gray-300 p-4 rounded-lg text-xs overflow-x-auto max-h-48 overflow-y-auto"
+                className="bg-[#172938] text-gray-300 p-4 rounded-lg text-xs overflow-x-auto max-h-48 overflow-y-auto mt-1"
                 data-testid="detail-request-body"
               >{JSON.stringify(info.request_body, null, 2)}</pre>
-            </div>
+            </details>
           )}
 
           {info.total_tokens && (
@@ -193,18 +213,6 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
             </div>
           )}
 
-          {info.context_values && Object.keys(info.context_values).length > 0 && (
-            <div className="text-xs">
-              <span className="text-muted-foreground font-medium block mb-1.5">Context Values</span>
-              <div className="flex flex-wrap gap-2">
-                {Object.entries(info.context_values).map(([k, v]) => (
-                  <Badge key={k} variant="outline" className="text-xs font-mono">
-                    {k}: {v}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
 
           {info.error_message && (
             <Card className="border-destructive/30 bg-destructive/5">
