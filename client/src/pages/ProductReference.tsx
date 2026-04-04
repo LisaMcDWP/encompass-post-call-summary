@@ -187,9 +187,11 @@ const THEMES: Theme[] = [
         stories: [
           { title: "call_info table with processing metrics, tokens, cost", status: "done" },
           { title: "call_observations table with per-observation detail", status: "done" },
+          { title: "call_qa_pairs table with full Q&A extraction per call", status: "done" },
           { title: "request_body stored (minus transcript) for debugging", status: "done" },
           { title: "Error logging with error_message for failed calls", status: "done" },
           { title: "Processed Calls UI with detail drill-down", status: "done" },
+          { title: "Q&A pairs display in call detail with category and observation linkage", status: "done" },
           { title: "API Request Fields display (care_flow_id, source_type, etc.)", status: "done" },
         ],
       },
@@ -203,6 +205,95 @@ const THEMES: Theme[] = [
           { title: "Follow-up area frequency analysis", status: "backlog" },
           { title: "Cost forecasting based on volume trends", status: "backlog" },
           { title: "Looker Studio / Data Studio integration", status: "backlog" },
+        ],
+      },
+    ],
+  },
+  {
+    name: "Batch Processing",
+    icon: <Layers className="h-5 w-5 text-primary" />,
+    description: "Search, select, and reprocess historical Bland AI calls through the extraction pipeline in bulk",
+    epics: [
+      {
+        name: "Search & Filtering",
+        description: "Query historical Bland calls with flexible criteria to find calls for batch processing",
+        stories: [
+          { title: "Search by date range (start/end date pickers)", status: "done" },
+          { title: "Filter by answered_by (Human, Voicemail, No Answer)", status: "done" },
+          { title: "Filter by call duration (min/max seconds)", status: "done" },
+          { title: "Filter by specific call IDs (comma-separated)", status: "done" },
+          { title: "Tag-based filtering — Must Have / Exclude toggles (green/red pill buttons)", status: "done" },
+          { title: "Processing status filter — Not Yet Processed / Already Processed / All", status: "done" },
+          { title: "Configurable result limit", status: "done" },
+        ],
+      },
+      {
+        name: "Batch Creation & Management",
+        description: "Turn search results into a batch for processing — select individual calls or all results",
+        stories: [
+          { title: "Select/deselect individual calls from search results", status: "done" },
+          { title: "Select All / Deselect All toggle", status: "done" },
+          { title: "Load selected calls into a new batch (DML INSERT to BigQuery batch_processing table)", status: "done" },
+          { title: "Batch summary dashboard — total, pending, completed, failed counts", status: "done" },
+          { title: "Batch items table with status, call ID, care flow ID, error details", status: "done" },
+          { title: "Recreate batch from failed/incomplete items", status: "done" },
+          { title: "Reset failed items to pending for retry", status: "done" },
+        ],
+      },
+      {
+        name: "Batch Processing Pipeline",
+        description: "Process pending batch items through the Gemini extraction pipeline with the same prompt as the live API",
+        stories: [
+          { title: "Process N items at a time (configurable batch size)", status: "done" },
+          { title: "Each item: fetch transcript → call Gemini → write call_info + call_observations + call_qa_pairs", status: "done" },
+          { title: "call_id = Bland call_id (matches source for processed filter cross-reference)", status: "done" },
+          { title: "Status tracking per item: pending → processing → completed / failed", status: "done" },
+          { title: "Error capture — failed items store error message for debugging", status: "done" },
+          { title: "Skips items with no transcript", status: "done" },
+          { title: "Batch job Docker container for Cloud Run Jobs (Dockerfile.batch)", status: "done" },
+        ],
+      },
+      {
+        name: "Data Flow Summary",
+        description: "How data moves through the batch system end-to-end",
+        stories: [
+          {
+            title: "1. User sets search filters (dates, tags, duration, processing status) and clicks Search",
+            status: "done",
+            acceptanceCriteria: [
+              "Queries Bland.calls + Bland.variables + Bland.tags in BigQuery",
+              "Cross-references call_info.source_id to determine processed vs unprocessed",
+              "Returns matching calls with call_id, transcript, care_flow_id, duration, answered_by, tags",
+            ],
+          },
+          {
+            title: "2. User selects calls from results and clicks Load to Batch",
+            status: "done",
+            acceptanceCriteria: [
+              "Creates rows in call_information.batch_processing table via DML INSERT (not streaming API)",
+              "Each row: bland_call_id, transcript, care_flow_id, status='pending', batch_id=timestamp",
+            ],
+          },
+          {
+            title: "3. User clicks Process Batch to run extraction on pending items",
+            status: "done",
+            acceptanceCriteria: [
+              "Fetches pending items from batch_processing table (newest batch first)",
+              "For each item: builds prompt from current observation config → calls Gemini → parses response",
+              "Writes to call_info (summary, observations_summary, follow_up, tokens, cost)",
+              "Writes to call_observations (one row per observation topic with value, detail, evidence, confidence)",
+              "Writes to call_qa_pairs (one row per Q&A exchange with category and observation linkage)",
+              "Updates batch_processing row status to completed or failed",
+            ],
+          },
+          {
+            title: "4. Results visible in Call History — click any call to see full detail including Q&A pairs",
+            status: "done",
+            acceptanceCriteria: [
+              "Call detail panel shows summary, observations, Q&A pairs, follow-up areas, transition status",
+              "Q&A pairs displayed in chronological order with category badges and observation links",
+            ],
+          },
         ],
       },
     ],
