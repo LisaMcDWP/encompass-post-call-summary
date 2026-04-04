@@ -556,10 +556,10 @@ export async function registerRoutes(
           const contextParams = await storage.getActiveContextParameters();
           const { prompt: _p, promptVersion, promptVersionDate } = await getPromptWithVersion();
 
-          const sourceId = `batch_${item.bland_call_id}`;
+          const callId = item.bland_call_id;
           const startTime = Date.now();
           const { analysis, tokenUsage } = await analyzeTranscript(
-            sourceId,
+            callId,
             item.transcript.trim(),
             activeObs,
             undefined,
@@ -572,10 +572,10 @@ export async function registerRoutes(
 
           const processedAt = new Date().toISOString();
           await insertCallInfo({
-            callId: sourceId,
+            callId: callId,
             careFlowId: item.care_flow_id || null,
             sourceType: "batch_reprocess",
-            sourceId: item.bland_call_id,
+            sourceId: callId,
             processedAt,
             processingTimeMs,
             promptVersion,
@@ -592,8 +592,8 @@ export async function registerRoutes(
             requestBody: JSON.stringify({ batch_id: item.batch_id, bland_call_id: item.bland_call_id }),
           });
 
-          await insertCallObservations(sourceId, analysis.observations);
-          await updateBatchItemStatus(item.bland_call_id, "completed", sourceId);
+          await insertCallObservations(callId, analysis.observations);
+          await updateBatchItemStatus(item.bland_call_id, "completed", callId);
           results.push({ callId: item.bland_call_id, status: "completed" });
         } catch (err: any) {
           await updateBatchItemStatus(item.bland_call_id, "failed", undefined, err.message);
