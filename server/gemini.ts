@@ -43,11 +43,22 @@ export interface ObservationResult {
   confidence: string | null;
 }
 
+export interface QAPair {
+  question: string;
+  answer: string;
+  asked_by: string;
+  answered_by: string;
+  observation_name: string | null;
+  observation_display_name: string | null;
+  category: string;
+}
+
 export interface TranscriptAnalysis {
   summary: string;
   transition_status: string;
   follow_up_areas: string;
   observations: ObservationResult[];
+  qa_pairs: QAPair[];
 }
 
 const COLOR_STYLES: Record<string, string> = {
@@ -135,8 +146,22 @@ Your response MUST be valid JSON with exactly this structure:
   "summary": "${resolvedInstruction}",
   "observations": [],
   "transition_status": "<p>No observation topics configured.</p>",
-  "follow_up_areas": "<p>No follow-up areas identified.</p>"
+  "follow_up_areas": "<p>No follow-up areas identified.</p>",
+  "qa_pairs": [
+    {
+      "question": "The question that was asked",
+      "answer": "The response given",
+      "asked_by": "care_guide or patient or caregiver",
+      "answered_by": "patient or caregiver or care_guide",
+      "observation_name": null,
+      "observation_display_name": null,
+      "category": "A short category label"
+    }
+  ]
 }
+
+Guidelines:
+- qa_pairs: Extract EVERY question and answer exchange from the transcript, in chronological order. Include ALL exchanges — greetings, identity verification, clinical questions, scheduling, and any other conversation. Set observation_name and observation_display_name to null (no observations configured). Assign a descriptive category to every Q&A pair.
 Source ID: {{SOURCE_ID}}
 
 SOURCE TEXT:
@@ -169,7 +194,18 @@ Your response MUST be valid JSON with exactly this structure:
 ${observationsSchema}
   ],
   "transition_status": "A single HTML string covering ALL ${topicCount} observation topics. This value MUST be a valid JSON string. Do NOT start with a quote character. Use inline styles for color-coded status badges. For enum topics, format as: <b>Topic:</b> <span style='INLINE_STYLE'>ENUM_VALUE</span><br>Detail sentence.<br><br> — where ENUM_VALUE is the actual observation value (e.g. 'Fair', 'No Readmission', 'Picked Up', 'Not Discussed') and INLINE_STYLE is the corresponding color style from the mappings below. NEVER use the color name (GREEN, YELLOW, etc.) as the badge text — always use the enum value. For non-enum topics (text, boolean, number), format as: <b>Topic:</b><br>Detail sentence.<br><br> (no status badge needed). Use these exact inline styles for each status type: ${colorStyles} — Status-to-color mappings (use the inline style that corresponds to the enum value): ${statusMappings}. ALWAYS include all ${topicCount} topics. IMPORTANT: Order the topics so that all discussed topics appear first, and any topics with a 'Not Discussed' status are grouped together at the bottom.",
-  "follow_up_areas": "A single HTML string listing follow-up areas. This value MUST be a valid JSON string. Use <ul> and <li> tags with <b> for topic names. Only include items for topics with problems or gaps. If none, use '<p>No follow-up areas identified.</p>'. Example: <ul><li><b>${activeObservations[0]?.displayName || "Topic"}:</b> Detail about the issue.</li></ul>"
+  "follow_up_areas": "A single HTML string listing follow-up areas. This value MUST be a valid JSON string. Use <ul> and <li> tags with <b> for topic names. Only include items for topics with problems or gaps. If none, use '<p>No follow-up areas identified.</p>'. Example: <ul><li><b>${activeObservations[0]?.displayName || "Topic"}:</b> Detail about the issue.</li></ul>",
+  "qa_pairs": [
+    {
+      "question": "The question that was asked, as stated or closely paraphrased from the transcript",
+      "answer": "The response given to the question, as stated or closely paraphrased from the transcript",
+      "asked_by": "Who asked the question: 'care_guide' or 'patient' or 'caregiver'",
+      "answered_by": "Who answered: 'patient' or 'caregiver' or 'care_guide'",
+      "observation_name": "The observation name this Q&A maps to (from the configured observations above), or null if it does not match any configured observation",
+      "observation_display_name": "The display name of the matched observation, or null if no match",
+      "category": "A short category label for this Q&A (e.g. 'Medication', 'Pain', 'Appointment', 'DME/Supplies', 'Greeting', 'Identity Verification', 'General', etc.)"
+    }
+  ]
 }
 
 Guidelines:
@@ -180,6 +216,7 @@ Guidelines:
 - observations: Return an array with exactly ${topicCount} objects, one for each observation topic. Each object must have: name (the key), display_name, domain, value_type, value (the extracted value from the transcript — use the exact label for enum types, or null if not discussed), detail (a brief 1-2 sentence explanation of what was actually observed in the transcript — this MUST be your own original summary of what happened, NOT a copy of the evaluation guidance comments), evidence (a direct quote or specific reference from the transcript that supports the value — use null if the topic was not discussed), and confidence (one of "high", "medium", or "low" based on how clear and direct the transcript evidence is — use "high" when the patient explicitly stated something, "medium" when it was implied, "low" when inferred from limited information, or null if not discussed). Preserve the name, display_name, domain, and value_type exactly as specified above. IMPORTANT: If a topic was not discussed in the transcript (and no evaluation guidance specifies a different detail), set the value to "Not Discussed", set the detail to "Not discussed.", set evidence to null, and set confidence to null. The /* EVALUATION GUIDANCE */ comments in the schema above are instructions for how to EVALUATE and choose the correct value — they must NOT appear in your output. The "detail" field must contain your own brief description of what was observed, not the guidance text.${observationsGuidance ? `\n- GENERAL OBSERVATIONS GUIDANCE: ${observationsGuidance}` : ""}
 - transition_status: Return a single HTML string as a valid JSON string value. The detail text after each status badge MUST be a brief original sentence about what was observed — NEVER repeat or paraphrase the evaluation guidance instructions. Do NOT start the string with a quote or any character before the first <b> tag. Use inline style attributes with single quotes for color-coded status badges (e.g. style='display:inline-block;padding:1px 8px;...'). Use <b> for topic labels, <span style='...'> for colored status badges, and <br> for line breaks. The text inside each <span> badge MUST be the actual enum value chosen for that observation (e.g. "Fair", "Picked Up", "Not Discussed") — NEVER use the color name (GREEN, YELLOW, RED, etc.) as badge text. Include all ${topicCount} topics. The entire value must be a properly quoted JSON string. The first character of the string content must be the opening < of the first <b> tag. IMPORTANT: List all discussed topics first, then group any "Not Discussed" topics together at the bottom of the output.
 - follow_up_areas: Return a single HTML string as a valid JSON string value. Use <ul>/<li> with <b> for topic names. Use single quotes for any HTML attributes. Only include items with issues. If none, return "<p>No follow-up areas identified.</p>".
+- qa_pairs: Extract EVERY question and answer exchange from the transcript, in chronological order. Include ALL exchanges — greetings, identity verification, clinical questions, scheduling, and any other conversation. Each entry should capture the question asked, the answer given, who asked it, and who answered it. Try to match each Q&A to the closest configured observation topic if applicable, setting observation_name and observation_display_name. If a Q&A does not match any configured observation, set those fields to null and still include it. Assign a descriptive category to every Q&A pair. Do not skip any exchanges.
 Source ID: {{SOURCE_ID}}
 
 SOURCE TEXT:
@@ -254,6 +291,10 @@ export async function analyzeTranscript(
 
   if (!Array.isArray(parsed.observations)) {
     parsed.observations = [];
+  }
+
+  if (!Array.isArray(parsed.qa_pairs)) {
+    parsed.qa_pairs = [];
   }
 
   return {

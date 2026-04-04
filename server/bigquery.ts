@@ -1,9 +1,10 @@
 import { BigQuery } from "@google-cloud/bigquery";
-import type { ObservationResult } from "./gemini";
+import type { ObservationResult, QAPair } from "./gemini";
 
 const DATASET_ID = "call_information";
 const CALL_INFO_TABLE_ID = "call_info";
 const OBSERVATIONS_TABLE_ID = "call_observations";
+const QA_PAIRS_TABLE_ID = "call_qa_pairs";
 const BATCH_PROCESSING_TABLE_ID = "batch_processing";
 
 export interface CallInfoRow {
@@ -141,6 +142,7 @@ async function ensureObservationsTable() {
 
 let callInfoInitialized = false;
 let observationsInitialized = false;
+let qaPairsInitialized = false;
 
 async function migrateCallInfoColumns(): Promise<void> {
   try {
@@ -276,6 +278,82 @@ export async function insertCallObservations(callId: string, observations: Obser
     console.log(`BigQuery call_observations inserted: ${rows.length} rows for call ${callId}`);
   } catch (error: any) {
     console.error("Failed to insert call_observations:", error.message);
+    if (error.errors) {
+      console.error("BigQuery errors:", JSON.stringify(error.errors));
+    }
+  }
+}
+
+async function ensureQAPairsTable() {
+  const client = getBigQueryClient();
+  const dataset = await ensureDataset();
+  const table = dataset.table(QA_PAIRS_TABLE_ID);
+  const [tableExists] = await table.exists();
+  if (tableExists) {
+    return;
+  }
+  await dataset.createTable(QA_PAIRS_TABLE_ID, {
+    schema: {
+      fields: [
+        { name: "call_id", type: "STRING", mode: "REQUIRED" },
+        { name: "sequence_number", type: "INTEGER", mode: "REQUIRED" },
+        { name: "question", type: "STRING", mode: "REQUIRED" },
+        { name: "answer", type: "STRING", mode: "REQUIRED" },
+        { name: "asked_by", type: "STRING", mode: "NULLABLE" },
+        { name: "answered_by", type: "STRING", mode: "NULLABLE" },
+        { name: "observation_name", type: "STRING", mode: "NULLABLE" },
+        { name: "observation_display_name", type: "STRING", mode: "NULLABLE" },
+        { name: "category", type: "STRING", mode: "NULLABLE" },
+      ],
+    },
+  });
+  console.log(`Created BigQuery table: ${DATASET_ID}.${QA_PAIRS_TABLE_ID}`);
+}
+
+export async function insertCallQAPairs(callId: string, qaPairs: QAPair[]): Promise<void> {
+  try {
+    if (!qaPairsInitialized) {
+      await ensureQAPairsTable();
+      qaPairsInitialized = true;
+    }
+
+    if (!qaPairs || qaPairs.length === 0) return;
+
+    const validPairs = qaPairs.filter(qa =>
+      qa.question && typeof qa.question === "string" && qa.question.trim().length > 0 &&
+      qa.answer && typeof qa.answer === "string" && qa.answer.trim().length > 0
+    );
+
+    if (validPairs.length === 0) {
+      console.log(`No valid Q&A pairs to insert for call ${callId} (${qaPairs.length} dropped due to missing question/answer)`);
+      return;
+    }
+
+    if (validPairs.length < qaPairs.length) {
+      console.warn(`Dropped ${qaPairs.length - validPairs.length} invalid Q&A pairs for call ${callId}`);
+    }
+
+    const client = getBigQueryClient();
+    const rows = validPairs.map((qa, index) => ({
+      call_id: callId,
+      sequence_number: index + 1,
+      question: qa.question,
+      answer: qa.answer,
+      asked_by: qa.asked_by || null,
+      answered_by: qa.answered_by || null,
+      observation_name: qa.observation_name || null,
+      observation_display_name: qa.observation_display_name || null,
+      category: qa.category || null,
+    }));
+
+    await client
+      .dataset(DATASET_ID)
+      .table(QA_PAIRS_TABLE_ID)
+      .insert(rows);
+
+    console.log(`BigQuery call_qa_pairs inserted: ${rows.length} rows for call ${callId}`);
+  } catch (error: any) {
+    console.error("Failed to insert call_qa_pairs:", error.message);
     if (error.errors) {
       console.error("BigQuery errors:", JSON.stringify(error.errors));
     }

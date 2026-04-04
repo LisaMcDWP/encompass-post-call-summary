@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, aiObservationAssistant } from "./gemini";
-import { insertCallInfo, insertCallObservations, getCallInfoList, getCallDetail, queryBlandCalls, loadBlandCallsToBatch, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, resetFailedBatchItems, recreateBatch, getDistinctTags } from "./bigquery";
+import { insertCallInfo, insertCallObservations, insertCallQAPairs, getCallInfoList, getCallDetail, queryBlandCalls, loadBlandCallsToBatch, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, resetFailedBatchItems, recreateBatch, getDistinctTags } from "./bigquery";
 import { randomUUID, createHash } from "crypto";
 import { storage } from "./storage";
 import { insertObservationSchema, enumValueSchema, insertContextParameterSchema } from "@shared/schema";
@@ -121,6 +121,7 @@ export async function registerRoutes(
       });
 
       await insertCallObservations(resolvedSourceId, analysis.observations);
+      await insertCallQAPairs(resolvedSourceId, analysis.qa_pairs);
 
       return res.json({
         status: "success",
@@ -593,6 +594,7 @@ export async function registerRoutes(
           });
 
           await insertCallObservations(callId, analysis.observations);
+          await insertCallQAPairs(callId, analysis.qa_pairs);
           await updateBatchItemStatus(item.bland_call_id, "completed", callId);
           results.push({ callId: item.bland_call_id, status: "completed" });
         } catch (err: any) {
