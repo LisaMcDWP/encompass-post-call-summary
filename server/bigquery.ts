@@ -536,26 +536,42 @@ export async function loadBlandCallsToBatch(
     return { loaded: 0, skipped: callIds.length };
   }
 
-  const rows = (transcriptRows as any[]).map(row => ({
-    batch_id: batchId,
-    bland_call_id: row.call_id,
-    transcript: row.concatenated_transcript,
-    source_type: "bland_call",
-    created_at: new Date().toISOString(),
-    status: "pending",
-    error_message: null,
-    result_call_id: null,
-    processed_at: null,
-    batch_label: batchLabel || null,
-    care_flow_id: row.care_flow_id || null,
-  }));
+  const validRows = (transcriptRows as any[]);
+  const now = new Date().toISOString();
 
-  await client
-    .dataset(DATASET_ID)
-    .table(BATCH_PROCESSING_TABLE_ID)
-    .insert(rows);
+  const valuesClauses = validRows.map((_, i) =>
+    `(@batchId, @callId_${i}, @transcript_${i}, 'bland_call', @now, 'pending', CAST(NULL AS STRING), CAST(NULL AS STRING), CAST(NULL AS TIMESTAMP), @batchLabel, @careFlowId_${i})`
+  ).join(",\n    ");
 
-  return { loaded: rows.length, skipped: callIds.length - rows.length };
+  const params: Record<string, any> = {
+    batchId,
+    now,
+    batchLabel: batchLabel || null,
+  };
+  const types: Record<string, string> = {
+    batchId: "STRING",
+    now: "STRING",
+    batchLabel: "STRING",
+  };
+
+  validRows.forEach((row, i) => {
+    params[`callId_${i}`] = row.call_id;
+    params[`transcript_${i}`] = row.concatenated_transcript;
+    params[`careFlowId_${i}`] = row.care_flow_id || null;
+    types[`callId_${i}`] = "STRING";
+    types[`transcript_${i}`] = "STRING";
+    types[`careFlowId_${i}`] = "STRING";
+  });
+
+  const insertQuery = `
+    INSERT INTO \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
+    (batch_id, bland_call_id, transcript, source_type, created_at, status, error_message, result_call_id, processed_at, batch_label, care_flow_id)
+    VALUES ${valuesClauses}
+  `;
+
+  await client.query({ query: insertQuery, params, types, location: "US" });
+
+  return { loaded: validRows.length, skipped: callIds.length - validRows.length };
 }
 
 export async function getBatchItems(filters?: {
@@ -708,6 +724,61 @@ export async function updateBatchItemStatus(
   const [, , metadata] = await client.query({ query, params, types, location: "US" });
   const affected = Number((metadata as any)?.dmlStats?.updatedRowCount || (metadata as any)?.numDmlAffectedRows || 0);
   return affected;
+}
+
+export async function recreateBatch(oldBatchId: string): Promise<{ newBatchId: string; count: number }> {
+  const client = getBigQueryClient();
+  const readQuery = `
+    SELECT bland_call_id, transcript, source_type, batch_label, care_flow_id
+    FROM \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
+    WHERE batch_id = @oldBatchId
+  `;
+  const [rows] = await client.query({ query: readQuery, params: { oldBatchId }, location: "US" });
+  const items = rows as any[];
+
+  if (items.length === 0) {
+    throw new Error(`No items found for batch ${oldBatchId}`);
+  }
+
+  const newBatchId = `batch_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+  const now = new Date().toISOString();
+
+  const valuesClauses = items.map((_, i) =>
+    `(@newBatchId, @callId_${i}, @transcript_${i}, 'bland_call', @now, 'pending', CAST(NULL AS STRING), CAST(NULL AS STRING), CAST(NULL AS TIMESTAMP), @batchLabel_${i}, @careFlowId_${i})`
+  ).join(",\n    ");
+
+  const params: Record<string, any> = { newBatchId, now };
+  const types: Record<string, string> = { newBatchId: "STRING", now: "STRING" };
+
+  items.forEach((item, i) => {
+    params[`callId_${i}`] = item.bland_call_id;
+    params[`transcript_${i}`] = item.transcript;
+    params[`batchLabel_${i}`] = item.batch_label || null;
+    params[`careFlowId_${i}`] = item.care_flow_id || null;
+    types[`callId_${i}`] = "STRING";
+    types[`transcript_${i}`] = "STRING";
+    types[`batchLabel_${i}`] = "STRING";
+    types[`careFlowId_${i}`] = "STRING";
+  });
+
+  const insertQuery = `
+    INSERT INTO \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
+    (batch_id, bland_call_id, transcript, source_type, created_at, status, error_message, result_call_id, processed_at, batch_label, care_flow_id)
+    VALUES ${valuesClauses}
+  `;
+
+  await client.query({ query: insertQuery, params, types, location: "US" });
+
+  const deleteQuery = `
+    DELETE FROM \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
+    WHERE batch_id = @oldBatchId
+  `;
+  try {
+    await client.query({ query: deleteQuery, params: { oldBatchId }, location: "US" });
+  } catch {
+  }
+
+  return { newBatchId, count: items.length };
 }
 
 export async function resetFailedBatchItems(batchId?: string): Promise<number> {

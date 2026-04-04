@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, aiObservationAssistant } from "./gemini";
-import { insertCallInfo, insertCallObservations, getCallInfoList, getCallDetail, queryBlandCalls, loadBlandCallsToBatch, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, resetFailedBatchItems, getDistinctTags } from "./bigquery";
+import { insertCallInfo, insertCallObservations, getCallInfoList, getCallDetail, queryBlandCalls, loadBlandCallsToBatch, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, resetFailedBatchItems, recreateBatch, getDistinctTags } from "./bigquery";
 import { randomUUID, createHash } from "crypto";
 import { storage } from "./storage";
 import { insertObservationSchema, enumValueSchema, insertContextParameterSchema } from "@shared/schema";
@@ -608,6 +608,17 @@ export async function registerRoutes(
       const { batchId } = req.body;
       const count = await resetFailedBatchItems(batchId);
       res.json({ reset: count });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/batch/recreate", async (req, res) => {
+    try {
+      const { batchId } = req.body;
+      if (!batchId) return res.status(400).json({ message: "batchId required" });
+      const result = await recreateBatch(batchId);
+      res.json(result);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

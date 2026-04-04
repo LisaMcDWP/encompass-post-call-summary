@@ -193,6 +193,32 @@ export default function BatchProcessing() {
     },
   });
 
+  const recreateMutation = useMutation({
+    mutationFn: async (batchId: string) => {
+      const res = await fetch("/api/batch/recreate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ batchId }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Failed to recreate batch");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Batch recreated",
+        description: `${data.count} items moved to new batch ${data.newBatchId}`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/batch/summary"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/batch/items"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Recreate failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const resetMutation = useMutation({
     mutationFn: async () => {
       const res = await fetch("/api/batch/reset-failed", {
@@ -304,6 +330,22 @@ export default function BatchProcessing() {
           {resetMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RotateCcw className="h-4 w-4 mr-1" />}
           Reset Failed
         </Button>
+        {summary?.batches && summary.batches.length > 0 && (
+          <Button
+            onClick={() => {
+              const batchId = summary.batches[0].batch_id;
+              if (confirm(`Recreate batch ${batchId}? This copies all items to a new batch using a compatible insert method.`)) {
+                recreateMutation.mutate(batchId);
+              }
+            }}
+            disabled={recreateMutation.isPending}
+            variant="outline"
+            data-testid="button-recreate-batch"
+          >
+            {recreateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Zap className="h-4 w-4 mr-1" />}
+            Recreate Batch
+          </Button>
+        )}
       </div>
 
       <Card>
