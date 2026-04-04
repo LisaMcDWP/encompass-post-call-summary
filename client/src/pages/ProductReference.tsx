@@ -45,9 +45,9 @@ interface Theme {
 }
 
 const NORTH_STAR = {
-  metric: "Time from call completion to actionable clinical insight",
-  target: "< 30 seconds per call, fully automated",
-  description: "Every post-discharge patient call is automatically analyzed and structured into actionable clinical observations — enabling care teams to identify at-risk patients and close care gaps without manual review.",
+  metric: "100% of post-discharge call observations and care gaps are identified",
+  target: "Every observation extracted, every gap flagged — zero missed follow-ups",
+  description: "Every post-discharge patient call is fully analyzed so that all clinical observations are captured and all care gaps are surfaced. Care teams have complete visibility into what was discussed, what was missed, and where follow-up is needed — ensuring no patient falls through the cracks.",
 };
 
 const VISION = "A unified AI-powered platform that transforms unstructured patient call transcripts into structured, evidence-based clinical observations — driving faster follow-up, better outcomes, and complete visibility into post-discharge care transitions.";
