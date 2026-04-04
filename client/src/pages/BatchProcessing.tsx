@@ -22,6 +22,7 @@ interface BlandCall {
   from_number: string | null;
   answered_by: string | null;
   pathway_id: string | null;
+  care_flow_id: string | null;
 }
 
 interface BatchItem {
@@ -35,6 +36,7 @@ interface BatchItem {
   processed_at: string | null;
   batch_label: string | null;
   transcript_length: number;
+  care_flow_id: string | null;
 }
 
 interface BatchSummary {
@@ -88,6 +90,9 @@ export default function BatchProcessing() {
   const [showSearch, setShowSearch] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [processLimit, setProcessLimit] = useState("5");
+  const [answeredBy, setAnsweredBy] = useState("human");
+  const [minDuration, setMinDuration] = useState("30");
+  const [maxDuration, setMaxDuration] = useState("");
 
   const summaryQuery = useQuery<BatchSummary>({
     queryKey: ["/api/batch/summary"],
@@ -116,6 +121,9 @@ export default function BatchProcessing() {
       const params = new URLSearchParams();
       if (startDate) params.set("startDate", new Date(startDate).toISOString());
       if (endDate) params.set("endDate", new Date(endDate).toISOString());
+      if (answeredBy) params.set("answeredBy", answeredBy);
+      if (minDuration) params.set("minDuration", minDuration);
+      if (maxDuration) params.set("maxDuration", maxDuration);
       params.set("limit", searchLimit || "50");
 
       const res = await fetch(`/api/batch/bland-calls?${params}`);
@@ -324,6 +332,44 @@ export default function BatchProcessing() {
                 />
               </div>
               <div>
+                <Label className="text-xs">Answered By</Label>
+                <select
+                  value={answeredBy}
+                  onChange={(e) => setAnsweredBy(e.target.value)}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm w-32"
+                  data-testid="select-answered-by"
+                >
+                  <option value="">Any</option>
+                  <option value="human">Human</option>
+                  <option value="voicemail">Voicemail</option>
+                  <option value="no-answer">No Answer</option>
+                </select>
+              </div>
+              <div>
+                <Label className="text-xs">Min Duration (s)</Label>
+                <Input
+                  type="number"
+                  value={minDuration}
+                  onChange={(e) => setMinDuration(e.target.value)}
+                  className="w-24"
+                  min="0"
+                  placeholder="0"
+                  data-testid="input-min-duration"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Max Duration (s)</Label>
+                <Input
+                  type="number"
+                  value={maxDuration}
+                  onChange={(e) => setMaxDuration(e.target.value)}
+                  className="w-24"
+                  min="0"
+                  placeholder="No max"
+                  data-testid="input-max-duration"
+                />
+              </div>
+              <div>
                 <Label className="text-xs">Limit</Label>
                 <Input
                   type="number"
@@ -391,8 +437,10 @@ export default function BatchProcessing() {
                           />
                         </th>
                         <th className="p-2 text-left">Call ID</th>
+                        <th className="p-2 text-left">Care Flow ID</th>
                         <th className="p-2 text-left">Date</th>
                         <th className="p-2 text-left">Duration</th>
+                        <th className="p-2 text-left">Answered By</th>
                         <th className="p-2 text-left">Transcript</th>
                         <th className="p-2 text-left">Status</th>
                       </tr>
@@ -415,8 +463,10 @@ export default function BatchProcessing() {
                             />
                           </td>
                           <td className="p-2 font-mono text-xs">{call.call_id.substring(0, 12)}...</td>
+                          <td className="p-2 font-mono text-xs">{call.care_flow_id || "—"}</td>
                           <td className="p-2 text-xs">{formatDate(call.created_at)}</td>
                           <td className="p-2 text-xs">{call.call_length ? `${Math.round(call.call_length)}s` : "—"}</td>
+                          <td className="p-2 text-xs">{call.answered_by || "—"}</td>
                           <td className="p-2 text-xs">{call.transcript_length ? `${(call.transcript_length / 1000).toFixed(1)}k chars` : "—"}</td>
                           <td className="p-2"><Badge variant="outline" className="text-xs">{call.status}</Badge></td>
                         </tr>
@@ -467,6 +517,7 @@ export default function BatchProcessing() {
                 <thead>
                   <tr className="bg-muted/50 border-b">
                     <th className="p-2 text-left">Bland Call ID</th>
+                    <th className="p-2 text-left">Care Flow ID</th>
                     <th className="p-2 text-left">Batch</th>
                     <th className="p-2 text-left">Label</th>
                     <th className="p-2 text-left">Transcript</th>
@@ -479,6 +530,7 @@ export default function BatchProcessing() {
                   {batchItemsQuery.data.map((item, idx) => (
                     <tr key={`${item.bland_call_id}-${idx}`} className="border-b hover:bg-muted/30" data-testid={`row-batch-${item.bland_call_id}`}>
                       <td className="p-2 font-mono text-xs">{item.bland_call_id.substring(0, 12)}...</td>
+                      <td className="p-2 font-mono text-xs">{item.care_flow_id || "—"}</td>
                       <td className="p-2 font-mono text-xs">{item.batch_id.substring(0, 16)}...</td>
                       <td className="p-2 text-xs">{item.batch_label || "—"}</td>
                       <td className="p-2 text-xs">{(item.transcript_length / 1000).toFixed(1)}k</td>

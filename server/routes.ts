@@ -462,12 +462,15 @@ export async function registerRoutes(
 
   app.get("/api/batch/bland-calls", async (req, res) => {
     try {
-      const { startDate, endDate, limit, callIds } = req.query;
+      const { startDate, endDate, limit, callIds, answeredBy, minDuration, maxDuration } = req.query;
       const filters: any = {};
       if (startDate) filters.startDate = startDate;
       if (endDate) filters.endDate = endDate;
       if (limit) filters.limit = parseInt(limit as string);
       if (callIds) filters.callIds = (callIds as string).split(",").map(s => s.trim());
+      if (answeredBy) filters.answeredBy = answeredBy;
+      if (minDuration) filters.minDuration = parseFloat(minDuration as string);
+      if (maxDuration) filters.maxDuration = parseFloat(maxDuration as string);
 
       const calls = await queryBlandCalls(filters);
       res.json(calls);
@@ -555,6 +558,7 @@ export async function registerRoutes(
           const processedAt = new Date().toISOString();
           await insertCallInfo({
             callId: sourceId,
+            careFlowId: item.care_flow_id || null,
             sourceType: "batch_reprocess",
             sourceId: item.bland_call_id,
             processedAt,

@@ -333,6 +333,7 @@ export interface BatchProcessingRow {
   result_call_id: string | null;
   processed_at: string | null;
   batch_label: string | null;
+  care_flow_id: string | null;
 }
 
 let batchTableInitialized = false;
@@ -357,10 +358,34 @@ async function ensureBatchProcessingTable(): Promise<void> {
         { name: "result_call_id", type: "STRING", mode: "NULLABLE" },
         { name: "processed_at", type: "TIMESTAMP", mode: "NULLABLE" },
         { name: "batch_label", type: "STRING", mode: "NULLABLE" },
+        { name: "care_flow_id", type: "STRING", mode: "NULLABLE" },
       ],
     },
   });
   console.log(`Created BigQuery table: ${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}`);
+}
+
+async function migrateBatchProcessingColumns(): Promise<void> {
+  try {
+    const client = getBigQueryClient();
+    const dataset = client.dataset(DATASET_ID);
+    const table = dataset.table(BATCH_PROCESSING_TABLE_ID);
+    const [exists] = await table.exists();
+    if (!exists) return;
+
+    const [metadata] = await table.getMetadata();
+    const fields = metadata.schema?.fields || [];
+    const hasCareFlowId = fields.some((f: any) => f.name === "care_flow_id");
+    if (!hasCareFlowId) {
+      await client.query({
+        query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\` ADD COLUMN care_flow_id STRING`,
+        location: "US",
+      });
+      console.log("Added care_flow_id column to batch_processing table.");
+    }
+  } catch (err: any) {
+    console.error("Migration check for batch_processing columns:", err.message);
+  }
 }
 
 export async function initializeBatchTable(): Promise<void> {
@@ -368,6 +393,7 @@ export async function initializeBatchTable(): Promise<void> {
     await ensureBatchProcessingTable();
     batchTableInitialized = true;
     console.log("BigQuery batch_processing table ready.");
+    await migrateBatchProcessingColumns();
   } catch (err: any) {
     console.error("Failed to initialize batch_processing table:", err.message);
   }
@@ -378,36 +404,54 @@ export async function queryBlandCalls(filters: {
   endDate?: string;
   limit?: number;
   callIds?: string[];
+  answeredBy?: string;
+  minDuration?: number;
+  maxDuration?: number;
 }): Promise<any[]> {
   const client = getBigQueryClient();
   const conditions: string[] = [];
   const params: Record<string, any> = {};
 
   if (filters.callIds && filters.callIds.length > 0) {
-    conditions.push("call_id IN UNNEST(@callIds)");
+    conditions.push("c.call_id IN UNNEST(@callIds)");
     params.callIds = filters.callIds;
   }
   if (filters.startDate) {
-    conditions.push("created_at >= @startDate");
+    conditions.push("c.created_at >= @startDate");
     params.startDate = filters.startDate;
   }
   if (filters.endDate) {
-    conditions.push("created_at <= @endDate");
+    conditions.push("c.created_at <= @endDate");
     params.endDate = filters.endDate;
   }
-  conditions.push("concatenated_transcript IS NOT NULL");
-  conditions.push("LENGTH(TRIM(concatenated_transcript)) > 0");
+  if (filters.answeredBy) {
+    conditions.push("c.answered_by = @answeredBy");
+    params.answeredBy = filters.answeredBy;
+  }
+  if (filters.minDuration !== undefined && filters.minDuration > 0) {
+    conditions.push("c.call_length >= @minDuration");
+    params.minDuration = filters.minDuration;
+  }
+  if (filters.maxDuration !== undefined && filters.maxDuration > 0) {
+    conditions.push("c.call_length <= @maxDuration");
+    params.maxDuration = filters.maxDuration;
+  }
+  conditions.push("c.concatenated_transcript IS NOT NULL");
+  conditions.push("LENGTH(TRIM(c.concatenated_transcript)) > 0");
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
   const rowLimit = Math.min(filters.limit || 100, 500);
 
   const query = `
-    SELECT call_id, created_at, call_length, status, summary, 
-           LENGTH(concatenated_transcript) as transcript_length,
-           to_number, from_number, answered_by, pathway_id
-    FROM \`${client.projectId}.Bland.calls\`
+    SELECT c.call_id, c.created_at, c.call_length, c.status, c.summary, 
+           LENGTH(c.concatenated_transcript) as transcript_length,
+           c.to_number, c.from_number, c.answered_by, c.pathway_id,
+           v.variable_value as care_flow_id
+    FROM \`${client.projectId}.Bland.calls\` c
+    LEFT JOIN \`${client.projectId}.Bland.variables\` v
+      ON c.call_id = v.call_id AND v.variable_name = 'awell_care_flow_id'
     ${whereClause}
-    ORDER BY created_at DESC
+    ORDER BY c.created_at DESC
     LIMIT ${rowLimit}
   `;
 
@@ -440,11 +484,14 @@ export async function loadBlandCallsToBatch(
   }
 
   const transcriptQuery = `
-    SELECT call_id, concatenated_transcript, status
-    FROM \`${client.projectId}.Bland.calls\`
-    WHERE call_id IN UNNEST(@callIds)
-    AND concatenated_transcript IS NOT NULL
-    AND LENGTH(TRIM(concatenated_transcript)) > 0
+    SELECT c.call_id, c.concatenated_transcript, c.status,
+           v.variable_value as care_flow_id
+    FROM \`${client.projectId}.Bland.calls\` c
+    LEFT JOIN \`${client.projectId}.Bland.variables\` v
+      ON c.call_id = v.call_id AND v.variable_name = 'awell_care_flow_id'
+    WHERE c.call_id IN UNNEST(@callIds)
+    AND c.concatenated_transcript IS NOT NULL
+    AND LENGTH(TRIM(c.concatenated_transcript)) > 0
   `;
   const [transcriptRows] = await client.query({ query: transcriptQuery, params: { callIds: newCallIds }, location: "US" });
 
@@ -463,6 +510,7 @@ export async function loadBlandCallsToBatch(
     result_call_id: null,
     processed_at: null,
     batch_label: batchLabel || null,
+    care_flow_id: row.care_flow_id || null,
   }));
 
   await client
@@ -497,7 +545,7 @@ export async function getBatchItems(filters?: {
   const query = `
     SELECT batch_id, bland_call_id, source_type, created_at, status, 
            error_message, result_call_id, processed_at, batch_label,
-           LENGTH(transcript) as transcript_length
+           care_flow_id, LENGTH(transcript) as transcript_length
     FROM \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
     ${whereClause}
     ORDER BY created_at DESC
@@ -572,7 +620,7 @@ export async function getBatchSummary(): Promise<{
 export async function getPendingBatchItems(limit = 10): Promise<any[]> {
   const client = getBigQueryClient();
   const query = `
-    SELECT batch_id, bland_call_id, transcript, source_type, batch_label
+    SELECT batch_id, bland_call_id, transcript, source_type, batch_label, care_flow_id
     FROM \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
     WHERE status = 'pending'
     ORDER BY created_at ASC
