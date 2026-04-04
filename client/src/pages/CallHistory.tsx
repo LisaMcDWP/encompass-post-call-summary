@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Phone, Clock, Coins, ChevronRight, X, FileText, Activity, ListChecks, ClipboardList, AlertCircle } from "lucide-react";
+import { Loader2, Phone, Clock, Coins, ChevronRight, X, FileText, Activity, ListChecks, ClipboardList, AlertCircle, MessageSquare } from "lucide-react";
 
 interface CallInfo {
   call_id: string;
@@ -40,9 +40,22 @@ interface CallObservation {
   observation_confidence: string | null;
 }
 
+interface QAPair {
+  call_id: string;
+  sequence_number: number;
+  question: string;
+  answer: string;
+  asked_by: string | null;
+  answered_by: string | null;
+  observation_name: string | null;
+  observation_display_name: string | null;
+  category: string | null;
+}
+
 interface CallDetail {
   callInfo: CallInfo;
   observations: CallObservation[];
+  qaPairs: QAPair[];
 }
 
 function formatDate(dateStr: string | null): string {
@@ -90,6 +103,7 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
 
   const info = data.callInfo;
   const obs = data.observations;
+  const qaPairs = data.qaPairs || [];
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center" onClick={onClose}>
@@ -302,6 +316,61 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
                             {o.observation_confidence} confidence
                           </Badge>
                         )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {qaPairs.length > 0 && (
+            <Card className="border-border/60 bg-card shadow-sm" data-testid="detail-qa-pairs">
+              <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
+                <CardTitle className="text-base flex items-center gap-2 text-secondary">
+                  <MessageSquare className="h-4 w-4 text-primary" />
+                  Questions & Answers
+                  <Badge variant="outline" className="text-xs ml-2">{qaPairs.length} exchanges</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="space-y-3">
+                  {qaPairs.map((qa, i) => (
+                    <div
+                      key={`qa-${i}`}
+                      className="p-3 rounded-lg border border-border/50 bg-muted/20"
+                      data-testid={`detail-qa-${i}`}
+                    >
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono">
+                          #{qa.sequence_number}
+                        </Badge>
+                        {qa.category && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                            {qa.category}
+                          </Badge>
+                        )}
+                        {qa.observation_display_name && (
+                          <Badge className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border border-primary/20">
+                            {qa.observation_display_name}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className="flex items-start gap-2">
+                          <span className="text-[10px] font-semibold uppercase text-muted-foreground/70 w-8 shrink-0 pt-0.5">Q</span>
+                          <p className="text-sm leading-relaxed">
+                            <span className="text-muted-foreground/60 text-xs mr-1">({qa.asked_by || "unknown"})</span>
+                            {qa.question}
+                          </p>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <span className="text-[10px] font-semibold uppercase text-primary/70 w-8 shrink-0 pt-0.5">A</span>
+                          <p className="text-sm leading-relaxed">
+                            <span className="text-muted-foreground/60 text-xs mr-1">({qa.answered_by || "unknown"})</span>
+                            {qa.answer}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   ))}

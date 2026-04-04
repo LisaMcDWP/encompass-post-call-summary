@@ -933,5 +933,19 @@ export async function getCallDetail(callId: string): Promise<{ callInfo: any | n
     request_body: row.request_body ? JSON.parse(row.request_body) : null,
   } : null;
 
-  return { callInfo, observations: obsRows as CallObservationRow[] };
+  const qaQuery = `
+    SELECT *
+    FROM \`${client.projectId}.${DATASET_ID}.${QA_PAIRS_TABLE_ID}\`
+    WHERE call_id = @callId
+    ORDER BY sequence_number ASC
+  `;
+  let qaRows: any[] = [];
+  try {
+    const [rows] = await client.query({ query: qaQuery, params: { callId }, location: "US" });
+    qaRows = rows;
+  } catch (err: any) {
+    console.warn("Q&A pairs table not found or query failed:", err.message);
+  }
+
+  return { callInfo, observations: obsRows as CallObservationRow[], qaPairs: qaRows };
 }
