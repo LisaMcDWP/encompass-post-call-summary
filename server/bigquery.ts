@@ -670,16 +670,19 @@ export async function getBatchSummary(): Promise<{
   };
 }
 
-export async function getPendingBatchItems(limit = 10): Promise<any[]> {
+export async function getPendingBatchItems(limit = 10, batchId?: string): Promise<any[]> {
   const client = getBigQueryClient();
+  const batchFilter = batchId ? "AND batch_id = @batchId" : "";
   const query = `
     SELECT batch_id, bland_call_id, transcript, source_type, batch_label, care_flow_id
     FROM \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
-    WHERE status = 'pending'
-    ORDER BY created_at ASC
+    WHERE status = 'pending' ${batchFilter}
+    ORDER BY created_at DESC
     LIMIT ${limit}
   `;
-  const [rows] = await client.query({ query, location: "US" });
+  const params: Record<string, any> = {};
+  if (batchId) params.batchId = batchId;
+  const [rows] = await client.query({ query, params, location: "US" });
   return rows as any[];
 }
 

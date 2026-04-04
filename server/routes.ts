@@ -530,7 +530,8 @@ export async function registerRoutes(
   app.post("/api/batch/process", async (req, res) => {
     try {
       const batchSize = parseInt(req.query.limit as string) || 5;
-      const pendingItems = await getPendingBatchItems(batchSize);
+      const batchId = req.query.batchId as string | undefined;
+      const pendingItems = await getPendingBatchItems(batchSize, batchId);
 
       if (pendingItems.length === 0) {
         return res.json({ processed: 0, message: "No pending items" });
