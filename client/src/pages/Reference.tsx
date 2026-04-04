@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import { BookOpen, Code2, Webhook, Server, Key, Activity, Database, Settings, Phone, Download } from "lucide-react";
+import { BookOpen, Code2, Webhook, Server, Key, Activity, Database, Settings, Phone, Download, Layers, MessageSquare } from "lucide-react";
 import { useRef } from "react";
 
 function exportToHtml(contentEl: HTMLElement) {
@@ -179,7 +179,27 @@ export default function Reference() {
         }
       ],
       "transition_status": "<b>Overall Feeling:</b> <span style='...'>Good</span>...",
-      "follow_up_areas": "<ul><li><b>Topic:</b> Detail...</li></ul>"
+      "follow_up_areas": "<ul><li><b>Topic:</b> Detail...</li></ul>",
+      "qa_pairs": [
+        {
+          "question": "How are you feeling today?",
+          "answer": "I'm doing much better, thank you.",
+          "asked_by": "care_guide",
+          "answered_by": "patient",
+          "observation_name": "overall_feeling",
+          "observation_display_name": "Overall Feeling",
+          "category": "General Health"
+        },
+        {
+          "question": "Have you been taking your medications?",
+          "answer": "Yes, I take them every morning.",
+          "asked_by": "care_guide",
+          "answered_by": "patient",
+          "observation_name": "medication_adherence",
+          "observation_display_name": "Medication Adherence",
+          "category": "Medication"
+        }
+      ]
     },
     "tokenUsage": {
       "promptTokens": 2450,
@@ -212,6 +232,10 @@ export default function Reference() {
                 <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
                   <p className="text-primary font-mono text-sm">follow_up_areas</p>
                   <p className="text-muted-foreground text-sm mt-1">HTML-formatted list of items needing follow-up. Only includes topics that had problems or gaps.</p>
+                </div>
+                <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
+                  <p className="text-primary font-mono text-sm">qa_pairs</p>
+                  <p className="text-muted-foreground text-sm mt-1">Array of every question and answer exchange from the transcript, in chronological order. Each entry contains: <code className="text-primary">question</code> (the question asked), <code className="text-primary">answer</code> (the response given), <code className="text-primary">asked_by</code> (care_guide, patient, or caregiver), <code className="text-primary">answered_by</code> (patient, caregiver, or care_guide), <code className="text-primary">observation_name</code> (matched observation key or null), <code className="text-primary">observation_display_name</code> (matched observation label or null), and <code className="text-primary">category</code> (descriptive label like Medication, Pain, Greeting, etc.). Includes all exchanges — not just those matching configured observations.</p>
                 </div>
               </div>
             </div>
@@ -360,6 +384,19 @@ export default function Reference() {
       "observation_detail": "Patient reports feeling well.",
       "observation_evidence": "I'm doing much better.",
       "observation_confidence": "high"
+    }
+  ],
+  "qaPairs": [
+    {
+      "call_id": "call_987654321",
+      "sequence_number": 1,
+      "question": "How are you feeling today?",
+      "answer": "I'm doing much better, thank you.",
+      "asked_by": "care_guide",
+      "answered_by": "patient",
+      "observation_name": "overall_feeling",
+      "observation_display_name": "Overall Feeling",
+      "category": "General Health"
     }
   ]
 }`}
@@ -641,6 +678,123 @@ export default function Reference() {
         <Card className="border-border/60 shadow-sm mb-6">
           <CardHeader>
             <CardTitle className="text-foreground flex items-center gap-2">
+              <Layers className="h-5 w-5 text-primary" />
+              Batch Processing
+              <Badge className="bg-blue-500/10 text-blue-600 border-blue-500/20 ml-2">Bulk</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <p className="text-muted-foreground">Search historical Bland AI calls, load them into a batch, and process them through the same Gemini extraction pipeline used by the live API. Results are written to <code className="text-primary">call_info</code>, <code className="text-primary">call_observations</code>, and <code className="text-primary">call_qa_pairs</code>.</p>
+
+            <div className="bg-primary/5 border border-primary/20 p-4 rounded-lg">
+              <p className="text-primary font-semibold text-sm mb-2">How Batch Processing Works</p>
+              <ol className="text-muted-foreground text-sm space-y-2 list-decimal list-inside">
+                <li><strong>Search</strong> — Query Bland.calls in BigQuery using filters (date range, answered_by, duration, tags, processing status). The "Not Yet Processed" filter cross-references <code className="text-primary">call_info.source_id</code> to exclude calls already processed.</li>
+                <li><strong>Select</strong> — Choose individual calls or select all from the results. Each call shows its ID, date, duration, answered_by, transcript preview, and tags.</li>
+                <li><strong>Load to Batch</strong> — Selected calls are inserted into <code className="text-primary">call_information.batch_processing</code> via DML INSERT (not streaming API). Each row includes bland_call_id, transcript, care_flow_id, and status=pending.</li>
+                <li><strong>Process</strong> — Click "Process Batch" to run N pending items through Gemini. Each item: builds the prompt from current observation config → calls Gemini → writes call_info + call_observations + call_qa_pairs → updates batch status to completed or failed.</li>
+                <li><strong>Review</strong> — Processed calls appear in Call History. Click any call to see the full detail panel including summary, observations, Q&A pairs, follow-up areas, and transition status.</li>
+              </ol>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">GET /api/batch/bland-calls</h3>
+              <p className="text-muted-foreground text-sm mb-2">Search historical Bland calls with flexible filters.</p>
+              <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-2 mb-3">
+                <p className="text-foreground"><span className="text-primary font-semibold">startDate</span> <span className="text-muted-foreground">(query, optional)</span> — ISO 8601 date. Filter calls after this date.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">endDate</span> <span className="text-muted-foreground">(query, optional)</span> — ISO 8601 date. Filter calls before this date.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">answeredBy</span> <span className="text-muted-foreground">(query, optional)</span> — "human", "voicemail", or "no-answer".</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">minDuration</span> <span className="text-muted-foreground">(query, optional)</span> — Minimum call duration in seconds.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">maxDuration</span> <span className="text-muted-foreground">(query, optional)</span> — Maximum call duration in seconds.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">callIds</span> <span className="text-muted-foreground">(query, optional)</span> — Comma-separated list of specific call IDs.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">requiredTags</span> <span className="text-muted-foreground">(query, optional)</span> — Comma-separated tags that must be present on the call.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">excludeTags</span> <span className="text-muted-foreground">(query, optional)</span> — Comma-separated tags that must NOT be present on the call.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">processedFilter</span> <span className="text-muted-foreground">(query, optional)</span> — "unprocessed" (default), "processed", or "all". Cross-references call_info.source_id.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">limit</span> <span className="text-muted-foreground">(query, optional)</span> — Max results to return (default 50).</p>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">GET /api/batch/tags</h3>
+              <p className="text-muted-foreground text-sm mb-2">Returns distinct tag values from <code className="text-primary">Bland.tags</code> for use in the tag filter UI.</p>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">POST /api/batch/load</h3>
+              <p className="text-muted-foreground text-sm mb-2">Load selected calls into a new batch for processing.</p>
+              <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`{
+  "calls": [
+    {
+      "call_id": "5ff863af-c06a-...",
+      "transcript": "Care Guide: Hello...",
+      "care_flow_id": "cf_abc123"
+    }
+  ]
+}`}
+              </pre>
+              <p className="text-muted-foreground text-sm mt-2">Creates rows in <code className="text-primary">call_information.batch_processing</code> with status "pending" and a shared batch_id (timestamp-based).</p>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">POST /api/batch/process</h3>
+              <p className="text-muted-foreground text-sm mb-2">Process pending batch items through the Gemini extraction pipeline.</p>
+              <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-2 mb-3">
+                <p className="text-foreground"><span className="text-primary font-semibold">limit</span> <span className="text-muted-foreground">(body, optional)</span> — Max items to process in this run (default 5).</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">batchId</span> <span className="text-muted-foreground">(body, optional)</span> — Target a specific batch. Defaults to newest batch.</p>
+              </div>
+              <p className="text-muted-foreground text-sm">For each pending item: builds prompt from current observation config → calls Gemini → writes to call_info, call_observations, and call_qa_pairs → updates batch item status to completed or failed.</p>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">GET /api/batch/summary</h3>
+              <p className="text-muted-foreground text-sm mb-2">Returns batch status counts: total, pending, processing, completed, failed.</p>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">POST /api/batch/recreate</h3>
+              <p className="text-muted-foreground text-sm">Creates a new batch from all non-completed items in the current batch (failed + pending). Useful when you want a clean batch after fixing issues.</p>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">POST /api/batch/reset-failed</h3>
+              <p className="text-muted-foreground text-sm">Resets all failed batch items back to "pending" status so they can be reprocessed.</p>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">BigQuery Tables Used</h3>
+              <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-2">
+                <p className="text-foreground"><span className="text-primary font-semibold">Bland.calls</span> — Source call data (call_id, created_at, call_length, answered_by, concatenated_transcript)</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">Bland.variables</span> — Call variables including awell_care_flow_id (joined via call_id)</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">Bland.tags</span> — Call tags (assessment_completed, patient_deceased, etc.)</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">call_information.batch_processing</span> — Batch tracking table (bland_call_id, transcript, care_flow_id, status, batch_id, error_message)</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">call_information.call_info</span> — Output: one row per processed call (cross-referenced by source_id for processed filter)</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">call_information.call_observations</span> — Output: one row per observation per call</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">call_information.call_qa_pairs</span> — Output: one row per Q&A exchange per call</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/60 shadow-sm mb-6">
+          <CardHeader>
+            <CardTitle className="text-foreground flex items-center gap-2">
               <Webhook className="h-5 w-5 text-primary" />
               Awell Integration
             </CardTitle>
@@ -735,6 +889,8 @@ export default function Reference() {
                 <ul className="text-muted-foreground text-sm list-disc list-inside ml-2 mt-1 space-y-1">
                   <li><code className="text-primary">call_info</code> — One row per API call (metadata, summary, tokens, cost, status)</li>
                   <li><code className="text-primary">call_observations</code> — One row per observation per call (name, value, detail, evidence, confidence)</li>
+                  <li><code className="text-primary">call_qa_pairs</code> — One row per Q&A exchange per call (sequence_number, question, answer, asked_by, answered_by, observation_name, category)</li>
+                  <li><code className="text-primary">batch_processing</code> — Batch processing tracker (bland_call_id, transcript, care_flow_id, status, batch_id, error_message, processed_call_id)</li>
                   <li><code className="text-primary">observations</code> — Observation configuration (id, name, display_name, domain, value_type, value, is_active, prompt_guidance)</li>
                   <li><code className="text-primary">context_parameters</code> — Context parameter definitions (id, name, display_name, data_type, enum_values, is_active)</li>
                   <li><code className="text-primary">settings</code> — Key-value settings store (summary_instruction, observations_guidance)</li>
