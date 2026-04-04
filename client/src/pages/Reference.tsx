@@ -530,6 +530,23 @@ export default function Reference() {
             <Separator />
 
             <div>
+              <h3 className="text-foreground font-semibold mb-2">POST /api/observations/ai-suggest</h3>
+              <p className="text-muted-foreground text-sm mb-2">Chat with the AI assistant to get suggestions for improving or adding observation topics. Maintains conversation history for multi-turn interactions.</p>
+              <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`{
+  "message": "Can you suggest an observation for tracking medication side effects?",
+  "history": [
+    { "role": "user", "text": "Previous message..." },
+    { "role": "assistant", "text": "Previous response..." }
+  ]
+}`}
+              </pre>
+              <p className="text-muted-foreground text-sm mt-2">Returns <code className="text-primary">{`{ "response": "AI suggestion text..." }`}</code>. The assistant is aware of currently configured observations and can suggest new ones, modifications, or prompt guidance improvements.</p>
+            </div>
+
+            <Separator />
+
+            <div>
               <h3 className="text-foreground font-semibold mb-2">PUT /api/observations/reorder</h3>
               <p className="text-muted-foreground text-sm mb-2">Reorder observations by providing an array of IDs in the desired order.</p>
               <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
@@ -757,6 +774,30 @@ export default function Reference() {
             <Separator />
 
             <div>
+              <h3 className="text-foreground font-semibold mb-2">GET /api/batch/items</h3>
+              <p className="text-muted-foreground text-sm mb-2">Returns all items in the batch processing table with their current status.</p>
+              <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-2 mb-3">
+                <p className="text-foreground"><span className="text-primary font-semibold">limit</span> <span className="text-muted-foreground">(query, optional)</span> — Max rows to return (default 100).</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">status</span> <span className="text-muted-foreground">(query, optional)</span> — Filter by status: "pending", "processing", "completed", or "failed".</p>
+              </div>
+              <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`[
+  {
+    "bland_call_id": "5ff863af-c06a-...",
+    "care_flow_id": "cf_abc123",
+    "status": "completed",
+    "batch_id": "2026-04-01T10:00:00.000Z",
+    "processed_call_id": "5ff863af-c06a-...",
+    "error_message": null,
+    "created_at": "2026-04-01T10:00:00.000Z"
+  }
+]`}
+              </pre>
+            </div>
+
+            <Separator />
+
+            <div>
               <h3 className="text-foreground font-semibold mb-2">GET /api/batch/summary</h3>
               <p className="text-muted-foreground text-sm mb-2">Returns batch status counts: total, pending, processing, completed, failed.</p>
             </div>
@@ -838,6 +879,7 @@ export default function Reference() {
                 <p><code className="text-primary">data.analysis.observations</code> → Array of Extracted Observations</p>
                 <p><code className="text-primary">data.analysis.transition_status</code> → Transition Status Details (HTML)</p>
                 <p><code className="text-primary">data.analysis.follow_up_areas</code> → Follow-Up Items (HTML)</p>
+                <p><code className="text-primary">data.analysis.qa_pairs</code> → Array of Q&A exchanges (question, answer, category, observation linkage)</p>
                 <p><code className="text-primary">data.tokenUsage</code> → Token usage and cost metrics</p>
               </div>
             </div>

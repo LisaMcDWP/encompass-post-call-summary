@@ -202,7 +202,18 @@ export default function ApiReference() {
         }
       ],
       "observations_summary_formatted": "<b>Overall Feeling:</b> <span>Good</span>...",
-      "followup_formatted": "<ul><li><b>Topic:</b> Detail...</li></ul>"
+      "followup_formatted": "<ul><li><b>Topic:</b> Detail...</li></ul>",
+      "qa_pairs": [
+        {
+          "question": "How are you feeling today?",
+          "answer": "I'm doing much better, thank you.",
+          "asked_by": "care_guide",
+          "answered_by": "patient",
+          "observation_name": "overall_feeling",
+          "observation_display_name": "Overall Feeling",
+          "category": "General Health"
+        }
+      ]
     },
     "tokenUsage": {
       "promptTokens": 2450,
@@ -234,6 +245,10 @@ export default function ApiReference() {
                 <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
                   <p className="text-primary font-mono text-sm">analysis.followup_formatted</p>
                   <p className="text-muted-foreground text-sm mt-1">HTML-formatted list of items needing follow-up. Only includes topics with problems or gaps.</p>
+                </div>
+                <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
+                  <p className="text-primary font-mono text-sm">analysis.qa_pairs[]</p>
+                  <p className="text-muted-foreground text-sm mt-1">Array of every question and answer exchange from the transcript, in chronological order. Each entry contains: <code className="text-primary">question</code>, <code className="text-primary">answer</code>, <code className="text-primary">asked_by</code> (care_guide/patient/caregiver), <code className="text-primary">answered_by</code>, <code className="text-primary">observation_name</code> (matched observation key or null), <code className="text-primary">observation_display_name</code> (matched label or null), and <code className="text-primary">category</code> (e.g. Medication, Pain, Greeting). Includes all exchanges — not just those matching configured observations.</p>
                 </div>
                 <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
                   <p className="text-primary font-mono text-sm">tokenUsage</p>
