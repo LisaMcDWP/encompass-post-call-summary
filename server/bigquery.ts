@@ -407,6 +407,8 @@ export async function queryBlandCalls(filters: {
   answeredBy?: string;
   minDuration?: number;
   maxDuration?: number;
+  requiredTags?: string[];
+  excludeTags?: string[];
 }): Promise<any[]> {
   const client = getBigQueryClient();
   const conditions: string[] = [];
@@ -436,6 +438,23 @@ export async function queryBlandCalls(filters: {
     conditions.push("c.call_length <= @maxDuration");
     params.maxDuration = filters.maxDuration;
   }
+  if (filters.requiredTags && filters.requiredTags.length > 0) {
+    conditions.push(`c.call_id IN (
+      SELECT call_id FROM \`${client.projectId}.Bland.tags\`
+      WHERE tag IN UNNEST(@requiredTags)
+      GROUP BY call_id
+      HAVING COUNT(DISTINCT tag) = @requiredTagCount
+    )`);
+    params.requiredTags = filters.requiredTags;
+    params.requiredTagCount = filters.requiredTags.length;
+  }
+  if (filters.excludeTags && filters.excludeTags.length > 0) {
+    conditions.push(`c.call_id NOT IN (
+      SELECT call_id FROM \`${client.projectId}.Bland.tags\`
+      WHERE tag IN UNNEST(@excludeTags)
+    )`);
+    params.excludeTags = filters.excludeTags;
+  }
   conditions.push("c.concatenated_transcript IS NOT NULL");
   conditions.push("LENGTH(TRIM(c.concatenated_transcript)) > 0");
 
@@ -446,17 +465,35 @@ export async function queryBlandCalls(filters: {
     SELECT c.call_id, c.created_at, c.call_length, c.status, c.summary, 
            LENGTH(c.concatenated_transcript) as transcript_length,
            c.to_number, c.from_number, c.answered_by, c.pathway_id,
-           v.variable_value as care_flow_id
+           v.variable_value as care_flow_id,
+           ARRAY_AGG(DISTINCT t.tag IGNORE NULLS) as tags
     FROM \`${client.projectId}.Bland.calls\` c
     LEFT JOIN \`${client.projectId}.Bland.variables\` v
       ON c.call_id = v.call_id AND v.variable_name = 'awell_care_flow_id'
+    LEFT JOIN \`${client.projectId}.Bland.tags\` t
+      ON c.call_id = t.call_id AND t.tag IS NOT NULL AND t.tag != ''
     ${whereClause}
+    GROUP BY c.call_id, c.created_at, c.call_length, c.status, c.summary,
+             c.concatenated_transcript, c.to_number, c.from_number, c.answered_by, c.pathway_id,
+             v.variable_value
     ORDER BY c.created_at DESC
     LIMIT ${rowLimit}
   `;
 
   const [rows] = await client.query({ query, params, location: "US" });
   return rows as any[];
+}
+
+export async function getDistinctTags(): Promise<string[]> {
+  const client = getBigQueryClient();
+  const query = `
+    SELECT DISTINCT tag
+    FROM \`${client.projectId}.Bland.tags\`
+    WHERE tag IS NOT NULL AND tag != ''
+    ORDER BY tag
+  `;
+  const [rows] = await client.query({ query, location: "US" });
+  return (rows as any[]).map(r => r.tag);
 }
 
 export async function loadBlandCallsToBatch(

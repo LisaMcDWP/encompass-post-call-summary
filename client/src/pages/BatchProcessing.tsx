@@ -23,6 +23,7 @@ interface BlandCall {
   answered_by: string | null;
   pathway_id: string | null;
   care_flow_id: string | null;
+  tags: string[] | null;
 }
 
 interface BatchItem {
@@ -93,6 +94,12 @@ export default function BatchProcessing() {
   const [answeredBy, setAnsweredBy] = useState("human");
   const [minDuration, setMinDuration] = useState("30");
   const [maxDuration, setMaxDuration] = useState("");
+  const [requiredTags, setRequiredTags] = useState<string[]>([]);
+  const [excludeTags, setExcludeTags] = useState<string[]>(["patient_deceased"]);
+
+  const tagsQuery = useQuery<string[]>({
+    queryKey: ["/api/batch/tags"],
+  });
 
   const summaryQuery = useQuery<BatchSummary>({
     queryKey: ["/api/batch/summary"],
@@ -124,6 +131,8 @@ export default function BatchProcessing() {
       if (answeredBy) params.set("answeredBy", answeredBy);
       if (minDuration) params.set("minDuration", minDuration);
       if (maxDuration) params.set("maxDuration", maxDuration);
+      if (requiredTags.length > 0) params.set("requiredTags", requiredTags.join(","));
+      if (excludeTags.length > 0) params.set("excludeTags", excludeTags.join(","));
       params.set("limit", searchLimit || "50");
 
       const res = await fetch(`/api/batch/bland-calls?${params}`);
@@ -392,6 +401,53 @@ export default function BatchProcessing() {
               </Button>
             </div>
 
+            {tagsQuery.data && tagsQuery.data.length > 0 && (
+              <div className="space-y-2">
+                <div>
+                  <Label className="text-xs font-medium">Must Have Tags</Label>
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {tagsQuery.data.map((tag) => (
+                      <button
+                        key={`req-${tag}`}
+                        onClick={() => setRequiredTags(prev =>
+                          prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+                        )}
+                        className={`px-2 py-0.5 rounded-full text-xs border transition-colors ${
+                          requiredTags.includes(tag)
+                            ? "bg-green-100 text-green-800 border-green-300"
+                            : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                        }`}
+                        data-testid={`tag-require-${tag}`}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs font-medium">Exclude Tags</Label>
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {tagsQuery.data.map((tag) => (
+                      <button
+                        key={`exc-${tag}`}
+                        onClick={() => setExcludeTags(prev =>
+                          prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+                        )}
+                        className={`px-2 py-0.5 rounded-full text-xs border transition-colors ${
+                          excludeTags.includes(tag)
+                            ? "bg-red-100 text-red-800 border-red-300"
+                            : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                        }`}
+                        data-testid={`tag-exclude-${tag}`}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {searchResults.length > 0 && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -442,6 +498,7 @@ export default function BatchProcessing() {
                         <th className="p-2 text-left">Duration</th>
                         <th className="p-2 text-left">Answered By</th>
                         <th className="p-2 text-left">Transcript</th>
+                        <th className="p-2 text-left">Tags</th>
                         <th className="p-2 text-left">Status</th>
                       </tr>
                     </thead>
@@ -468,6 +525,16 @@ export default function BatchProcessing() {
                           <td className="p-2 text-xs">{call.call_length ? `${Math.round(call.call_length)}s` : "—"}</td>
                           <td className="p-2 text-xs">{call.answered_by || "—"}</td>
                           <td className="p-2 text-xs">{call.transcript_length ? `${(call.transcript_length / 1000).toFixed(1)}k chars` : "—"}</td>
+                          <td className="p-2">
+                            <div className="flex flex-wrap gap-0.5">
+                              {call.tags && call.tags.length > 0
+                                ? call.tags.map(tag => (
+                                    <span key={tag} className="px-1.5 py-0 rounded text-[10px] bg-gray-100 text-gray-600 border border-gray-200">{tag}</span>
+                                  ))
+                                : <span className="text-xs text-muted-foreground">—</span>
+                              }
+                            </div>
+                          </td>
                           <td className="p-2"><Badge variant="outline" className="text-xs">{call.status}</Badge></td>
                         </tr>
                       ))}

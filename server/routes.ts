@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, aiObservationAssistant } from "./gemini";
-import { insertCallInfo, insertCallObservations, getCallInfoList, getCallDetail, queryBlandCalls, loadBlandCallsToBatch, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, resetFailedBatchItems } from "./bigquery";
+import { insertCallInfo, insertCallObservations, getCallInfoList, getCallDetail, queryBlandCalls, loadBlandCallsToBatch, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, resetFailedBatchItems, getDistinctTags } from "./bigquery";
 import { randomUUID, createHash } from "crypto";
 import { storage } from "./storage";
 import { insertObservationSchema, enumValueSchema, insertContextParameterSchema } from "@shared/schema";
@@ -460,9 +460,18 @@ export async function registerRoutes(
 
   await initializeBatchTable();
 
+  app.get("/api/batch/tags", async (_req, res) => {
+    try {
+      const tags = await getDistinctTags();
+      res.json(tags);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.get("/api/batch/bland-calls", async (req, res) => {
     try {
-      const { startDate, endDate, limit, callIds, answeredBy, minDuration, maxDuration } = req.query;
+      const { startDate, endDate, limit, callIds, answeredBy, minDuration, maxDuration, requiredTags, excludeTags } = req.query;
       const filters: any = {};
       if (startDate) filters.startDate = startDate;
       if (endDate) filters.endDate = endDate;
@@ -471,6 +480,8 @@ export async function registerRoutes(
       if (answeredBy) filters.answeredBy = answeredBy;
       if (minDuration) filters.minDuration = parseFloat(minDuration as string);
       if (maxDuration) filters.maxDuration = parseFloat(maxDuration as string);
+      if (requiredTags) filters.requiredTags = (requiredTags as string).split(",").map(s => s.trim());
+      if (excludeTags) filters.excludeTags = (excludeTags as string).split(",").map(s => s.trim());
 
       const calls = await queryBlandCalls(filters);
       res.json(calls);
