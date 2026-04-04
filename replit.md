@@ -79,6 +79,16 @@ Returns service connectivity status.
 - Table: `context_parameters` — Context parameter definitions (id, name, display_name, description, data_type, is_required, is_active, display_order)
 - **IMPORTANT**: `call_info` and `call_observations` tables are LIVE PRODUCTION tables. NEVER drop, delete, or recreate them unless explicitly instructed by the user. Code only creates them if they don't exist.
 
+## Batch Processing
+- **Table**: `call_information.batch_processing` — stores calls queued for reprocessing
+  - Fields: batch_id, bland_call_id, transcript, source_type, created_at, status (pending/processing/completed/failed), error_message, result_call_id, processed_at, batch_label
+- **Source data**: `Bland.calls` table (historical call transcripts)
+- **Flow**: Search Bland calls → select → load to batch table → process (runs each through extraction API with current prompt/observations)
+- **API endpoints**: `GET /api/batch/bland-calls`, `POST /api/batch/load`, `GET /api/batch/items`, `GET /api/batch/summary`, `POST /api/batch/process`, `POST /api/batch/reset-failed`
+- **Cloud Run Job**: `server/batch-job.ts` + `Dockerfile.batch` — standalone job that processes pending batch items
+- **UI**: `/batch` page in Analytics section
+- **Safety**: Parameterized SQL, atomic claim semantics (pending→processing prevents duplicate work), status validation
+
 ## GCP Cloud Run Deployment
 - **Dockerfile**: Multi-stage build (builder + runner) with Node 20
 - **cloudbuild.yaml**: Builds Docker image, pushes to GCR, deploys to Cloud Run

@@ -4,6 +4,7 @@ import type { ObservationResult } from "./gemini";
 const DATASET_ID = "call_information";
 const CALL_INFO_TABLE_ID = "call_info";
 const OBSERVATIONS_TABLE_ID = "call_observations";
+const BATCH_PROCESSING_TABLE_ID = "batch_processing";
 
 export interface CallInfoRow {
   call_id: string;
@@ -319,6 +320,317 @@ export async function getCallInfoList(limit = 100): Promise<any[]> {
     error_message: row.error_message,
     request_body: row.request_body ? JSON.parse(row.request_body) : null,
   }));
+}
+
+export interface BatchProcessingRow {
+  batch_id: string;
+  bland_call_id: string;
+  transcript: string;
+  source_type: string;
+  created_at: string;
+  status: string;
+  error_message: string | null;
+  result_call_id: string | null;
+  processed_at: string | null;
+  batch_label: string | null;
+}
+
+let batchTableInitialized = false;
+
+async function ensureBatchProcessingTable(): Promise<void> {
+  const client = getBigQueryClient();
+  const dataset = await ensureDataset();
+  const table = dataset.table(BATCH_PROCESSING_TABLE_ID);
+  const [tableExists] = await table.exists();
+  if (tableExists) return;
+
+  await dataset.createTable(BATCH_PROCESSING_TABLE_ID, {
+    schema: {
+      fields: [
+        { name: "batch_id", type: "STRING", mode: "REQUIRED" },
+        { name: "bland_call_id", type: "STRING", mode: "REQUIRED" },
+        { name: "transcript", type: "STRING", mode: "REQUIRED" },
+        { name: "source_type", type: "STRING", mode: "NULLABLE" },
+        { name: "created_at", type: "TIMESTAMP", mode: "REQUIRED" },
+        { name: "status", type: "STRING", mode: "REQUIRED" },
+        { name: "error_message", type: "STRING", mode: "NULLABLE" },
+        { name: "result_call_id", type: "STRING", mode: "NULLABLE" },
+        { name: "processed_at", type: "TIMESTAMP", mode: "NULLABLE" },
+        { name: "batch_label", type: "STRING", mode: "NULLABLE" },
+      ],
+    },
+  });
+  console.log(`Created BigQuery table: ${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}`);
+}
+
+export async function initializeBatchTable(): Promise<void> {
+  try {
+    await ensureBatchProcessingTable();
+    batchTableInitialized = true;
+    console.log("BigQuery batch_processing table ready.");
+  } catch (err: any) {
+    console.error("Failed to initialize batch_processing table:", err.message);
+  }
+}
+
+export async function queryBlandCalls(filters: {
+  startDate?: string;
+  endDate?: string;
+  limit?: number;
+  callIds?: string[];
+}): Promise<any[]> {
+  const client = getBigQueryClient();
+  const conditions: string[] = [];
+  const params: Record<string, any> = {};
+
+  if (filters.callIds && filters.callIds.length > 0) {
+    conditions.push("call_id IN UNNEST(@callIds)");
+    params.callIds = filters.callIds;
+  }
+  if (filters.startDate) {
+    conditions.push("created_at >= @startDate");
+    params.startDate = filters.startDate;
+  }
+  if (filters.endDate) {
+    conditions.push("created_at <= @endDate");
+    params.endDate = filters.endDate;
+  }
+  conditions.push("concatenated_transcript IS NOT NULL");
+  conditions.push("LENGTH(TRIM(concatenated_transcript)) > 0");
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const rowLimit = Math.min(filters.limit || 100, 500);
+
+  const query = `
+    SELECT call_id, created_at, call_length, status, summary, 
+           LENGTH(concatenated_transcript) as transcript_length,
+           to_number, from_number, answered_by, pathway_id
+    FROM \`${client.projectId}.Bland.calls\`
+    ${whereClause}
+    ORDER BY created_at DESC
+    LIMIT ${rowLimit}
+  `;
+
+  const [rows] = await client.query({ query, params, location: "US" });
+  return rows as any[];
+}
+
+export async function loadBlandCallsToBatch(
+  callIds: string[],
+  batchLabel: string | null
+): Promise<{ loaded: number; skipped: number }> {
+  if (!batchTableInitialized) {
+    await ensureBatchProcessingTable();
+    batchTableInitialized = true;
+  }
+
+  const client = getBigQueryClient();
+  const batchId = `batch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+  const existingQuery = `
+    SELECT bland_call_id FROM \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
+    WHERE bland_call_id IN UNNEST(@callIds) AND status IN ('pending', 'processing', 'completed')
+  `;
+  const [existingRows] = await client.query({ query: existingQuery, params: { callIds }, location: "US" });
+  const existingIds = new Set((existingRows as any[]).map(r => r.bland_call_id));
+
+  const newCallIds = callIds.filter(id => !existingIds.has(id));
+  if (newCallIds.length === 0) {
+    return { loaded: 0, skipped: callIds.length };
+  }
+
+  const transcriptQuery = `
+    SELECT call_id, concatenated_transcript, status
+    FROM \`${client.projectId}.Bland.calls\`
+    WHERE call_id IN UNNEST(@callIds)
+    AND concatenated_transcript IS NOT NULL
+    AND LENGTH(TRIM(concatenated_transcript)) > 0
+  `;
+  const [transcriptRows] = await client.query({ query: transcriptQuery, params: { callIds: newCallIds }, location: "US" });
+
+  if ((transcriptRows as any[]).length === 0) {
+    return { loaded: 0, skipped: callIds.length };
+  }
+
+  const rows = (transcriptRows as any[]).map(row => ({
+    batch_id: batchId,
+    bland_call_id: row.call_id,
+    transcript: row.concatenated_transcript,
+    source_type: "bland_call",
+    created_at: new Date().toISOString(),
+    status: "pending",
+    error_message: null,
+    result_call_id: null,
+    processed_at: null,
+    batch_label: batchLabel || null,
+  }));
+
+  await client
+    .dataset(DATASET_ID)
+    .table(BATCH_PROCESSING_TABLE_ID)
+    .insert(rows);
+
+  return { loaded: rows.length, skipped: callIds.length - rows.length };
+}
+
+export async function getBatchItems(filters?: {
+  status?: string;
+  batchLabel?: string;
+  limit?: number;
+}): Promise<any[]> {
+  const client = getBigQueryClient();
+  const conditions: string[] = [];
+  const params: Record<string, any> = {};
+
+  if (filters?.status) {
+    conditions.push("status = @status");
+    params.status = filters.status;
+  }
+  if (filters?.batchLabel) {
+    conditions.push("batch_label = @batchLabel");
+    params.batchLabel = filters.batchLabel;
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const rowLimit = Math.min(filters?.limit || 200, 1000);
+
+  const query = `
+    SELECT batch_id, bland_call_id, source_type, created_at, status, 
+           error_message, result_call_id, processed_at, batch_label,
+           LENGTH(transcript) as transcript_length
+    FROM \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
+    ${whereClause}
+    ORDER BY created_at DESC
+    LIMIT ${rowLimit}
+  `;
+
+  const [rows] = await client.query({ query, params, location: "US" });
+  return (rows as any[]).map(row => ({
+    ...row,
+    created_at: extractTimestamp(row.created_at),
+    processed_at: extractTimestamp(row.processed_at),
+  }));
+}
+
+export async function getBatchSummary(): Promise<{
+  total: number;
+  pending: number;
+  processing: number;
+  completed: number;
+  failed: number;
+  batches: { batch_id: string; batch_label: string | null; count: number; status_counts: Record<string, number> }[];
+}> {
+  const client = getBigQueryClient();
+
+  try {
+    const [tableExists] = await client.dataset(DATASET_ID).table(BATCH_PROCESSING_TABLE_ID).exists();
+    if (!tableExists) {
+      return { total: 0, pending: 0, processing: 0, completed: 0, failed: 0, batches: [] };
+    }
+  } catch {
+    return { total: 0, pending: 0, processing: 0, completed: 0, failed: 0, batches: [] };
+  }
+
+  const statusQuery = `
+    SELECT status, COUNT(*) as cnt
+    FROM \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
+    GROUP BY status
+  `;
+  const [statusRows] = await client.query({ query: statusQuery, location: "US" });
+
+  const counts: Record<string, number> = {};
+  (statusRows as any[]).forEach(r => { counts[r.status] = Number(r.cnt); });
+
+  const batchQuery = `
+    SELECT batch_id, batch_label, status, COUNT(*) as cnt
+    FROM \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
+    GROUP BY batch_id, batch_label, status
+    ORDER BY MIN(created_at) DESC
+  `;
+  const [batchRows] = await client.query({ query: batchQuery, location: "US" });
+
+  const batchMap = new Map<string, { batch_id: string; batch_label: string | null; count: number; status_counts: Record<string, number> }>();
+  (batchRows as any[]).forEach(r => {
+    if (!batchMap.has(r.batch_id)) {
+      batchMap.set(r.batch_id, { batch_id: r.batch_id, batch_label: r.batch_label, count: 0, status_counts: {} });
+    }
+    const b = batchMap.get(r.batch_id)!;
+    b.count += Number(r.cnt);
+    b.status_counts[r.status] = Number(r.cnt);
+  });
+
+  return {
+    total: Object.values(counts).reduce((a, b) => a + b, 0),
+    pending: counts["pending"] || 0,
+    processing: counts["processing"] || 0,
+    completed: counts["completed"] || 0,
+    failed: counts["failed"] || 0,
+    batches: Array.from(batchMap.values()),
+  };
+}
+
+export async function getPendingBatchItems(limit = 10): Promise<any[]> {
+  const client = getBigQueryClient();
+  const query = `
+    SELECT batch_id, bland_call_id, transcript, source_type, batch_label
+    FROM \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
+    WHERE status = 'pending'
+    ORDER BY created_at ASC
+    LIMIT ${limit}
+  `;
+  const [rows] = await client.query({ query, location: "US" });
+  return rows as any[];
+}
+
+const VALID_BATCH_STATUSES = new Set(["pending", "processing", "completed", "failed"]);
+
+export async function updateBatchItemStatus(
+  blandCallId: string,
+  status: string,
+  resultCallId?: string,
+  errorMessage?: string
+): Promise<number> {
+  if (!VALID_BATCH_STATUSES.has(status)) {
+    throw new Error(`Invalid batch status: ${status}`);
+  }
+
+  const client = getBigQueryClient();
+  const params: Record<string, any> = {
+    status,
+    blandCallId,
+    resultCallId: resultCallId || null,
+    errorMessage: errorMessage ? errorMessage.substring(0, 1000) : null,
+  };
+
+  const setProcessedAt = (status === "completed" || status === "failed")
+    ? ", processed_at = CURRENT_TIMESTAMP()" : "";
+
+  const fromStatus = status === "processing" ? "'pending'" : "'pending', 'processing'";
+
+  const query = `
+    UPDATE \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
+    SET status = @status, result_call_id = @resultCallId, error_message = @errorMessage ${setProcessedAt}
+    WHERE bland_call_id = @blandCallId AND status IN (${fromStatus})
+  `;
+
+  const [, , metadata] = await client.query({ query, params, location: "US" });
+  const affected = Number((metadata as any)?.dmlStats?.updatedRowCount || (metadata as any)?.numDmlAffectedRows || 0);
+  return affected;
+}
+
+export async function resetFailedBatchItems(batchId?: string): Promise<number> {
+  const client = getBigQueryClient();
+  const condition = batchId ? `AND batch_id = @batchId` : "";
+  const query = `
+    UPDATE \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
+    SET status = 'pending', error_message = NULL, processed_at = NULL, result_call_id = NULL
+    WHERE status = 'failed' ${condition}
+  `;
+  const params: Record<string, any> = {};
+  if (batchId) params.batchId = batchId;
+
+  const [, , response] = await client.query({ query, params, location: "US" });
+  return Number((response as any)?.dmlStats?.updatedRowCount || (response as any)?.numDmlAffectedRows || 0);
 }
 
 export async function getCallDetail(callId: string): Promise<{ callInfo: any | null; observations: CallObservationRow[] }> {

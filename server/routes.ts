@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, aiObservationAssistant } from "./gemini";
-import { insertCallInfo, insertCallObservations, getCallInfoList, getCallDetail } from "./bigquery";
+import { insertCallInfo, insertCallObservations, getCallInfoList, getCallDetail, queryBlandCalls, loadBlandCallsToBatch, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, resetFailedBatchItems } from "./bigquery";
 import { randomUUID, createHash } from "crypto";
 import { storage } from "./storage";
 import { insertObservationSchema, enumValueSchema, insertContextParameterSchema } from "@shared/schema";
@@ -453,6 +453,146 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Call not found" });
       }
       res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  await initializeBatchTable();
+
+  app.get("/api/batch/bland-calls", async (req, res) => {
+    try {
+      const { startDate, endDate, limit, callIds } = req.query;
+      const filters: any = {};
+      if (startDate) filters.startDate = startDate;
+      if (endDate) filters.endDate = endDate;
+      if (limit) filters.limit = parseInt(limit as string);
+      if (callIds) filters.callIds = (callIds as string).split(",").map(s => s.trim());
+
+      const calls = await queryBlandCalls(filters);
+      res.json(calls);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/batch/load", async (req, res) => {
+    try {
+      const { callIds, batchLabel } = req.body;
+      if (!callIds || !Array.isArray(callIds) || callIds.length === 0) {
+        return res.status(400).json({ message: "callIds array is required" });
+      }
+      const result = await loadBlandCallsToBatch(callIds, batchLabel || null);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/batch/items", async (req, res) => {
+    try {
+      const { status, batchLabel, limit } = req.query;
+      const filters: any = {};
+      if (status) filters.status = status;
+      if (batchLabel) filters.batchLabel = batchLabel;
+      if (limit) filters.limit = parseInt(limit as string);
+
+      const items = await getBatchItems(filters);
+      res.json(items);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/batch/summary", async (_req, res) => {
+    try {
+      const summary = await getBatchSummary();
+      res.json(summary);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/batch/process", async (req, res) => {
+    try {
+      const batchSize = parseInt(req.query.limit as string) || 5;
+      const pendingItems = await getPendingBatchItems(batchSize);
+
+      if (pendingItems.length === 0) {
+        return res.json({ processed: 0, message: "No pending items" });
+      }
+
+      const results: { callId: string; status: string; error?: string }[] = [];
+
+      for (const item of pendingItems) {
+        const claimed = await updateBatchItemStatus(item.bland_call_id, "processing");
+        if (claimed === 0) {
+          results.push({ callId: item.bland_call_id, status: "skipped" });
+          continue;
+        }
+
+        try {
+          const activeObs = await storage.getActiveObservations();
+          const summaryInstruction = await storage.getSetting("summary_instruction");
+          const observationsGuidance = await storage.getSetting("observations_prompt_guidance");
+          const contextParams = await storage.getActiveContextParameters();
+          const { prompt: _p, promptVersion, promptVersionDate } = await getPromptWithVersion();
+
+          const sourceId = `batch_${item.bland_call_id}`;
+          const startTime = Date.now();
+          const { analysis, tokenUsage } = await analyzeTranscript(
+            sourceId,
+            item.transcript.trim(),
+            activeObs,
+            undefined,
+            summaryInstruction || undefined,
+            contextParams,
+            {},
+            observationsGuidance || undefined
+          );
+          const processingTimeMs = Date.now() - startTime;
+
+          const processedAt = new Date().toISOString();
+          await insertCallInfo({
+            callId: sourceId,
+            sourceType: "batch_reprocess",
+            sourceId: item.bland_call_id,
+            processedAt,
+            processingTimeMs,
+            promptVersion,
+            promptVersionDate,
+            transcriptLength: item.transcript.length,
+            summary: analysis.summary,
+            followUpAreas: analysis.follow_up_areas,
+            transitionStatus: analysis.transition_status,
+            promptTokens: tokenUsage.promptTokens,
+            completionTokens: tokenUsage.completionTokens,
+            totalTokens: tokenUsage.totalTokens,
+            estimatedCost: tokenUsage.estimatedCost,
+            status: "success",
+            requestBody: JSON.stringify({ batch_id: item.batch_id, bland_call_id: item.bland_call_id }),
+          });
+
+          await insertCallObservations(sourceId, analysis.observations);
+          await updateBatchItemStatus(item.bland_call_id, "completed", sourceId);
+          results.push({ callId: item.bland_call_id, status: "completed" });
+        } catch (err: any) {
+          await updateBatchItemStatus(item.bland_call_id, "failed", undefined, err.message);
+          results.push({ callId: item.bland_call_id, status: "failed", error: err.message });
+        }
+      }
+
+      res.json({ processed: results.length, results });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/batch/reset-failed", async (req, res) => {
+    try {
+      const { batchId } = req.body;
+      const count = await resetFailedBatchItems(batchId);
+      res.json({ reset: count });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
