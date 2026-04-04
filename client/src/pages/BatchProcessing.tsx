@@ -174,14 +174,12 @@ export default function BatchProcessing() {
     },
   });
 
-  const latestBatchId = summary?.batches?.sort((a: any, b: any) =>
-    b.batch_id.localeCompare(a.batch_id)
-  )?.[0]?.batch_id;
-
   const processMutation = useMutation({
     mutationFn: async () => {
       const params = new URLSearchParams({ limit: processLimit });
-      if (latestBatchId) params.set("batchId", latestBatchId);
+      const batches = summaryQuery.data?.batches;
+      const newest = batches?.sort((a: any, b: any) => b.batch_id.localeCompare(a.batch_id))?.[0]?.batch_id;
+      if (newest) params.set("batchId", newest);
       const res = await fetch(`/api/batch/process?${params}`, { method: "POST" });
       if (!res.ok) {
         const err = await res.json();
