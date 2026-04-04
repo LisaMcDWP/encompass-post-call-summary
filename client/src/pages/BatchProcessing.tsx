@@ -96,6 +96,7 @@ export default function BatchProcessing() {
   const [maxDuration, setMaxDuration] = useState("");
   const [requiredTags, setRequiredTags] = useState<string[]>([]);
   const [excludeTags, setExcludeTags] = useState<string[]>(["patient_deceased"]);
+  const [processedFilter, setProcessedFilter] = useState<"unprocessed" | "processed" | "all">("unprocessed");
 
   const tagsQuery = useQuery<string[]>({
     queryKey: ["/api/batch/tags"],
@@ -133,6 +134,7 @@ export default function BatchProcessing() {
       if (maxDuration) params.set("maxDuration", maxDuration);
       if (requiredTags.length > 0) params.set("requiredTags", requiredTags.join(","));
       if (excludeTags.length > 0) params.set("excludeTags", excludeTags.join(","));
+      if (processedFilter !== "all") params.set("processedFilter", processedFilter);
       params.set("limit", searchLimit || "50");
 
       const res = await fetch(`/api/batch/bland-calls?${params}`);
@@ -388,6 +390,19 @@ export default function BatchProcessing() {
                   className="w-40"
                   data-testid="input-end-date"
                 />
+              </div>
+              <div>
+                <Label className="text-xs">Processing Status</Label>
+                <select
+                  value={processedFilter}
+                  onChange={(e) => setProcessedFilter(e.target.value as "unprocessed" | "processed" | "all")}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm w-40"
+                  data-testid="select-processed-filter"
+                >
+                  <option value="unprocessed">Not Yet Processed</option>
+                  <option value="processed">Already Processed</option>
+                  <option value="all">All Calls</option>
+                </select>
               </div>
               <div>
                 <Label className="text-xs">Answered By</Label>

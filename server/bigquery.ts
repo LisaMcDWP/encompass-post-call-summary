@@ -409,6 +409,7 @@ export async function queryBlandCalls(filters: {
   maxDuration?: number;
   requiredTags?: string[];
   excludeTags?: string[];
+  processedFilter?: "unprocessed" | "processed" | "all";
 }): Promise<any[]> {
   const client = getBigQueryClient();
   const conditions: string[] = [];
@@ -457,6 +458,18 @@ export async function queryBlandCalls(filters: {
   }
   conditions.push("c.concatenated_transcript IS NOT NULL");
   conditions.push("LENGTH(TRIM(c.concatenated_transcript)) > 0");
+
+  if (filters.processedFilter === "unprocessed") {
+    conditions.push(`c.call_id NOT IN (
+      SELECT source_id FROM \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\`
+      WHERE source_id IS NOT NULL
+    )`);
+  } else if (filters.processedFilter === "processed") {
+    conditions.push(`c.call_id IN (
+      SELECT source_id FROM \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\`
+      WHERE source_id IS NOT NULL
+    )`);
+  }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
   const rowLimit = Math.min(filters.limit || 100, 500);

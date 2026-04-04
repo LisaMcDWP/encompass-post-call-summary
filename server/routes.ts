@@ -471,7 +471,7 @@ export async function registerRoutes(
 
   app.get("/api/batch/bland-calls", async (req, res) => {
     try {
-      const { startDate, endDate, limit, callIds, answeredBy, minDuration, maxDuration, requiredTags, excludeTags } = req.query;
+      const { startDate, endDate, limit, callIds, answeredBy, minDuration, maxDuration, requiredTags, excludeTags, processedFilter } = req.query;
       const filters: any = {};
       if (startDate) filters.startDate = startDate;
       if (endDate) filters.endDate = endDate;
@@ -482,6 +482,9 @@ export async function registerRoutes(
       if (maxDuration) filters.maxDuration = parseFloat(maxDuration as string);
       if (requiredTags) filters.requiredTags = (requiredTags as string).split(",").map(s => s.trim());
       if (excludeTags) filters.excludeTags = (excludeTags as string).split(",").map(s => s.trim());
+      if (processedFilter && ["unprocessed", "processed", "all"].includes(processedFilter as string)) {
+        filters.processedFilter = processedFilter;
+      }
 
       const calls = await queryBlandCalls(filters);
       res.json(calls);
