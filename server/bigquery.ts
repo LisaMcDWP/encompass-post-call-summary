@@ -687,6 +687,13 @@ export async function updateBatchItemStatus(
     errorMessage: errorMessage ? errorMessage.substring(0, 1000) : null,
   };
 
+  const types: Record<string, string> = {
+    status: "STRING",
+    blandCallId: "STRING",
+    resultCallId: "STRING",
+    errorMessage: "STRING",
+  };
+
   const setProcessedAt = (status === "completed" || status === "failed")
     ? ", processed_at = CURRENT_TIMESTAMP()" : "";
 
@@ -698,7 +705,7 @@ export async function updateBatchItemStatus(
     WHERE bland_call_id = @blandCallId AND status IN (${fromStatus})
   `;
 
-  const [, , metadata] = await client.query({ query, params, location: "US" });
+  const [, , metadata] = await client.query({ query, params, types, location: "US" });
   const affected = Number((metadata as any)?.dmlStats?.updatedRowCount || (metadata as any)?.numDmlAffectedRows || 0);
   return affected;
 }
