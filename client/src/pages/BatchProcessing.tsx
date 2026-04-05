@@ -92,7 +92,7 @@ export default function BatchProcessing() {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [processLimit, setProcessLimit] = useState("5");
   const [answeredBy, setAnsweredBy] = useState("human");
-  const [minDuration, setMinDuration] = useState("30");
+  const [minDuration, setMinDuration] = useState("0.01");
   const [maxDuration, setMaxDuration] = useState("");
   const [requiredTags, setRequiredTags] = useState<string[]>([]);
   const [excludeTags, setExcludeTags] = useState<string[]>([]);
