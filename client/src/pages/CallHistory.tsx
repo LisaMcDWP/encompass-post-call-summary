@@ -626,10 +626,10 @@ export default function CallHistory() {
 
       {calls && calls.length > 0 && (
         <div className="space-y-2" data-testid="list-calls">
-          <div className="grid grid-cols-[1fr_1fr_100px_120px_100px_90px_80px_32px] gap-3 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+          <div className="grid grid-cols-[1fr_1fr_1fr_120px_100px_90px_80px_32px] gap-3 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
             <span>Call ID</span>
+            <span>Source ID</span>
             <span>Care Flow</span>
-            <span>Source</span>
             <span>Processed</span>
             <span>Status</span>
             <span>Tokens</span>
@@ -639,7 +639,7 @@ export default function CallHistory() {
           {calls.map((call) => (
             <div
               key={call.call_id}
-              className="grid grid-cols-[1fr_1fr_100px_120px_100px_90px_80px_32px] gap-3 items-center px-4 py-3 rounded-lg border border-border/50 bg-card hover:bg-muted/30 cursor-pointer transition-colors shadow-sm"
+              className="grid grid-cols-[1fr_1fr_1fr_120px_100px_90px_80px_32px] gap-3 items-center px-4 py-3 rounded-lg border border-border/50 bg-card hover:bg-muted/30 cursor-pointer transition-colors shadow-sm"
               onClick={() => setSelectedCallId(call.call_id)}
               data-testid={`row-call-${call.call_id}`}
             >
@@ -649,12 +649,17 @@ export default function CallHistory() {
                 </p>
               </div>
               <div className="min-w-0">
+                <p className="text-xs font-mono truncate text-muted-foreground" data-testid={`text-source-id-${call.call_id}`}>
+                  {call.source_id || "—"}
+                </p>
+                {call.source_type && (
+                  <p className="text-[10px] text-muted-foreground/60 truncate">{call.source_type}</p>
+                )}
+              </div>
+              <div className="min-w-0">
                 <p className="text-xs font-mono truncate text-muted-foreground" data-testid={`text-care-flow-${call.call_id}`}>
                   {call.care_flow_id || "—"}
                 </p>
-              </div>
-              <div className="text-xs text-muted-foreground" data-testid={`text-source-type-${call.call_id}`}>
-                {call.source_type || "—"}
               </div>
               <div className="text-xs text-muted-foreground" data-testid={`text-processed-${call.call_id}`}>
                 {formatDate(call.processed_at)}
