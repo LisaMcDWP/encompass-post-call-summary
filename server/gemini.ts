@@ -113,7 +113,7 @@ function buildSummaryTopics(obs: Observation[]): string {
     .join("; ");
 }
 
-function buildObservationsSchema(obs: Observation[]): string {
+function buildObservationsSchema(obs: Observation[], contextParams?: ContextParameter[], contextValues?: Record<string, string>): string {
   const entries = obs.map(o => {
     const valuesNote = o.valueType === "enum" && Array.isArray(o.value) && o.value.length > 0
       ? `One of: ${(o.value as EnumValue[]).map(v => `"${v.label}"`).join(", ")}, or null if not discussed`
@@ -122,9 +122,29 @@ function buildObservationsSchema(obs: Observation[]): string {
         : o.valueType === "number"
           ? `Numeric value, or null if not discussed`
           : `Free text string, or null if not discussed`;
-    const guidanceComment = o.promptGuidance
-      ? ` /* EVALUATION GUIDANCE (do NOT copy this into the detail field — use it to decide the value): ${o.promptGuidance} */`
-      : "";
+    let guidanceText = o.promptGuidance || "";
+    if (guidanceText && contextParams && contextValues) {
+      for (const param of contextParams) {
+        const placeholder = `{{CONTEXT_${param.name.toUpperCase()}}}`;
+        const val = contextValues[param.name] || "N/A";
+        guidanceText = guidanceText.replace(new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g'), val);
+      }
+    }
+    let contextHint = "";
+    if (contextParams && contextValues) {
+      const relevantContext = contextParams
+        .filter(p => guidanceText.toLowerCase().includes(p.name.toLowerCase()) || o.name.toLowerCase().includes(p.name.replace(/_ordered$/, '').replace(/_/g, '_')))
+        .map(p => `${p.name}="${contextValues[p.name] || "N/A"}"`)
+        .filter(s => !s.endsWith('"N/A"'));
+      if (relevantContext.length > 0) {
+        contextHint = ` [ACTIVE CONTEXT: ${relevantContext.join(", ")}]`;
+      }
+    }
+    const guidanceComment = guidanceText
+      ? ` /* EVALUATION GUIDANCE (do NOT copy this into the detail field — use it to decide the value): ${guidanceText}${contextHint} */`
+      : contextHint
+        ? ` /* ${contextHint} */`
+        : "";
     return `    { "name": "${o.name}", "display_name": "${o.displayName}", "domain": "${o.domain}", "value_type": "${o.valueType}", "value": "${valuesNote}", "detail": "Write a brief 1-2 sentence explanation of what was observed in the transcript for this topic. Do NOT repeat the evaluation guidance — describe what actually happened.", "evidence": "Direct quote or specific reference from the transcript that supports this observation value. Use null if the topic was not discussed.", "confidence": "One of: high, medium, low — how confident the analysis is based on the clarity and directness of the transcript evidence" }${guidanceComment}`;
   });
   return entries.join(",\n");
@@ -169,7 +189,7 @@ function buildCallQABlock(callQAPrompts: CallQAPrompt[]): string {
   return items.join("\n");
 }
 
-export function buildPromptTemplate(activeObservations: Observation[], summaryInstruction?: string, contextParams?: ContextParameter[], observationsGuidance?: string, barriersGuidance?: string, callQAPrompts?: CallQAPrompt[]): string {
+export function buildPromptTemplate(activeObservations: Observation[], summaryInstruction?: string, contextParams?: ContextParameter[], observationsGuidance?: string, barriersGuidance?: string, callQAPrompts?: CallQAPrompt[], contextValues?: Record<string, string>): string {
   const instruction = summaryInstruction || DEFAULT_SUMMARY_INSTRUCTION;
   const contextBlock = buildContextBlock(contextParams || []);
 
@@ -234,7 +254,7 @@ SOURCE TEXT:
   const statusMappings = buildStatusMappings(activeObservations);
   const summaryTopics = buildSummaryTopics(activeObservations);
   const colorStyles = buildColorStylesBlock();
-  const observationsSchema = buildObservationsSchema(activeObservations);
+  const observationsSchema = buildObservationsSchema(activeObservations, contextParams, contextValues);
   const resolvedSummaryInstruction = instruction.replace("{{SUMMARY_TOPICS}}", summaryTopics);
 
   return `You are an expert healthcare call analyst for Guideway Care. Analyze the following patient interaction transcript and produce a structured JSON output.
@@ -331,7 +351,7 @@ export async function analyzeTranscript(
     },
   });
 
-  const template = customPrompt || buildPromptTemplate(activeObservations, summaryInstruction, contextParams, observationsGuidance, barriersGuidance, callQAPrompts);
+  const template = customPrompt || buildPromptTemplate(activeObservations, summaryInstruction, contextParams, observationsGuidance, barriersGuidance, callQAPrompts, contextValues);
   let prompt = template
     .replace("{{SOURCE_ID}}", sourceId)
     .replace("{{SOURCE_TEXT}}", sourceText);
