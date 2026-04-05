@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Loader2, BarChart3, Calendar, Building2,
-  CheckCircle2, XCircle, Coins, Zap, Phone, Activity, Layers
+  CheckCircle2, XCircle, Coins, Phone, Activity, Layers
 } from "lucide-react";
 
 type DateRange = "1" | "7" | "30" | "ytd" | "all";
@@ -373,7 +373,7 @@ export default function CallStats() {
 
         {!isLoading && (
           <>
-            <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
               <Card className="border-border/50 bg-gradient-to-br from-blue-50/50 to-transparent">
                 <CardContent className="pt-4 pb-3 px-4">
                   <div className="flex items-center justify-between">
@@ -412,20 +412,13 @@ export default function CallStats() {
                   <p className="text-2xl font-bold text-foreground mt-1" data-testid="stat-avg-time">{avgProcessingTime.toFixed(1)}s</p>
                 </CardContent>
               </Card>
-              <Card className="border-border/50">
-                <CardContent className="pt-4 pb-3 px-4">
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-semibold flex items-center gap-1">
-                    <Zap className="h-3 w-3" /> Tokens
-                  </p>
-                  <p className="text-2xl font-bold text-foreground mt-1" data-testid="stat-tokens">{totals.tokens.toLocaleString()}</p>
-                </CardContent>
-              </Card>
               <Card className="border-border/50 bg-gradient-to-br from-blue-50/30 to-transparent">
                 <CardContent className="pt-4 pb-3 px-4">
                   <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-semibold flex items-center gap-1">
                     <Coins className="h-3 w-3 text-primary" /> Total Cost
                   </p>
-                  <p className="text-2xl font-bold text-primary mt-1" data-testid="stat-cost">${totals.cost.toFixed(4)}</p>
+                  <p className="text-2xl font-bold text-primary mt-1" data-testid="stat-cost">${totals.cost.toFixed(2)}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5" data-testid="stat-tokens">{totals.tokens.toLocaleString()} tokens</p>
                 </CardContent>
               </Card>
             </div>
@@ -527,7 +520,7 @@ export default function CallStats() {
                           <div className="flex items-center gap-3 text-[10px] text-muted-foreground border-t border-border/30 pt-2">
                             <span className="text-green-600">{cp.success} success</span>
                             {cp.errors > 0 && <span className="text-red-500">{cp.errors} errors</span>}
-                            <span className="ml-auto text-primary font-medium">${cp.cost.toFixed(4)}</span>
+                            <span className="ml-auto text-primary font-medium">${cp.cost.toFixed(2)}</span>
                           </div>
                         </div>
                       );
@@ -573,7 +566,7 @@ export default function CallStats() {
                               ))}
                               <td className="px-4 py-2 text-xs text-green-600">{row.success}</td>
                               <td className="px-4 py-2 text-xs text-red-500">{row.errors > 0 ? row.errors : "—"}</td>
-                              <td className="px-4 py-2 text-xs font-mono text-primary">${row.cost.toFixed(4)}</td>
+                              <td className="px-4 py-2 text-xs font-mono text-primary">${row.cost.toFixed(2)}</td>
                               <td className="px-4 py-2">
                                 <div className="w-full bg-muted/30 rounded-full h-2 overflow-hidden">
                                   <div className="h-full rounded-full bg-primary/70 transition-all" style={{ width: `${pct}%` }} />
@@ -593,7 +586,7 @@ export default function CallStats() {
                           })}
                           <td className="px-4 py-2.5 text-xs text-green-600">{totals.success.toLocaleString()}</td>
                           <td className="px-4 py-2.5 text-xs text-red-500">{totals.errors > 0 ? totals.errors.toLocaleString() : "—"}</td>
-                          <td className="px-4 py-2.5 text-xs font-mono text-primary">${totals.cost.toFixed(4)}</td>
+                          <td className="px-4 py-2.5 text-xs font-mono text-primary">${totals.cost.toFixed(2)}</td>
                           <td></td>
                         </tr>
                       </tfoot>
