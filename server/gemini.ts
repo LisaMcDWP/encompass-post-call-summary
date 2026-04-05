@@ -340,7 +340,6 @@ export async function analyzeTranscript(
     for (const param of contextParams) {
       const placeholder = `{{CONTEXT_${param.name.toUpperCase()}}}`;
       const val = contextValues[param.name] || "N/A";
-      console.log(`[context-inject] ${param.name}: placeholder=${placeholder} value=${val} (raw=${contextValues[param.name]})`);
       prompt = prompt.replace(placeholder, val);
     }
   }
