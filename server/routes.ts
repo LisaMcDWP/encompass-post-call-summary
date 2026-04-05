@@ -666,7 +666,8 @@ export async function registerRoutes(
 
   app.get("/api/calls/stats/daily", async (req, res) => {
     try {
-      const days = parseInt(req.query.days as string) || 30;
+      const rawDays = parseInt(req.query.days as string);
+      const days = isNaN(rawDays) ? 30 : rawDays;
       const stats = await getCallStatsByDay(days);
       res.json(stats);
     } catch (error: any) {
