@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Phone, Clock, Coins, ChevronRight, X, FileText, Activity, ListChecks, ClipboardList, AlertCircle, MessageSquare, ShieldAlert, ClipboardCheck } from "lucide-react";
+import { Loader2, Phone, Clock, Coins, ChevronRight, X, FileText, Activity, ListChecks, ClipboardList, AlertCircle, MessageSquare, ShieldAlert, ClipboardCheck, RefreshCw } from "lucide-react";
 
 interface CallInfo {
   call_id: string;
@@ -559,6 +559,7 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
 
 export default function CallHistory() {
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const { data: calls, isLoading } = useQuery<CallInfo[]>({
     queryKey: ["/api/calls"],
@@ -571,13 +572,24 @@ export default function CallHistory() {
 
   return (
     <div className="p-8 max-w-6xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-secondary tracking-tight" data-testid="heading-call-history">
-          Processed Calls
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          All calls processed through the API, with full extraction details.
-        </p>
+      <div className="mb-8 flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-secondary tracking-tight" data-testid="heading-call-history">
+            Processed Calls
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            All calls processed through the API, with full extraction details.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/calls"] })}
+          data-testid="button-refresh-calls"
+        >
+          <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+          Refresh
+        </Button>
       </div>
 
       {isLoading && (
