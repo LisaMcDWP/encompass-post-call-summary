@@ -8,8 +8,9 @@ async function getPromptWithVersion() {
   const activeObs = await storage.getActiveObservations();
   const summaryInstruction = await storage.getSetting("summary_instruction");
   const observationsGuidance = await storage.getSetting("observations_prompt_guidance");
+  const barriersGuidance = await storage.getSetting("barriers_prompt_guidance");
   const contextParams = await storage.getActiveContextParameters();
-  const prompt = buildPromptTemplate(activeObs, summaryInstruction || undefined, contextParams, observationsGuidance || undefined);
+  const prompt = buildPromptTemplate(activeObs, summaryInstruction || undefined, contextParams, observationsGuidance || undefined, barriersGuidance || undefined);
 
   const hash = createHash("sha256").update(prompt).digest("hex");
   const storedHash = await storage.getSetting("prompt_hash");
@@ -59,6 +60,7 @@ async function processBatch() {
       const activeObs = await storage.getActiveObservations();
       const summaryInstruction = await storage.getSetting("summary_instruction");
       const observationsGuidance = await storage.getSetting("observations_prompt_guidance");
+      const barriersGuidance = await storage.getSetting("barriers_prompt_guidance");
       const contextParams = await storage.getActiveContextParameters();
       const { promptVersion, promptVersionDate } = await getPromptWithVersion();
 
@@ -73,7 +75,8 @@ async function processBatch() {
         summaryInstruction || undefined,
         contextParams,
         {},
-        observationsGuidance || undefined
+        observationsGuidance || undefined,
+        barriersGuidance || undefined
       );
 
       const processingTimeMs = Date.now() - startTime;

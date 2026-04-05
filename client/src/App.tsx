@@ -16,6 +16,7 @@ import ProjectOverview from "@/pages/ProjectOverview";
 import ApiReference from "@/pages/ApiReference";
 import ProductReference from "@/pages/ProductReference";
 import BatchProcessing from "@/pages/BatchProcessing";
+import BarriersPrompt from "@/pages/BarriersPrompt";
 
 function Router() {
   return (
@@ -26,6 +27,7 @@ function Router() {
         <Route path="/overview" component={ProjectOverview} />
         <Route path="/observations" component={Observations} />
         <Route path="/summary-prompt" component={SummaryPrompt} />
+        <Route path="/barriers-prompt" component={BarriersPrompt} />
         <Route path="/context-parameters" component={ContextParameters} />
         <Route path="/generated-prompt" component={GeneratedPrompt} />
         <Route path="/api-reference" component={ApiReference} />

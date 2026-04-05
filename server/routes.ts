@@ -11,8 +11,9 @@ async function getPromptWithVersion() {
   const activeObs = await storage.getActiveObservations();
   const summaryInstruction = await storage.getSetting("summary_instruction");
   const observationsGuidance = await storage.getSetting("observations_prompt_guidance");
+  const barriersGuidance = await storage.getSetting("barriers_prompt_guidance");
   const contextParams = await storage.getActiveContextParameters();
-  const prompt = buildPromptTemplate(activeObs, summaryInstruction || undefined, contextParams, observationsGuidance || undefined);
+  const prompt = buildPromptTemplate(activeObs, summaryInstruction || undefined, contextParams, observationsGuidance || undefined, barriersGuidance || undefined);
 
   const hash = createHash("sha256").update(prompt).digest("hex");
   const storedHash = await storage.getSetting("prompt_hash");
@@ -72,6 +73,7 @@ export async function registerRoutes(
       const activeObs = await storage.getActiveObservations();
       const summaryInstruction = await storage.getSetting("summary_instruction");
       const observationsGuidance = await storage.getSetting("observations_prompt_guidance");
+      const barriersGuidance = await storage.getSetting("barriers_prompt_guidance");
       const contextParams = await storage.getActiveContextParameters();
 
       const contextValues: Record<string, string> = {};
@@ -91,7 +93,8 @@ export async function registerRoutes(
         summaryInstruction || undefined,
         contextParams,
         contextValues,
-        observationsGuidance || undefined
+        observationsGuidance || undefined,
+        barriersGuidance || undefined
       );
       const processingTime = Date.now() - startTime;
 
@@ -437,6 +440,61 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/settings/barriers-guidance", async (_req, res) => {
+    try {
+      const stored = await storage.getSetting("barriers_prompt_guidance");
+      res.json({
+        guidance: stored || "",
+        isCustom: stored !== null,
+        defaultGuidance: "Extract ANY barriers to care, recovery, or well-being that the patient or caregiver mentions or that can be identified from the conversation. A barrier is anything that may prevent or hinder the patient from following their care plan, recovering properly, or accessing needed services. Include barriers that are explicitly stated AND those clearly implied. Common barrier categories include: Transportation, Financial, Medication Access, Social Support, Health Literacy, Language, Housing, Caregiver Burden, Emotional/Mental Health, Physical Limitation, Insurance/Coverage.",
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/settings/barriers-guidance", async (req, res) => {
+    try {
+      const { guidance } = req.body;
+      if (typeof guidance !== "string") {
+        return res.status(400).json({ message: "A guidance string is required." });
+      }
+      if (guidance.trim().length === 0) {
+        const client = (await import("@google-cloud/bigquery")).BigQuery;
+        const raw = process.env.GCP_SERVICE_ACCOUNT_KEY;
+        const projectId = process.env.GCP_PROJECT_ID;
+        if (!raw || !projectId) throw new Error("GCP credentials not set");
+        const bq = new client({ projectId, credentials: JSON.parse(raw) });
+        await bq.query({
+          query: `DELETE FROM \`${projectId}.call_information.settings\` WHERE key = @key`,
+          params: { key: "barriers_prompt_guidance" },
+        });
+        return res.json({ success: true, guidance: "" });
+      }
+      await storage.setSetting("barriers_prompt_guidance", guidance.trim());
+      res.json({ success: true, guidance: guidance.trim() });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/settings/barriers-guidance", async (_req, res) => {
+    try {
+      const client = (await import("@google-cloud/bigquery")).BigQuery;
+      const raw = process.env.GCP_SERVICE_ACCOUNT_KEY;
+      const projectId = process.env.GCP_PROJECT_ID;
+      if (!raw || !projectId) throw new Error("GCP credentials not set");
+      const bq = new client({ projectId, credentials: JSON.parse(raw) });
+      await bq.query({
+        query: `DELETE FROM \`${projectId}.call_information.settings\` WHERE key = @key`,
+        params: { key: "barriers_prompt_guidance" },
+      });
+      res.json({ success: true, guidance: "" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.get("/api/calls", async (req, res) => {
     try {
       const rawLimit = parseInt(req.query.limit as string) || 100;
@@ -556,6 +614,7 @@ export async function registerRoutes(
           const activeObs = await storage.getActiveObservations();
           const summaryInstruction = await storage.getSetting("summary_instruction");
           const observationsGuidance = await storage.getSetting("observations_prompt_guidance");
+          const barriersGuidance = await storage.getSetting("barriers_prompt_guidance");
           const contextParams = await storage.getActiveContextParameters();
           const { prompt: _p, promptVersion, promptVersionDate } = await getPromptWithVersion();
 
@@ -569,7 +628,8 @@ export async function registerRoutes(
             summaryInstruction || undefined,
             contextParams,
             {},
-            observationsGuidance || undefined
+            observationsGuidance || undefined,
+            barriersGuidance || undefined
           );
           const processingTimeMs = Date.now() - startTime;
 
