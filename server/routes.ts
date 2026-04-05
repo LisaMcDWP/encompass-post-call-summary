@@ -715,7 +715,7 @@ export async function registerRoutes(
           await insertCallInfo({
             callId: callId,
             careFlowId: item.care_flow_id || null,
-            sourceType: "batch_reprocess",
+            sourceType: item.source_type || "bland_call",
             sourceId: callId,
             processedAt,
             processingTimeMs,

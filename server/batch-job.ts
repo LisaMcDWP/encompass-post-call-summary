@@ -94,7 +94,7 @@ async function processBatch() {
       await insertCallInfo({
         callId: sourceId,
         careFlowId: item.care_flow_id || null,
-        sourceType: "batch_reprocess",
+        sourceType: item.source_type || "bland_call",
         sourceId: item.bland_call_id,
         processedAt,
         processingTimeMs,
