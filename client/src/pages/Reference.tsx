@@ -4,6 +4,7 @@ import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { BookOpen, Code2, Webhook, Server, Key, Activity, Database, Settings, Phone, Download, Layers, MessageSquare, ClipboardCheck, FileText } from "lucide-react";
 import { useRef } from "react";
+import { jsPDF } from "jspdf";
 
 function exportToHtml(contentEl: HTMLElement) {
   const clone = contentEl.cloneNode(true) as HTMLElement;
@@ -42,6 +43,371 @@ ${clone.innerHTML}
   URL.revokeObjectURL(url);
 }
 
+function exportReferencePdf() {
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const mL = 15;
+  const mR = 15;
+  const cW = pageW - mL - mR;
+  let y = 15;
+
+  const PRIMARY: [number, number, number] = [0, 152, 219];
+  const NAVY: [number, number, number] = [23, 41, 56];
+  const GRAY: [number, number, number] = [107, 114, 128];
+  const CODE_BG: [number, number, number] = [23, 41, 56];
+  const CODE_FG: [number, number, number] = [150, 212, 16];
+
+  function pageBreak(needed: number) {
+    if (y + needed > pageH - 15) {
+      doc.addPage();
+      y = 15;
+    }
+  }
+
+  function heading(title: string, icon?: string) {
+    pageBreak(16);
+    y += 5;
+    doc.setFillColor(...PRIMARY);
+    doc.rect(mL, y, cW, 9, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text((icon ? icon + "  " : "") + title, mL + 3, y + 6.5);
+    y += 14;
+    doc.setTextColor(0, 0, 0);
+  }
+
+  function subheading(title: string) {
+    pageBreak(10);
+    y += 2;
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...NAVY);
+    doc.text(title, mL, y);
+    y += 6;
+  }
+
+  function para(text: string, fontSize = 8, indent = 0) {
+    doc.setFontSize(fontSize);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...NAVY);
+    const lines = doc.splitTextToSize(text, cW - indent);
+    for (const l of lines) {
+      pageBreak(5);
+      doc.text(l, mL + indent, y);
+      y += 4;
+    }
+    y += 1;
+  }
+
+  function codeBlock(code: string) {
+    const lines = code.split("\n");
+    const blockH = lines.length * 3.5 + 6;
+    pageBreak(Math.min(blockH, 40));
+    doc.setFillColor(...CODE_BG);
+    const startY = y;
+    for (const line of lines) {
+      pageBreak(4);
+      if (y === 15) {
+        doc.setFillColor(...CODE_BG);
+      }
+      doc.setFontSize(6.5);
+      doc.setFont("courier", "normal");
+      doc.setTextColor(...CODE_FG);
+      doc.text(line, mL + 3, y + 2);
+      y += 3.5;
+    }
+    y += 3;
+  }
+
+  function fieldDesc(name: string, desc: string, indent = 0) {
+    pageBreak(7);
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...PRIMARY);
+    doc.text(name, mL + indent, y);
+    const nameW = doc.getTextWidth(name);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...NAVY);
+    const descLines = doc.splitTextToSize(" — " + desc, cW - indent - nameW - 2);
+    doc.text(descLines, mL + indent + nameW, y);
+    y += descLines.length * 4 + 1;
+  }
+
+  function bulletPoint(text: string, indent = 3) {
+    pageBreak(6);
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...NAVY);
+    const lines = doc.splitTextToSize(text, cW - indent - 4);
+    doc.text("•", mL + indent, y);
+    doc.text(lines, mL + indent + 4, y);
+    y += lines.length * 4 + 1;
+  }
+
+  function divider() {
+    pageBreak(4);
+    doc.setDrawColor(200, 200, 210);
+    doc.line(mL, y, pageW - mR, y);
+    y += 4;
+  }
+
+  doc.setFillColor(...NAVY);
+  doc.rect(0, 0, pageW, 30, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(18);
+  doc.setFont("helvetica", "bold");
+  doc.text("Guideway Care", mL, 13);
+  doc.setFontSize(11);
+  doc.setFont("helvetica", "normal");
+  doc.text("Post-Call Analysis API Reference", mL, 21);
+  doc.setFontSize(7);
+  doc.setTextColor(200, 200, 200);
+  doc.text(`Generated: ${new Date().toLocaleString()}`, pageW - mR, 21, { align: "right" });
+  y = 38;
+
+  heading("Base URL");
+  para("Cloud Run deployment: guideway-care-api (us-central1)");
+  codeBlock("https://guideway-care-api-855188300685.us-central1.run.app");
+
+  heading("Authentication");
+  para("POST /api/analyze and management routes do not require authentication.");
+  para("POST /gwc_observation_summarization requires an X-API-Key header (GWC_OBSERVATION_SUMMARIZATION_API_KEY).");
+
+  heading("POST /api/analyze");
+  para("Accepts source text with contextual metadata, processes it through Gemini AI, and returns structured clinical analysis with HTML-formatted output.");
+  divider();
+  subheading("Request Body Fields");
+  fieldDesc("care_flow_id", "(string, optional) Identifier for the care flow.");
+  fieldDesc("processed_datetime", "(string, optional) ISO 8601 datetime.");
+  fieldDesc("source_type", "(string, optional) Type of source (phone_call, chat, note).");
+  fieldDesc("source_id", "(string, optional) Unique identifier for the source.");
+  fieldDesc("source_text", "(string, required) The full patient call transcript.");
+  fieldDesc("context", "(object, optional) Key-value pairs for known context injection.");
+  divider();
+  subheading("Example Request");
+  codeBlock(`{
+  "care_flow_id": "cf_abc123",
+  "processed_datetime": "2026-03-06T10:30:00Z",
+  "source_type": "phone_call",
+  "source_id": "call_987654321",
+  "source_text": "Care Guide: Hello, this is Maria...",
+  "context": {
+    "home_health_ordered": "true",
+    "dme_or_supplies_ordered": "false"
+  }
+}`);
+  divider();
+  subheading("Analysis Response Fields");
+  fieldDesc("summary", "Brief overview of the call based on topics discussed.");
+  fieldDesc("observations", "Array of observation objects (name, display_name, domain, value_type, value, detail, evidence, confidence).");
+  fieldDesc("transition_status", "HTML-formatted rich text with color-coded status badges.");
+  fieldDesc("follow_up_areas", "HTML-formatted list of items needing follow-up.");
+  fieldDesc("qa_pairs", "Array of Q&A exchanges (question, answer, asked_by, answered_by, observation_name, category).");
+  fieldDesc("barriers", "Array of barriers to care (barrier, context, category, severity, evidence, observation linkage).");
+  fieldDesc("call_qa", "Array of call quality assessments (name, display_name, value, detail, evidence).");
+  divider();
+  subheading("Token Usage");
+  fieldDesc("promptTokens", "Input tokens sent to Gemini.");
+  fieldDesc("completionTokens", "Output tokens returned by Gemini.");
+  fieldDesc("totalTokens", "Sum of prompt + completion tokens.");
+  fieldDesc("estimatedCost", "USD cost estimate (gemini-2.0-flash-001 pricing).");
+
+  heading("Status Badge Colors");
+  bulletPoint("GREEN — positive outcomes (Good)");
+  bulletPoint("YELLOW — caution / partial (Fair)");
+  bulletPoint("RED — negative / missed (Poor)");
+  bulletPoint("BLUE — informational (Has Questions)");
+  bulletPoint("GRAY — not discussed / unknown (Not Discussed)");
+
+  heading("Call History Endpoints");
+  subheading("GET /api/calls");
+  para("Returns recent processed calls ordered by processed_at descending. Optional limit query param (default 100, max 500).");
+  divider();
+  subheading("GET /api/calls/:callId");
+  para("Returns full detail for a single call including observations, qaPairs, barriers, and callQA.");
+
+  heading("GET /api/health");
+  para("Returns service status: gemini, bigquery, and projectId availability.");
+
+  heading("GET /api/prompt");
+  para("Returns the dynamically generated prompt template, version hash, and version date.");
+
+  heading("Observations CRUD");
+  subheading("GET /api/observations");
+  para("Returns all observations ordered by display_order.");
+  divider();
+  subheading("POST /api/observations");
+  para("Create a new observation topic.");
+  divider();
+  subheading("PUT /api/observations/:id");
+  para("Update an existing observation. Partial updates supported.");
+  divider();
+  subheading("DELETE /api/observations/:id");
+  para("Permanently deletes an observation by ID.");
+  divider();
+  subheading("POST /api/observations/ai-suggest");
+  para("Chat with the AI assistant for observation topic suggestions.");
+  divider();
+  subheading("PUT /api/observations/reorder");
+  para("Reorder observations by providing an array of IDs.");
+  divider();
+  subheading("Observation Fields");
+  fieldDesc("id", "(INT64) Auto-generated unique identifier.");
+  fieldDesc("name", "(string) Machine-readable key.");
+  fieldDesc("displayName", "(string) Human-readable label.");
+  fieldDesc("domain", "(string) Category: clinical, medication, appointment, equipment, discharge, experience, general.");
+  fieldDesc("displayOrder", "(integer) Sort order.");
+  fieldDesc("valueType", "(string) One of: enum, boolean, text, number.");
+  fieldDesc("value", "(array) For enum types: array of { label, color } objects.");
+  fieldDesc("isActive", "(boolean) Whether included in analysis.");
+  fieldDesc("promptGuidance", "(string, optional) Custom instruction for Gemini.");
+
+  heading("Context Parameters CRUD");
+  subheading("GET /api/context-parameters");
+  para("Returns all context parameters ordered by display_order.");
+  divider();
+  subheading("POST /api/context-parameters");
+  para("Create a new context parameter.");
+  divider();
+  subheading("PUT /api/context-parameters/:id");
+  para("Update an existing context parameter. Partial updates supported.");
+  divider();
+  subheading("PUT /api/context-parameters/reorder");
+  para("Reorder context parameters by providing an array of IDs.");
+  divider();
+  subheading("DELETE /api/context-parameters/:id");
+  para("Permanently deletes a context parameter by ID.");
+
+  heading("Prompt Settings");
+  subheading("Summary Instruction");
+  para("GET/PUT/DELETE /api/settings/summary-instruction — Manage the summary instruction. Supports {{SUMMARY_TOPICS}} placeholder.");
+  divider();
+  subheading("Observations Guidance");
+  para("GET/PUT/DELETE /api/settings/observations-guidance — Manage global observations guidance.");
+
+  heading("Call QA Prompts CRUD");
+  subheading("GET /api/call-qa-prompts");
+  para("Returns all Call QA prompts ordered by display_order.");
+  divider();
+  subheading("POST /api/call-qa-prompts");
+  para("Create a new Call QA prompt.");
+  divider();
+  subheading("PUT /api/call-qa-prompts/:id");
+  para("Update an existing Call QA prompt. Partial updates supported.");
+  divider();
+  subheading("DELETE /api/call-qa-prompts/:id");
+  para("Permanently deletes a Call QA prompt by ID.");
+  divider();
+  subheading("Call QA Prompt Fields");
+  fieldDesc("id", "(INT64) Auto-generated unique identifier.");
+  fieldDesc("name", "(string) Machine-readable key.");
+  fieldDesc("displayName", "(string) Human-readable label.");
+  fieldDesc("promptText", "(string) Instruction sent to Gemini for evaluation.");
+  fieldDesc("responseType", "(string) One of: enum, boolean, text.");
+  fieldDesc("responseOptions", "(array) For enum types, allowed response values.");
+  fieldDesc("isActive", "(boolean) Whether included in analysis.");
+  fieldDesc("displayOrder", "(integer) Sort order.");
+
+  heading("PDF Export");
+  para("Individual call details can be exported as PDF reports from the Call History page. Open any call detail panel and click the Export PDF button.");
+  para("Includes: branded header, call metadata, summary, observations, transition status, follow-up areas, barriers, call QA, Q&A pairs, and page numbers.");
+
+  heading("Batch Processing");
+  subheading("How Batch Processing Works");
+  bulletPoint("Search — Query Bland.calls in BigQuery with filters (date range, answered_by, duration, tags, processing status).");
+  bulletPoint("Select — Choose individual calls or select all from results.");
+  bulletPoint("Load to Batch — Selected calls inserted into batch_processing table via DML INSERT.");
+  bulletPoint("Process — Click Process Batch to run pending items through Gemini. Writes call_info, call_observations, call_qa_pairs, barriers, call_qa_results.");
+  bulletPoint("Review — Processed calls appear in Call History.");
+  divider();
+  subheading("GET /api/batch/bland-calls");
+  para("Search historical Bland calls with filters: startDate, endDate, answeredBy, minDuration, maxDuration, callIds, requiredTags, excludeTags, processedFilter, limit.");
+  divider();
+  subheading("GET /api/batch/tags");
+  para("Returns distinct tag values from Bland.tags.");
+  divider();
+  subheading("POST /api/batch/load");
+  para("Load selected calls into a new batch for processing.");
+  divider();
+  subheading("POST /api/batch/process");
+  para("Process pending batch items. Optional limit (default 5) and batchId params.");
+  divider();
+  subheading("GET /api/batch/items");
+  para("Returns batch items with status. Optional limit and status filters.");
+  divider();
+  subheading("GET /api/batch/summary");
+  para("Returns batch status counts: total, pending, processing, completed, failed.");
+  divider();
+  subheading("POST /api/batch/recreate");
+  para("Creates new batch from non-completed items (failed + pending).");
+  divider();
+  subheading("POST /api/batch/reset-failed");
+  para("Resets failed items back to pending for reprocessing.");
+
+  heading("Awell Integration");
+  subheading("Webhook Configuration");
+  para("URL: https://guideway-care-api-855188300685.us-central1.run.app/api/analyze");
+  para("Method: POST | Content-Type: application/json");
+  divider();
+  subheading("Response Mapping");
+  fieldDesc("data.analysis.summary", "Call Summary");
+  fieldDesc("data.analysis.observations", "Array of Extracted Observations");
+  fieldDesc("data.analysis.transition_status", "Transition Status Details (HTML)");
+  fieldDesc("data.analysis.follow_up_areas", "Follow-Up Items (HTML)");
+  fieldDesc("data.analysis.qa_pairs", "Array of Q&A exchanges");
+  fieldDesc("data.analysis.barriers", "Array of barriers to care");
+  fieldDesc("data.analysis.call_qa", "Array of Call QA assessments");
+  fieldDesc("data.tokenUsage", "Token usage and cost metrics");
+
+  heading("GCP Deployment Setup");
+  subheading("Prerequisites");
+  bulletPoint("Enable APIs: Cloud Run, Cloud Build, Container Registry, Secret Manager, Vertex AI, BigQuery");
+  bulletPoint("Store GCP_SERVICE_ACCOUNT_KEY in Secret Manager");
+  bulletPoint("Grant Cloud Build roles: Cloud Run Admin, Service Account User, Secret Manager Secret Accessor");
+  bulletPoint("Connect GitHub repo to Cloud Build trigger on main branch");
+  divider();
+  subheading("Service Account Roles");
+  bulletPoint("Vertex AI User (for Gemini API)");
+  bulletPoint("BigQuery Data Editor (for observations, settings, analytics logging)");
+  bulletPoint("BigQuery Job User (for running queries)");
+  divider();
+  subheading("Environment Variables");
+  fieldDesc("GCP_PROJECT_ID", "Google Cloud project ID");
+  fieldDesc("GCP_SERVICE_ACCOUNT_KEY", "Full JSON service account key (via Secret Manager)");
+  fieldDesc("GWC_OBSERVATION_SUMMARIZATION_API_KEY", "API key for secured endpoint (via Secret Manager)");
+  fieldDesc("PORT", "Set automatically by Cloud Run (default 8080)");
+  divider();
+  subheading("BigQuery Tables");
+  bulletPoint("call_info — One row per API call (metadata, summary, tokens, cost, status)");
+  bulletPoint("call_observations — One row per observation per call");
+  bulletPoint("call_qa_pairs — One row per Q&A exchange per call");
+  bulletPoint("barriers — One row per identified barrier per call");
+  bulletPoint("call_qa_results — One row per Call QA assessment per call");
+  bulletPoint("batch_processing — Batch processing tracker");
+  bulletPoint("observations — Observation configuration");
+  bulletPoint("context_parameters — Context parameter definitions");
+  bulletPoint("call_qa_prompts — Call QA prompt configuration");
+  bulletPoint("known_context_details — Known context per care flow");
+  bulletPoint("settings — Key-value settings store");
+
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(7);
+    doc.setTextColor(...GRAY);
+    doc.text(
+      `Guideway Care — API Reference — Page ${i} of ${totalPages}`,
+      pageW / 2,
+      pageH - 7,
+      { align: "center" }
+    );
+  }
+
+  doc.save("guideway-care-api-reference.pdf");
+}
+
 export default function Reference() {
   const contentRef = useRef<HTMLDivElement>(null);
   return (
@@ -55,23 +421,33 @@ export default function Reference() {
             </h1>
             <p className="text-sm text-muted-foreground mt-1">Guideway Care Post-Call Analysis API</p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            data-testid="button-export-html"
-            className="export-hide"
-            onClick={() => {
-              if (contentRef.current) {
-                const btn = contentRef.current.querySelector('.export-hide') as HTMLElement;
-                if (btn) btn.style.display = 'none';
-                exportToHtml(contentRef.current);
-                if (btn) btn.style.display = '';
-              }
-            }}
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Export HTML
-          </Button>
+          <div className="flex gap-2 export-hide">
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid="button-export-pdf"
+              onClick={() => exportReferencePdf()}
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              Export PDF
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid="button-export-html"
+              onClick={() => {
+                if (contentRef.current) {
+                  const btns = contentRef.current.querySelector('.export-hide') as HTMLElement;
+                  if (btns) btns.style.display = 'none';
+                  exportToHtml(contentRef.current);
+                  if (btns) btns.style.display = '';
+                }
+              }}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Export HTML
+            </Button>
+          </div>
         </div>
 
         <Card className="border-border/60 shadow-sm mb-6">
