@@ -561,7 +561,7 @@ export default function CallHistory() {
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
-  const { data: calls, isLoading } = useQuery<CallInfo[]>({
+  const { data: calls, isLoading, isFetching, refetch } = useQuery<CallInfo[]>({
     queryKey: ["/api/calls"],
     queryFn: async () => {
       const res = await fetch("/api/calls");
@@ -584,11 +584,12 @@ export default function CallHistory() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/calls"] })}
+          disabled={isFetching}
+          onClick={() => refetch()}
           data-testid="button-refresh-calls"
         >
-          <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-          Refresh
+          <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${isFetching ? "animate-spin" : ""}`} />
+          {isFetching ? "Refreshing..." : "Refresh"}
         </Button>
       </div>
 
