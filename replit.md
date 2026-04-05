@@ -75,6 +75,8 @@ Returns service connectivity status.
 - Dataset: `call_information`
 - Table: `call_info` — One row per API call (call_id, care_flow_id, processed_datetime, source_type, source_id, processed_at, processing_time_ms, prompt_version, prompt_version_date, context_values JSON, transcript_length, summary, follow_up_areas, transition_status, prompt_tokens, completion_tokens, total_tokens, estimated_cost, status, error_message)
 - Table: `call_observations` — One row per observation per call (call_id, observation_name, observation_display_name, observation_domain, observation_value_type, observation_value, observation_detail, observation_evidence, observation_confidence)
+- Table: `call_qa_pairs` — One row per Q&A exchange per call (call_id, sequence_number, question, answer, asked_by, answered_by, observation_name, observation_display_name, category)
+- Table: `call_barriers` — One row per identified barrier per call (call_id, barrier, context, category, severity, observation_name, observation_display_name, evidence)
 - Table: `observations` — Observation configuration (id, name, display_name, domain, display_order, value_type, value, is_active, prompt_guidance)
 - Table: `context_parameters` — Context parameter definitions (id, name, display_name, description, data_type, is_required, is_active, display_order)
 - **IMPORTANT**: `call_info` and `call_observations` tables are LIVE PRODUCTION tables. NEVER drop, delete, or recreate them unless explicitly instructed by the user. Code only creates them if they don't exist.

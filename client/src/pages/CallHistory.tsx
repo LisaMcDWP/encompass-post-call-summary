@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Phone, Clock, Coins, ChevronRight, X, FileText, Activity, ListChecks, ClipboardList, AlertCircle, MessageSquare } from "lucide-react";
+import { Loader2, Phone, Clock, Coins, ChevronRight, X, FileText, Activity, ListChecks, ClipboardList, AlertCircle, MessageSquare, ShieldAlert } from "lucide-react";
 
 interface CallInfo {
   call_id: string;
@@ -52,10 +52,22 @@ interface QAPair {
   category: string | null;
 }
 
+interface CallBarrier {
+  call_id: string;
+  barrier: string;
+  context: string | null;
+  category: string | null;
+  severity: string | null;
+  observation_name: string | null;
+  observation_display_name: string | null;
+  evidence: string | null;
+}
+
 interface CallDetail {
   callInfo: CallInfo;
   observations: CallObservation[];
   qaPairs: QAPair[];
+  barriers: CallBarrier[];
 }
 
 function formatDate(dateStr: string | null): string {
@@ -104,6 +116,7 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
   const info = data.callInfo;
   const obs = data.observations;
   const qaPairs = data.qaPairs || [];
+  const barriers = data.barriers || [];
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center" onClick={onClose}>
@@ -372,6 +385,65 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
                           </p>
                         </div>
                       </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {barriers.length > 0 && (
+            <Card className="border-border/60 bg-card shadow-sm" data-testid="detail-barriers">
+              <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
+                <CardTitle className="text-base flex items-center gap-2 text-secondary">
+                  <ShieldAlert className="h-4 w-4 text-red-500" />
+                  Barriers to Care
+                  <Badge variant="outline" className="text-xs ml-2">{barriers.length} identified</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="space-y-3">
+                  {barriers.map((b, i) => (
+                    <div
+                      key={`barrier-${i}`}
+                      className="p-3 rounded-lg border border-border/50 bg-muted/20"
+                      data-testid={`detail-barrier-${i}`}
+                    >
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        {b.severity && (
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] px-1.5 py-0 font-semibold ${
+                              b.severity === "high"
+                                ? "bg-red-50 text-red-700 border-red-200"
+                                : b.severity === "medium"
+                                ? "bg-yellow-50 text-yellow-700 border-yellow-200"
+                                : "bg-blue-50 text-blue-700 border-blue-200"
+                            }`}
+                          >
+                            {b.severity}
+                          </Badge>
+                        )}
+                        {b.category && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                            {b.category}
+                          </Badge>
+                        )}
+                        {b.observation_display_name && (
+                          <Badge className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border border-primary/20">
+                            {b.observation_display_name}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-sm font-medium text-foreground mb-1">{b.barrier}</p>
+                      {b.context && (
+                        <p className="text-sm text-muted-foreground leading-relaxed mb-2">{b.context}</p>
+                      )}
+                      {b.evidence && (
+                        <div className="mt-2 pl-3 border-l-2 border-primary/30">
+                          <p className="text-xs italic text-muted-foreground/80">"{b.evidence}"</p>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

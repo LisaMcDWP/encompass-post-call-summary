@@ -213,6 +213,17 @@ export default function ApiReference() {
           "observation_display_name": "Overall Feeling",
           "category": "General Health"
         }
+      ],
+      "barriers": [
+        {
+          "barrier": "Transportation to follow-up appointment",
+          "context": "Patient mentioned they do not have a ride to their follow-up appointment next week and are unsure how to get there.",
+          "category": "Transportation",
+          "severity": "high",
+          "observation_name": "follow_up_appointment",
+          "observation_display_name": "Follow-Up Appointment",
+          "evidence": "I don't have a way to get to my appointment next Tuesday."
+        }
       ]
     },
     "tokenUsage": {
@@ -249,6 +260,10 @@ export default function ApiReference() {
                 <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
                   <p className="text-primary font-mono text-sm">analysis.qa_pairs[]</p>
                   <p className="text-muted-foreground text-sm mt-1">Array of every question and answer exchange from the transcript, in chronological order. Each entry contains: <code className="text-primary">question</code>, <code className="text-primary">answer</code>, <code className="text-primary">asked_by</code> (care_guide/patient/caregiver), <code className="text-primary">answered_by</code>, <code className="text-primary">observation_name</code> (matched observation key or null), <code className="text-primary">observation_display_name</code> (matched label or null), and <code className="text-primary">category</code> (e.g. Medication, Pain, Greeting). Includes all exchanges — not just those matching configured observations.</p>
+                </div>
+                <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
+                  <p className="text-primary font-mono text-sm">analysis.barriers[]</p>
+                  <p className="text-muted-foreground text-sm mt-1">Array of barriers to care identified from the conversation. Each entry contains: <code className="text-primary">barrier</code> (short description), <code className="text-primary">context</code> (full details and circumstances), <code className="text-primary">category</code> (e.g. Transportation, Financial, Medication Access, Social Support, Health Literacy, Emotional/Mental Health, Physical Limitation, Insurance/Coverage), <code className="text-primary">severity</code> (high/medium/low), <code className="text-primary">observation_name</code> and <code className="text-primary">observation_display_name</code> (linked observation or null), and <code className="text-primary">evidence</code> (direct transcript quote). Returns empty array if no barriers identified.</p>
                 </div>
                 <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
                   <p className="text-primary font-mono text-sm">tokenUsage</p>

@@ -199,6 +199,17 @@ export default function Reference() {
           "observation_display_name": "Medication Adherence",
           "category": "Medication"
         }
+      ],
+      "barriers": [
+        {
+          "barrier": "Transportation to follow-up appointment",
+          "context": "Patient mentioned they do not have a ride to their follow-up appointment next week.",
+          "category": "Transportation",
+          "severity": "high",
+          "observation_name": "follow_up_appointment",
+          "observation_display_name": "Follow-Up Appointment",
+          "evidence": "I don't have a way to get to my appointment next Tuesday."
+        }
       ]
     },
     "tokenUsage": {
@@ -236,6 +247,10 @@ export default function Reference() {
                 <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
                   <p className="text-primary font-mono text-sm">qa_pairs</p>
                   <p className="text-muted-foreground text-sm mt-1">Array of every question and answer exchange from the transcript, in chronological order. Each entry contains: <code className="text-primary">question</code> (the question asked), <code className="text-primary">answer</code> (the response given), <code className="text-primary">asked_by</code> (care_guide, patient, or caregiver), <code className="text-primary">answered_by</code> (patient, caregiver, or care_guide), <code className="text-primary">observation_name</code> (matched observation key or null), <code className="text-primary">observation_display_name</code> (matched observation label or null), and <code className="text-primary">category</code> (descriptive label like Medication, Pain, Greeting, etc.). Includes all exchanges — not just those matching configured observations.</p>
+                </div>
+                <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
+                  <p className="text-primary font-mono text-sm">barriers</p>
+                  <p className="text-muted-foreground text-sm mt-1">Array of barriers to care identified from the conversation. Each entry contains: <code className="text-primary">barrier</code> (short description), <code className="text-primary">context</code> (full details about the barrier — circumstances, background, and impact on care), <code className="text-primary">category</code> (e.g. Transportation, Financial, Medication Access, Social Support, Health Literacy, Language, Housing, Caregiver Burden, Emotional/Mental Health, Physical Limitation, Insurance/Coverage), <code className="text-primary">severity</code> (high/medium/low based on impact on patient care), <code className="text-primary">observation_name</code> and <code className="text-primary">observation_display_name</code> (linked observation or null), and <code className="text-primary">evidence</code> (direct transcript quote). Returns empty array if no barriers identified.</p>
                 </div>
               </div>
             </div>
@@ -701,7 +716,7 @@ export default function Reference() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <p className="text-muted-foreground">Search historical Bland AI calls, load them into a batch, and process them through the same Gemini extraction pipeline used by the live API. Results are written to <code className="text-primary">call_info</code>, <code className="text-primary">call_observations</code>, and <code className="text-primary">call_qa_pairs</code>.</p>
+            <p className="text-muted-foreground">Search historical Bland AI calls, load them into a batch, and process them through the same Gemini extraction pipeline used by the live API. Results are written to <code className="text-primary">call_info</code>, <code className="text-primary">call_observations</code>, <code className="text-primary">call_qa_pairs</code>, and <code className="text-primary">call_barriers</code>.</p>
 
             <div className="bg-primary/5 border border-primary/20 p-4 rounded-lg">
               <p className="text-primary font-semibold text-sm mb-2">How Batch Processing Works</p>
@@ -709,7 +724,7 @@ export default function Reference() {
                 <li><strong>Search</strong> — Query Bland.calls in BigQuery using filters (date range, answered_by, duration, tags, processing status). The "Not Yet Processed" filter cross-references <code className="text-primary">call_info.source_id</code> to exclude calls already processed.</li>
                 <li><strong>Select</strong> — Choose individual calls or select all from the results. Each call shows its ID, date, duration, answered_by, transcript preview, and tags.</li>
                 <li><strong>Load to Batch</strong> — Selected calls are inserted into <code className="text-primary">call_information.batch_processing</code> via DML INSERT (not streaming API). Each row includes bland_call_id, transcript, care_flow_id, and status=pending.</li>
-                <li><strong>Process</strong> — Click "Process Batch" to run N pending items through Gemini. Each item: builds the prompt from current observation config → calls Gemini → writes call_info + call_observations + call_qa_pairs → updates batch status to completed or failed.</li>
+                <li><strong>Process</strong> — Click "Process Batch" to run N pending items through Gemini. Each item: builds the prompt from current observation config → calls Gemini → writes call_info + call_observations + call_qa_pairs + call_barriers → updates batch status to completed or failed.</li>
                 <li><strong>Review</strong> — Processed calls appear in Call History. Click any call to see the full detail panel including summary, observations, Q&A pairs, follow-up areas, and transition status.</li>
               </ol>
             </div>
@@ -768,7 +783,7 @@ export default function Reference() {
                 <p className="text-foreground"><span className="text-primary font-semibold">limit</span> <span className="text-muted-foreground">(body, optional)</span> — Max items to process in this run (default 5).</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">batchId</span> <span className="text-muted-foreground">(body, optional)</span> — Target a specific batch. Defaults to newest batch.</p>
               </div>
-              <p className="text-muted-foreground text-sm">For each pending item: builds prompt from current observation config → calls Gemini → writes to call_info, call_observations, and call_qa_pairs → updates batch item status to completed or failed.</p>
+              <p className="text-muted-foreground text-sm">For each pending item: builds prompt from current observation config → calls Gemini → writes to call_info, call_observations, call_qa_pairs, and call_barriers → updates batch item status to completed or failed.</p>
             </div>
 
             <Separator />
@@ -828,6 +843,7 @@ export default function Reference() {
                 <p className="text-foreground"><span className="text-primary font-semibold">call_information.call_info</span> — Output: one row per processed call (cross-referenced by source_id for processed filter)</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">call_information.call_observations</span> — Output: one row per observation per call</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">call_information.call_qa_pairs</span> — Output: one row per Q&A exchange per call</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">call_information.call_barriers</span> — Output: one row per identified barrier per call (barrier, context, category, severity, evidence, observation linkage)</p>
               </div>
             </div>
           </CardContent>
@@ -880,6 +896,7 @@ export default function Reference() {
                 <p><code className="text-primary">data.analysis.transition_status</code> → Transition Status Details (HTML)</p>
                 <p><code className="text-primary">data.analysis.follow_up_areas</code> → Follow-Up Items (HTML)</p>
                 <p><code className="text-primary">data.analysis.qa_pairs</code> → Array of Q&A exchanges (question, answer, category, observation linkage)</p>
+                <p><code className="text-primary">data.analysis.barriers</code> → Array of barriers to care (barrier, context, category, severity, evidence, observation linkage)</p>
                 <p><code className="text-primary">data.tokenUsage</code> → Token usage and cost metrics</p>
               </div>
             </div>
@@ -932,6 +949,7 @@ export default function Reference() {
                   <li><code className="text-primary">call_info</code> — One row per API call (metadata, summary, tokens, cost, status)</li>
                   <li><code className="text-primary">call_observations</code> — One row per observation per call (name, value, detail, evidence, confidence)</li>
                   <li><code className="text-primary">call_qa_pairs</code> — One row per Q&A exchange per call (sequence_number, question, answer, asked_by, answered_by, observation_name, category)</li>
+                  <li><code className="text-primary">call_barriers</code> — One row per identified barrier per call (barrier, context, category, severity, observation_name, observation_display_name, evidence)</li>
                   <li><code className="text-primary">batch_processing</code> — Batch processing tracker (bland_call_id, transcript, care_flow_id, status, batch_id, error_message, processed_call_id)</li>
                   <li><code className="text-primary">observations</code> — Observation configuration (id, name, display_name, domain, value_type, value, is_active, prompt_guidance)</li>
                   <li><code className="text-primary">context_parameters</code> — Context parameter definitions (id, name, display_name, data_type, enum_values, is_active)</li>

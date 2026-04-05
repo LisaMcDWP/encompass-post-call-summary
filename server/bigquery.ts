@@ -1,10 +1,11 @@
 import { BigQuery } from "@google-cloud/bigquery";
-import type { ObservationResult, QAPair } from "./gemini";
+import type { ObservationResult, QAPair, Barrier } from "./gemini";
 
 const DATASET_ID = "call_information";
 const CALL_INFO_TABLE_ID = "call_info";
 const OBSERVATIONS_TABLE_ID = "call_observations";
 const QA_PAIRS_TABLE_ID = "call_qa_pairs";
+const BARRIERS_TABLE_ID = "call_barriers";
 const BATCH_PROCESSING_TABLE_ID = "batch_processing";
 
 export interface CallInfoRow {
@@ -357,6 +358,91 @@ export async function insertCallQAPairs(callId: string, qaPairs: QAPair[]): Prom
     if (error.errors) {
       console.error("BigQuery errors:", JSON.stringify(error.errors));
     }
+  }
+}
+
+export async function ensureCallBarriersTable(): Promise<void> {
+  try {
+    const client = getBigQueryClient();
+    const dataset = client.dataset(DATASET_ID);
+    const table = dataset.table(BARRIERS_TABLE_ID);
+    const [exists] = await table.exists();
+    if (!exists) {
+      await dataset.createTable(BARRIERS_TABLE_ID, {
+        schema: {
+          fields: [
+            { name: "call_id", type: "STRING", mode: "REQUIRED" },
+            { name: "barrier", type: "STRING", mode: "REQUIRED" },
+            { name: "context", type: "STRING", mode: "NULLABLE" },
+            { name: "category", type: "STRING", mode: "NULLABLE" },
+            { name: "severity", type: "STRING", mode: "NULLABLE" },
+            { name: "observation_name", type: "STRING", mode: "NULLABLE" },
+            { name: "observation_display_name", type: "STRING", mode: "NULLABLE" },
+            { name: "evidence", type: "STRING", mode: "NULLABLE" },
+          ],
+        },
+      });
+      console.log("Created call_barriers table");
+    }
+  } catch (error: any) {
+    console.error("Failed to ensure call_barriers table:", error.message);
+  }
+}
+
+export async function insertCallBarriers(callId: string, barriers: Barrier[]): Promise<void> {
+  try {
+    if (!barriers || barriers.length === 0) {
+      return;
+    }
+
+    const validBarriers = barriers.filter(
+      (b) => b.barrier && typeof b.barrier === "string" && b.barrier.trim().length > 0
+    );
+
+    if (validBarriers.length === 0) {
+      console.log(`No valid barriers to insert for call ${callId} (${barriers.length} dropped due to missing barrier description)`);
+      return;
+    }
+
+    if (validBarriers.length < barriers.length) {
+      console.warn(`Dropped ${barriers.length - validBarriers.length} invalid barriers for call ${callId}`);
+    }
+
+    const client = getBigQueryClient();
+    const rows = validBarriers.map((b) => ({
+      call_id: callId,
+      barrier: b.barrier,
+      context: b.context || null,
+      category: b.category || null,
+      severity: b.severity || null,
+      observation_name: b.observation_name || null,
+      observation_display_name: b.observation_display_name || null,
+      evidence: b.evidence || null,
+    }));
+
+    await client
+      .dataset(DATASET_ID)
+      .table(BARRIERS_TABLE_ID)
+      .insert(rows);
+
+    console.log(`BigQuery call_barriers inserted: ${rows.length} rows for call ${callId}`);
+  } catch (error: any) {
+    console.error("Failed to insert call_barriers:", error.message);
+    if (error.errors) {
+      console.error("BigQuery errors:", JSON.stringify(error.errors));
+    }
+  }
+}
+
+export async function getCallBarriers(callId: string): Promise<any[]> {
+  try {
+    const client = getBigQueryClient();
+    const query = `SELECT * FROM \`${client.projectId}.${DATASET_ID}.${BARRIERS_TABLE_ID}\` WHERE call_id = @callId`;
+    const [rows] = await client.query({ query, params: { callId } });
+    return rows;
+  } catch (error: any) {
+    console.error("Failed to get call barriers:", error.message);
+    return [];
   }
 }
 
@@ -890,7 +976,7 @@ export async function resetFailedBatchItems(batchId?: string): Promise<number> {
   return Number((response as any)?.dmlStats?.updatedRowCount || (response as any)?.numDmlAffectedRows || 0);
 }
 
-export async function getCallDetail(callId: string): Promise<{ callInfo: any | null; observations: CallObservationRow[] }> {
+export async function getCallDetail(callId: string): Promise<{ callInfo: any | null; observations: CallObservationRow[]; qaPairs: any[]; barriers: any[] }> {
   const client = getBigQueryClient();
 
   const infoQuery = `
@@ -947,5 +1033,18 @@ export async function getCallDetail(callId: string): Promise<{ callInfo: any | n
     console.warn("Q&A pairs table not found or query failed:", err.message);
   }
 
-  return { callInfo, observations: obsRows as CallObservationRow[], qaPairs: qaRows };
+  let barrierRows: any[] = [];
+  try {
+    const barriersQuery = `
+      SELECT *
+      FROM \`${client.projectId}.${DATASET_ID}.${BARRIERS_TABLE_ID}\`
+      WHERE call_id = @callId
+    `;
+    const [bRows] = await client.query({ query: barriersQuery, params: { callId }, location: "US" });
+    barrierRows = bRows;
+  } catch (err: any) {
+    console.warn("Barriers table not found or query failed:", err.message);
+  }
+
+  return { callInfo, observations: obsRows as CallObservationRow[], qaPairs: qaRows, barriers: barrierRows };
 }
