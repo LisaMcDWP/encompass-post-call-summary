@@ -171,6 +171,20 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
             </div>
           </div>
 
+          {info.context_values && Object.keys(info.context_values).length > 0 && (
+            <div>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 block mb-1.5">Known Context</span>
+              <div className="bg-blue-50/50 rounded-lg border border-blue-200/40 p-3 flex flex-wrap gap-2" data-testid="detail-known-context">
+                {Object.entries(info.context_values).map(([k, v]) => (
+                  <div key={k} className="bg-white rounded-md border border-border/50 px-3 py-1.5 text-xs">
+                    <span className="text-muted-foreground">{k.replace(/_/g, " ")}</span>
+                    <span className="font-semibold text-foreground ml-1.5">{v || "—"}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div>
             <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 block mb-1.5">API Request Fields</span>
             <div className="bg-muted/20 rounded-lg border border-border/40 divide-y divide-border/30">
