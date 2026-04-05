@@ -169,7 +169,7 @@ function SparkLine({ values, color = "#0098db", height = 32 }: { values: number[
 }
 
 export default function CallStats() {
-  const [range, setRange] = useState<DateRange>("30");
+  const [range, setRange] = useState<DateRange>("7");
   const [filterClient, setFilterClient] = useState<string>("all");
   const [filterPathway, setFilterPathway] = useState<string>("all");
 
