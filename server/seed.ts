@@ -152,17 +152,26 @@ const DEFAULT_OBSERVATIONS: {
   },
 ];
 
-export async function seedObservations() {
+export async function seedObservations(clientPathwayId?: number) {
   try {
-    const existing = await storage.getObservations();
+    let cpId = clientPathwayId;
+    if (!cpId) {
+      const allCPs = await storage.getClientPathways();
+      if (allCPs.length === 0) {
+        console.log("No client/pathway configured. Skipping observation seeding.");
+        return;
+      }
+      cpId = allCPs[0].id;
+    }
+    const existing = await storage.getObservations(cpId);
     if (existing.length > 0) {
-      console.log(`Observations already seeded (${existing.length} found).`);
+      console.log(`Observations already seeded (${existing.length} found) for client/pathway ${cpId}.`);
       return;
     }
 
-    console.log("Seeding default observations to BigQuery...");
+    console.log(`Seeding default observations to BigQuery for client/pathway ${cpId}...`);
     for (const obs of DEFAULT_OBSERVATIONS) {
-      await storage.createObservation(obs);
+      await storage.createObservation(cpId, { ...obs, isActive: true, promptGuidance: "", description: "" });
     }
     console.log(`Seeded ${DEFAULT_OBSERVATIONS.length} default observations.`);
   } catch (error: any) {

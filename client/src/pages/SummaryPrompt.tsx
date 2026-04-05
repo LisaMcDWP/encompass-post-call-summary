@@ -5,8 +5,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Save, RotateCcw, FileText, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useClientPathway } from "@/contexts/ClientPathwayContext";
 
 export default function SummaryPrompt() {
+  const { selectedCPId } = useClientPathway();
   const [instruction, setInstruction] = useState("");
   const [defaultInstruction, setDefaultInstruction] = useState("");
   const [isCustom, setIsCustom] = useState(false);
@@ -15,14 +17,19 @@ export default function SummaryPrompt() {
   const [resetting, setResetting] = useState(false);
   const { toast } = useToast();
 
+  const cpParam = selectedCPId ? `clientPathwayId=${selectedCPId}` : "";
+
   useEffect(() => {
-    fetchInstruction();
-  }, []);
+    if (selectedCPId) {
+      fetchInstruction();
+    }
+  }, [selectedCPId]);
 
   async function fetchInstruction() {
+    if (!selectedCPId) return;
     try {
       setLoading(true);
-      const res = await fetch("/api/settings/summary-instruction");
+      const res = await fetch(`/api/settings/summary-instruction?${cpParam}`);
       if (!res.ok) throw new Error("Failed to load");
       const data = await res.json();
       setInstruction(data.instruction);
@@ -38,10 +45,10 @@ export default function SummaryPrompt() {
   async function handleSave() {
     try {
       setSaving(true);
-      const res = await fetch("/api/settings/summary-instruction", {
+      const res = await fetch(`/api/settings/summary-instruction?${cpParam}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ instruction }),
+        body: JSON.stringify({ instruction, clientPathwayId: selectedCPId }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -59,7 +66,7 @@ export default function SummaryPrompt() {
   async function handleReset() {
     try {
       setResetting(true);
-      const res = await fetch("/api/settings/summary-instruction", { method: "DELETE" });
+      const res = await fetch(`/api/settings/summary-instruction?${cpParam}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to reset");
       const data = await res.json();
       setInstruction(data.instruction);
@@ -73,6 +80,17 @@ export default function SummaryPrompt() {
   }
 
   const hasChanges = instruction !== defaultInstruction || isCustom;
+
+  if (!selectedCPId) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <p className="text-sm text-muted-foreground">No client & pathway selected.</p>
+          <p className="text-xs text-muted-foreground/70 mt-1">Create or select one from the sidebar to configure the summary prompt.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

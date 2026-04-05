@@ -11,18 +11,40 @@ A full-stack application that provides a Gemini-powered transcript analysis API.
 - **Logging**: Google BigQuery via `@google-cloud/bigquery`
 - **Auth**: GCP Service Account (shared between Gemini and BigQuery)
 
+## Multi-Tenant Architecture (Client & Pathway)
+**Client & Pathway is the parent entity.** Each client/pathway configuration has its own independent set of:
+- Observations
+- Context Parameters
+- Settings (summary instruction, observations guidance, barriers guidance, prompt versioning)
+- Call QA Prompts
+
+### How it works:
+- `client_pathway` table stores multiple entries (id, client, pathway, description)
+- Config tables (`observations`, `context_parameters`, `settings`, `call_qa_prompts`) all have a `client_pathway_id` column
+- All config API endpoints require `clientPathwayId` as a query param (GET/DELETE) or body param (POST/PUT)
+- Frontend uses React Context (`ClientPathwayContext`) with a sidebar dropdown selector
+- Setup pages automatically load/save config for the selected client/pathway
+- API processing (`/api/analyze`) resolves `client_pathway_id` from request body, then tries client/pathway string match, then falls back to first available CP
+- Batch processing uses the first configured client/pathway (or `clientPathwayId` query param)
+
 ## Key Files
-- `server/routes.ts` — API endpoints (`POST /api/analyze`, `GET /api/prompt`, `GET /api/health`, observations CRUD)
+- `server/routes.ts` — API endpoints (`POST /api/analyze`, `GET /api/prompt`, `GET /api/health`, observations CRUD, client-pathways CRUD)
 - `server/gemini.ts` — Vertex AI Gemini integration with dynamic prompt builder from observations
 - `server/bigquery.ts` — BigQuery logging: `call_info` (one row per call) + `call_observations` (one row per observation)
-- `server/storage.ts` — BigQueryStorage class with observation CRUD operations (dataset: `call_information`, table: `observations`)
-- `server/seed.ts` — Seeds default 11 observation topics to BigQuery on first run
-- `shared/schema.ts` — Type definitions (Observation, InsertObservation, EnumValue) + users table
+- `server/storage.ts` — BigQueryStorage class with all CRUD operations scoped by `clientPathwayId`
+- `server/seed.ts` — Seeds default 11 observation topics to BigQuery on first run (for a given clientPathwayId)
+- `server/batch-job.ts` — Standalone batch processing job for Cloud Run
+- `shared/schema.ts` — Type definitions (Observation, InsertObservation, EnumValue, ClientPathway types)
+- `client/src/contexts/ClientPathwayContext.tsx` — React Context for client/pathway selection state
+- `client/src/pages/ClientPathway.tsx` — Multi-entry client/pathway management UI (list, create, edit, delete)
 - `client/src/pages/Home.tsx` — Test interface for the API
-- `client/src/pages/Observations.tsx` — Observation definitions management UI
-- `client/src/pages/ContextParameters.tsx` — Context parameter management UI
-- `client/src/pages/CallQA.tsx` — Call QA prompt management UI
-- `client/src/pages/ClientPathway.tsx` — Client & Pathway configuration UI
+- `client/src/pages/Observations.tsx` — Observation definitions management UI (scoped by selected CP)
+- `client/src/pages/ContextParameters.tsx` — Context parameter management UI (scoped by selected CP)
+- `client/src/pages/SummaryPrompt.tsx` — Summary prompt instruction UI (scoped by selected CP)
+- `client/src/pages/BarriersPrompt.tsx` — Barriers prompt guidance UI (scoped by selected CP)
+- `client/src/pages/CallQA.tsx` — Call QA prompt management UI (scoped by selected CP)
+- `client/src/pages/GeneratedPrompt.tsx` — Read-only generated prompt viewer (scoped by selected CP)
+- `client/src/components/AppLayout.tsx` — Layout with sidebar navigation and CP selector dropdown
 - `client/src/pages/Reference.tsx` — API reference documentation
 - `Dockerfile` — Multi-stage Docker build for GCP Cloud Run
 - `cloudbuild.yaml` — GCP Cloud Build CI/CD pipeline
@@ -30,7 +52,7 @@ A full-stack application that provides a Gemini-powered transcript analysis API.
 
 ## Context Parameters
 Configurable input parameters stored in BigQuery (`call_information.context_parameters`) that API callers can pass alongside the transcript to give Gemini known context (e.g. patient name, diagnosis, facility).
-- `id` (INT64), `name` (key), `display_name`, `description`, `data_type` (string/number/date/boolean/enum), `enum_values`, `is_active`, `display_order`, `awell_data_point_key`, `awell_mapping_type`, `awell_patient_profile_field`
+- `id` (INT64), `name` (key), `display_name`, `description`, `data_type` (string/number/date/boolean/enum), `enum_values`, `is_active`, `display_order`, `awell_data_point_key`, `awell_mapping_type`, `awell_patient_profile_field`, `client_pathway_id`
 - Active parameters are injected into the Gemini prompt as a "KNOWN CONTEXT" section
 - Values passed via `context` object in POST /api/analyze request body
 - **Awell Mapping Types**: Each parameter can be mapped to an Awell source for batch processing auto-population:
@@ -41,7 +63,7 @@ Configurable input parameters stored in BigQuery (`call_information.context_para
 
 ## Observations Model
 Observations are dynamic topics stored in BigQuery (`call_information.observations`) used in the Gemini analysis prompt. Each observation has:
-- `id` (INT64), `name` (key), `display_name`, `domain`, `display_order`, `value_type`, `value` (JSON string), `is_active`, `prompt_guidance` (optional per-observation Gemini instruction)
+- `id` (INT64), `name` (key), `display_name`, `domain`, `display_order`, `value_type`, `value` (JSON string), `is_active`, `prompt_guidance`, `client_pathway_id`
 - For enum types, `value` contains a JSON-serialized array of `{label, color}` objects
 - Colors: GREEN, YELLOW, RED, BLUE, GRAY — mapped to inline HTML styles
 - The prompt is dynamically built from active observations at analysis time
@@ -60,34 +82,47 @@ Requires `X-API-Key` header matching `GWC_OBSERVATION_SUMMARIZATION_API_KEY` env
 ### POST /api/analyze (Legacy — Open)
 Identical functionality, no authentication. Kept for backward compatibility with existing Awell integration.
 
-Input: `{ care_flow_id?, processed_datetime?, source_type?, source_id?, source_text }`
-Output: `{ status, data: { care_flow_id, processed_datetime, source_type, source_id, processedAt, processingTimeMs, analysis: { summary, observations: [{ name, display_name, domain, value_type, value, detail, evidence, confidence }], transition_status, follow_up_areas }, tokenUsage: { promptTokens, completionTokens, totalTokens, estimatedCost } } }`
+Input: `{ care_flow_id?, processed_datetime?, source_type?, source_id?, source_text, client_pathway_id?, client?, pathway?, context? }`
+Output: `{ status, data: { ... analysis, tokenUsage } }`
 
-### GET /api/prompt
-Returns the dynamically generated prompt template: `{ prompt: string }`
+### Client/Pathway CRUD
+- `GET /api/client-pathways` — List all client/pathway configurations
+- `POST /api/client-pathways` — Create client/pathway
+- `GET /api/client-pathways/:id` — Get single client/pathway
+- `PUT /api/client-pathways/:id` — Update client/pathway
+- `DELETE /api/client-pathways/:id` — Delete client/pathway
+
+### Config Endpoints (all require `clientPathwayId`)
+- `GET /api/observations?clientPathwayId=N` — List observations for CP
+- `POST /api/observations` — Create observation (body includes clientPathwayId)
+- `GET /api/context-parameters?clientPathwayId=N` — List context parameters for CP
+- `POST /api/context-parameters` — Create context parameter (body includes clientPathwayId)
+- `GET /api/call-qa-prompts?clientPathwayId=N` — List call QA prompts for CP
+- `POST /api/call-qa-prompts` — Create call QA prompt (body includes clientPathwayId)
+- `GET /api/settings/summary-instruction?clientPathwayId=N` — Get summary instruction
+- `PUT /api/settings/summary-instruction` — Set summary instruction
+- `GET /api/settings/barriers-guidance?clientPathwayId=N` — Get barriers guidance
+- `PUT /api/settings/barriers-guidance` — Set barriers guidance
+- `GET /api/settings/observations-guidance?clientPathwayId=N` — Get observations guidance
+- `PUT /api/settings/observations-guidance` — Set observations guidance
+- `GET /api/prompt?clientPathwayId=N` — Get generated prompt
 
 ### GET /api/health
 Returns service connectivity status.
 
-### Observations CRUD
-- `GET /api/observations` — List all observations
-- `POST /api/observations` — Create observation
-- `PUT /api/observations/:id` — Update observation
-- `DELETE /api/observations/:id` — Delete observation
-- `PUT /api/observations/reorder` — Reorder observations
-
 ## BigQuery Schema
 - Dataset: `call_information`
-- Table: `client_pathway` — Client and pathway configuration (id, client, pathway)
+- Table: `client_pathway` — Client and pathway configurations (id, client, pathway, description)
 - Table: `call_info` — One row per API call (call_id, care_flow_id, processed_datetime, source_type, source_id, processed_at, processing_time_ms, prompt_version, prompt_version_date, context_values JSON, transcript_length, summary, follow_up_areas, transition_status, prompt_tokens, completion_tokens, total_tokens, estimated_cost, status, error_message, request_body, client, pathway)
-- Table: `call_observations` — One row per observation per call (call_id, observation_name, observation_display_name, observation_domain, observation_value_type, observation_value, observation_detail, observation_evidence, observation_confidence)
-- Table: `call_qa_pairs` — One row per Q&A exchange per call (call_id, sequence_number, question, answer, asked_by, answered_by, observation_name, observation_display_name, category)
-- Table: `barriers` — One row per identified barrier per call (call_id, barrier, context, category, severity, observation_name, observation_display_name, evidence)
-- Table: `call_qa_results` — One row per Call QA assessment per call (call_id, name, display_name, value, detail, evidence)
-- Table: `call_qa_prompts` — Call QA prompt configuration (id, name, display_name, prompt_text, response_type, response_options, is_active, display_order)
-- Table: `known_context_details` — Known context per care flow (care_flow_id, parameter_name, display_name, value_type, value, active_ind, created_at, updated_at). Multiple rows per care_flow_id.
-- Table: `observations` — Observation configuration (id, name, display_name, domain, display_order, value_type, value, is_active, prompt_guidance)
-- Table: `context_parameters` — Context parameter definitions (id, name, display_name, description, data_type, is_required, is_active, display_order)
+- Table: `call_observations` — One row per observation per call
+- Table: `call_qa_pairs` — One row per Q&A exchange per call
+- Table: `barriers` — One row per identified barrier per call
+- Table: `call_qa_results` — One row per Call QA assessment per call
+- Table: `call_qa_prompts` — Call QA prompt configuration (id, name, display_name, prompt_text, response_type, response_options, is_active, display_order, client_pathway_id)
+- Table: `known_context_details` — Known context per care flow
+- Table: `observations` — Observation configuration (id, name, display_name, domain, display_order, value_type, value, is_active, prompt_guidance, description, client_pathway_id)
+- Table: `context_parameters` — Context parameter definitions (id, name, display_name, description, data_type, is_required, is_active, display_order, client_pathway_id)
+- Table: `settings` — Key/value settings per CP (key, value, client_pathway_id)
 - **IMPORTANT**: `call_info` and `call_observations` tables are LIVE PRODUCTION tables. NEVER drop, delete, or recreate them unless explicitly instructed by the user. Code only creates them if they don't exist.
 
 ## Batch Processing

@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, GripVertical, X, Save, Loader2, Info, GripVertical as Grip, ArrowUp, ArrowDown, Sparkles, Send, MessageCircle } from "lucide-react";
+import { useClientPathway } from "@/contexts/ClientPathwayContext";
 
 interface EnumValue {
   label: string;
@@ -52,6 +53,7 @@ const emptyForm = {
 };
 
 export default function Observations() {
+  const { selectedCPId } = useClientPathway();
   const [observations, setObservations] = useState<Observation[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -68,15 +70,19 @@ export default function Observations() {
   const [aiHistory, setAiHistory] = useState<{ role: string; text: string }[]>([]);
   const { toast } = useToast();
 
+  const cpParam = selectedCPId ? `clientPathwayId=${selectedCPId}` : "";
+
   const fetchObservations = async () => {
-    const res = await fetch("/api/observations");
+    if (!selectedCPId) return;
+    const res = await fetch(`/api/observations?${cpParam}`);
     const data = await res.json();
     setObservations(data);
   };
 
   const fetchGuidance = async () => {
+    if (!selectedCPId) return;
     try {
-      const res = await fetch("/api/settings/observations-guidance");
+      const res = await fetch(`/api/settings/observations-guidance?${cpParam}`);
       if (res.ok) {
         const data = await res.json();
         setGeneralGuidance(data.guidance || "");
@@ -88,10 +94,10 @@ export default function Observations() {
   const saveGuidance = async () => {
     try {
       setGuidanceSaving(true);
-      const res = await fetch("/api/settings/observations-guidance", {
+      const res = await fetch(`/api/settings/observations-guidance?${cpParam}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ guidance: generalGuidance }),
+        body: JSON.stringify({ guidance: generalGuidance, clientPathwayId: selectedCPId }),
       });
       if (res.ok) {
         setSavedGuidance(generalGuidance.trim());
@@ -121,7 +127,7 @@ export default function Observations() {
       const res = await fetch("/api/observations/ai-suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMsg, history: aiHistory }),
+        body: JSON.stringify({ message: userMsg, history: aiHistory, clientPathwayId: selectedCPId }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -137,9 +143,15 @@ export default function Observations() {
   };
 
   useEffect(() => {
-    fetchObservations();
-    fetchGuidance();
-  }, []);
+    if (selectedCPId) {
+      fetchObservations();
+      fetchGuidance();
+    } else {
+      setObservations([]);
+      setGeneralGuidance("");
+      setSavedGuidance("");
+    }
+  }, [selectedCPId]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -190,10 +202,10 @@ export default function Observations() {
       });
     } else {
       const maxOrder = observations.length > 0 ? Math.max(...observations.map(o => o.displayOrder)) : -1;
-      res = await fetch("/api/observations", {
+      res = await fetch(`/api/observations?${cpParam}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payload, displayOrder: maxOrder + 1 }),
+        body: JSON.stringify({ ...payload, displayOrder: maxOrder + 1, clientPathwayId: selectedCPId }),
       });
     }
 
@@ -285,6 +297,17 @@ export default function Observations() {
     acc[obs.domain].push(obs);
     return acc;
   }, {} as Record<string, Observation[]>);
+
+  if (!selectedCPId) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <p className="text-sm text-muted-foreground">No client & pathway selected.</p>
+          <p className="text-xs text-muted-foreground/70 mt-1">Create or select one from the sidebar to configure observations.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full bg-background text-foreground font-sans">

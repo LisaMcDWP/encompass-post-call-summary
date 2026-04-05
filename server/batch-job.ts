@@ -4,27 +4,27 @@ import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION } f
 import { storage } from "./storage";
 import { createHash } from "crypto";
 
-async function getPromptWithVersion() {
-  const activeObs = await storage.getActiveObservations();
-  const summaryInstruction = await storage.getSetting("summary_instruction");
-  const observationsGuidance = await storage.getSetting("observations_prompt_guidance");
-  const barriersGuidance = await storage.getSetting("barriers_prompt_guidance");
-  const contextParams = await storage.getActiveContextParameters();
-  const callQAPrompts = await storage.getActiveCallQAPrompts();
+async function getPromptWithVersion(clientPathwayId: number) {
+  const activeObs = await storage.getActiveObservations(clientPathwayId);
+  const summaryInstruction = await storage.getSetting(clientPathwayId, "summary_instruction");
+  const observationsGuidance = await storage.getSetting(clientPathwayId, "observations_prompt_guidance");
+  const barriersGuidance = await storage.getSetting(clientPathwayId, "barriers_prompt_guidance");
+  const contextParams = await storage.getActiveContextParameters(clientPathwayId);
+  const callQAPrompts = await storage.getActiveCallQAPrompts(clientPathwayId);
   const prompt = buildPromptTemplate(activeObs, summaryInstruction || undefined, contextParams, observationsGuidance || undefined, barriersGuidance || undefined, callQAPrompts);
 
   const hash = createHash("sha256").update(prompt).digest("hex");
-  const storedHash = await storage.getSetting("prompt_hash");
+  const storedHash = await storage.getSetting(clientPathwayId, "prompt_hash");
 
-  let version = parseInt(await storage.getSetting("prompt_version") || "0", 10);
-  let versionDate = await storage.getSetting("prompt_version_date") || new Date().toISOString();
+  let version = parseInt(await storage.getSetting(clientPathwayId, "prompt_version") || "0", 10);
+  let versionDate = await storage.getSetting(clientPathwayId, "prompt_version_date") || new Date().toISOString();
 
   if (hash !== storedHash) {
     version = version + 1;
     versionDate = new Date().toISOString();
-    await storage.setSetting("prompt_hash", hash);
-    await storage.setSetting("prompt_version", String(version));
-    await storage.setSetting("prompt_version_date", versionDate);
+    await storage.setSetting(clientPathwayId, "prompt_hash", hash);
+    await storage.setSetting(clientPathwayId, "prompt_version", String(version));
+    await storage.setSetting(clientPathwayId, "prompt_version_date", versionDate);
   }
 
   return { prompt, promptVersion: version, promptVersionDate: versionDate };
@@ -40,9 +40,16 @@ async function processBatch() {
   await ensureCallQATable();
   await initializeCallTables();
 
-  const batchCP = await storage.getClientPathway();
+  const allCPs = await storage.getClientPathways();
+  if (allCPs.length === 0) {
+    console.log("No client/pathway configurations found. Job complete.");
+    return;
+  }
+  const batchCP = allCPs[0];
+  const cpId = batchCP.id;
+
   const pendingItems = await getPendingBatchItems(BATCH_SIZE);
-  console.log(`Found ${pendingItems.length} pending items to process.`);
+  console.log(`Found ${pendingItems.length} pending items to process (using client/pathway: ${batchCP.client}/${batchCP.pathway}).`);
 
   if (pendingItems.length === 0) {
     console.log("No pending items. Job complete.");
@@ -61,12 +68,12 @@ async function processBatch() {
     }
 
     try {
-      const activeObs = await storage.getActiveObservations();
-      const summaryInstruction = await storage.getSetting("summary_instruction");
-      const observationsGuidance = await storage.getSetting("observations_prompt_guidance");
-      const barriersGuidance = await storage.getSetting("barriers_prompt_guidance");
-      const contextParams = await storage.getActiveContextParameters();
-      const { promptVersion, promptVersionDate } = await getPromptWithVersion();
+      const activeObs = await storage.getActiveObservations(cpId);
+      const summaryInstruction = await storage.getSetting(cpId, "summary_instruction");
+      const observationsGuidance = await storage.getSetting(cpId, "observations_prompt_guidance");
+      const barriersGuidance = await storage.getSetting(cpId, "barriers_prompt_guidance");
+      const contextParams = await storage.getActiveContextParameters(cpId);
+      const { promptVersion, promptVersionDate } = await getPromptWithVersion(cpId);
 
       const sourceId = `batch_${item.bland_call_id}`;
       const startTime = Date.now();
@@ -76,7 +83,7 @@ async function processBatch() {
         try { batchContext = JSON.parse(item.context_values); } catch {}
       }
 
-      const batchCallQAPrompts = await storage.getActiveCallQAPrompts();
+      const batchCallQAPrompts = await storage.getActiveCallQAPrompts(cpId);
       const { analysis, tokenUsage } = await analyzeTranscript(
         sourceId,
         item.transcript.trim(),
@@ -113,8 +120,8 @@ async function processBatch() {
         estimatedCost: tokenUsage.estimatedCost,
         status: "success",
         requestBody: JSON.stringify({ batch_id: item.batch_id, bland_call_id: item.bland_call_id }),
-        client: batchCP?.client || null,
-        pathway: batchCP?.pathway || null,
+        client: batchCP.client || null,
+        pathway: batchCP.pathway || null,
       });
 
       await insertCallObservations(sourceId, analysis.observations);

@@ -9,6 +9,7 @@ import { Loader2, Play, CheckCircle2, AlertCircle, FileText, ListChecks, Clipboa
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useClientPathway } from "@/contexts/ClientPathwayContext";
 
 const SAMPLE_TRANSCRIPTS: Record<string, { label: string; transcript: string; context?: Record<string, string> }> = {
   struggling: {
@@ -209,9 +210,11 @@ export default function Home() {
   const [contextParams, setContextParams] = useState<ContextParam[]>([]);
   const [contextValues, setContextValues] = useState<Record<string, string>>({});
   const { toast } = useToast();
+  const { selectedCPId } = useClientPathway();
 
   useEffect(() => {
-    fetch("/api/prompt")
+    if (!selectedCPId) return;
+    fetch(`/api/prompt?clientPathwayId=${selectedCPId}`)
       .then((r) => r.json())
       .then((data) => {
         setDefaultPrompt(data.prompt);
@@ -219,14 +222,14 @@ export default function Home() {
       })
       .catch(() => {});
 
-    fetch("/api/context-parameters")
+    fetch(`/api/context-parameters?clientPathwayId=${selectedCPId}`)
       .then((r) => r.json())
       .then((data) => {
-        const active = data.filter((p: ContextParam) => p.isActive);
+        const active = (Array.isArray(data) ? data : []).filter((p: ContextParam) => p.isActive);
         setContextParams(active);
       })
       .catch(() => {});
-  }, []);
+  }, [selectedCPId]);
 
   const handleTestApi = async () => {
     if (!sourceText.trim()) {
@@ -251,6 +254,7 @@ export default function Home() {
           source_type: sourceType.trim() || undefined,
           source_id: sourceId.trim() || undefined,
           source_text: sourceText.trim(),
+          client_pathway_id: selectedCPId || undefined,
           context: Object.keys(contextValues).length > 0
             ? Object.fromEntries(
                 Object.entries(contextValues).filter(([_, v]) => v.trim() !== "")

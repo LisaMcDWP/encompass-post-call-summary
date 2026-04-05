@@ -32,6 +32,8 @@ export interface CallInfoRow {
   status: string;
   error_message: string | null;
   request_body: string | null;
+  client: string | null;
+  pathway: string | null;
 }
 
 export interface CallObservationRow {
@@ -1227,8 +1229,9 @@ export async function updateBatchItemStatus(
     WHERE bland_call_id = @blandCallId AND status IN (${fromStatus})
   `;
 
-  const [, , metadata] = await client.query({ query, params, types, location: "US" });
-  const affected = Number((metadata as any)?.dmlStats?.updatedRowCount || (metadata as any)?.numDmlAffectedRows || 0);
+  const result = await client.query({ query, params, types, location: "US" });
+  const metadata = (result as any)[2] || {};
+  const affected = Number(metadata?.dmlStats?.updatedRowCount || metadata?.numDmlAffectedRows || 0);
   return affected;
 }
 
@@ -1298,8 +1301,9 @@ export async function resetFailedBatchItems(batchId?: string): Promise<number> {
   const params: Record<string, any> = {};
   if (batchId) params.batchId = batchId;
 
-  const [, , response] = await client.query({ query, params, location: "US" });
-  return Number((response as any)?.dmlStats?.updatedRowCount || (response as any)?.numDmlAffectedRows || 0);
+  const retryResult = await client.query({ query, params, location: "US" });
+  const retryMeta = (retryResult as any)[2] || {};
+  return Number(retryMeta?.dmlStats?.updatedRowCount || retryMeta?.numDmlAffectedRows || 0);
 }
 
 export async function getCallDetail(callId: string): Promise<{ callInfo: any | null; observations: CallObservationRow[]; qaPairs: any[]; barriers: any[]; callQA: any[] }> {

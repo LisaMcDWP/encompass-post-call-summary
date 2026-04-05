@@ -49,6 +49,7 @@ export interface ContextParameter {
 export const insertClientPathwaySchema = z.object({
   client: z.string().min(1),
   pathway: z.string().min(1),
+  description: z.string().optional().default(""),
 });
 
 export type InsertClientPathway = z.infer<typeof insertClientPathwaySchema>;
@@ -57,6 +58,7 @@ export interface ClientPathway {
   id: number;
   client: string;
   pathway: string;
+  description: string;
 }
 
 export const enumValueSchema = z.object({
@@ -69,13 +71,13 @@ export type EnumValue = z.infer<typeof enumValueSchema>;
 export const insertObservationSchema = z.object({
   name: z.string(),
   displayName: z.string(),
-  description: z.string().optional().default(""),
+  description: z.string().default(""),
   domain: z.string().default("general"),
   displayOrder: z.number().int().default(0),
   valueType: z.string().default("enum"),
   value: z.array(enumValueSchema).default([]),
   isActive: z.boolean().default(true),
-  promptGuidance: z.string().optional().default(""),
+  promptGuidance: z.string().default(""),
 });
 
 export type InsertObservation = z.infer<typeof insertObservationSchema>;

@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Loader2, Plus, Save, Trash2, ClipboardCheck, Info, X, Edit2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useClientPathway } from "@/contexts/ClientPathwayContext";
 
 interface CallQAPrompt {
   id: number;
@@ -22,12 +23,15 @@ interface CallQAPrompt {
 }
 
 export default function CallQA() {
+  const { selectedCPId } = useClientPathway();
   const [prompts, setPrompts] = useState<CallQAPrompt[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
+
+  const cpParam = selectedCPId ? `clientPathwayId=${selectedCPId}` : "";
 
   const [form, setForm] = useState({
     name: "",
@@ -40,12 +44,19 @@ export default function CallQA() {
   });
   const [newOption, setNewOption] = useState("");
 
-  useEffect(() => { fetchPrompts(); }, []);
+  useEffect(() => {
+    if (selectedCPId) {
+      fetchPrompts();
+    } else {
+      setPrompts([]);
+    }
+  }, [selectedCPId]);
 
   async function fetchPrompts() {
+    if (!selectedCPId) return;
     try {
       setLoading(true);
-      const res = await fetch("/api/call-qa-prompts");
+      const res = await fetch(`/api/call-qa-prompts?${cpParam}`);
       if (!res.ok) throw new Error("Failed to load");
       setPrompts(await res.json());
     } catch (err: any) {
@@ -94,12 +105,12 @@ export default function CallQA() {
     }
     try {
       setSaving(true);
-      const url = editingId ? `/api/call-qa-prompts/${editingId}` : "/api/call-qa-prompts";
+      const url = editingId ? `/api/call-qa-prompts/${editingId}` : `/api/call-qa-prompts?${cpParam}`;
       const method = editingId ? "PUT" : "POST";
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, clientPathwayId: selectedCPId }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -138,6 +149,17 @@ export default function CallQA() {
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     }
+  }
+
+  if (!selectedCPId) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <p className="text-sm text-muted-foreground">No client & pathway selected.</p>
+          <p className="text-xs text-muted-foreground/70 mt-1">Create or select one from the sidebar to configure Call QA prompts.</p>
+        </div>
+      </div>
+    );
   }
 
   if (loading) {

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
+import { useClientPathway } from "@/contexts/ClientPathwayContext";
 import {
   Loader2, Package, Play, RotateCcw, CheckCircle2, XCircle, Clock, Search,
   ChevronDown, ChevronRight, AlertCircle, Zap, RefreshCw
@@ -83,6 +84,7 @@ function StatusBadge({ status }: { status: string }) {
 export default function BatchProcessing() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { selectedCPId } = useClientPathway();
 
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -166,6 +168,7 @@ export default function BatchProcessing() {
           batchLabel: batchLabel || null,
           useKnownContext,
           careFlowIds,
+          clientPathwayId: selectedCPId || undefined,
         }),
       });
       if (!res.ok) throw new Error("Failed to load calls");
@@ -191,6 +194,7 @@ export default function BatchProcessing() {
       const batches = summaryQuery.data?.batches;
       const newest = batches?.sort((a: any, b: any) => b.batch_id.localeCompare(a.batch_id))?.[0]?.batch_id;
       if (newest) params.set("batchId", newest);
+      if (selectedCPId) params.set("clientPathwayId", String(selectedCPId));
       const res = await fetch(`/api/batch/process?${params}`, { method: "POST" });
       if (!res.ok) {
         const err = await res.json();

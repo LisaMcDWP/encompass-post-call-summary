@@ -5,8 +5,10 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Eye, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useClientPathway } from "@/contexts/ClientPathwayContext";
 
 export default function GeneratedPrompt() {
+  const { selectedCPId } = useClientPathway();
   const [prompt, setPrompt] = useState("");
   const [promptVersion, setPromptVersion] = useState<number>(0);
   const [promptVersionDate, setPromptVersionDate] = useState("");
@@ -15,26 +17,27 @@ export default function GeneratedPrompt() {
   const [location] = useLocation();
   const { toast } = useToast();
 
+  const cpParam = selectedCPId ? `clientPathwayId=${selectedCPId}` : "";
+
   useEffect(() => {
-    fetchPrompt();
-  }, [location]);
+    if (selectedCPId) fetchPrompt();
+  }, [location, selectedCPId]);
 
   useEffect(() => {
     const onVisible = () => {
-      if (document.visibilityState === "visible") fetchPrompt();
+      if (document.visibilityState === "visible" && selectedCPId) fetchPrompt();
     };
     document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("focus", () => fetchPrompt());
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("focus", () => fetchPrompt());
     };
-  }, []);
+  }, [selectedCPId]);
 
   async function fetchPrompt() {
+    if (!selectedCPId) return;
     try {
       setLoading(true);
-      const res = await fetch("/api/prompt");
+      const res = await fetch(`/api/prompt?${cpParam}`);
       if (!res.ok) throw new Error("Failed to load prompt");
       const data = await res.json();
       setPrompt(data.prompt);
@@ -57,6 +60,17 @@ export default function GeneratedPrompt() {
       toast({ title: "Error", description: "Failed to copy.", variant: "destructive" });
     }
   };
+
+  if (!selectedCPId) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <p className="text-sm text-muted-foreground">No client & pathway selected.</p>
+          <p className="text-xs text-muted-foreground/70 mt-1">Create or select one from the sidebar to view the generated prompt.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

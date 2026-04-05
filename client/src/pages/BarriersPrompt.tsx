@@ -5,10 +5,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Save, RotateCcw, ShieldAlert, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useClientPathway } from "@/contexts/ClientPathwayContext";
 
 const DEFAULT_BARRIERS_GUIDANCE = `Extract ANY barriers to care, recovery, or well-being that the patient or caregiver mentions or that can be identified from the conversation. A barrier is anything that may prevent or hinder the patient from following their care plan, recovering properly, or accessing needed services. Include barriers that are explicitly stated AND those clearly implied. Common barrier categories include: Transportation, Financial, Medication Access, Social Support, Health Literacy, Language, Housing, Caregiver Burden, Emotional/Mental Health, Physical Limitation, Insurance/Coverage. Assign a severity based on potential impact on patient outcomes.`;
 
 export default function BarriersPrompt() {
+  const { selectedCPId } = useClientPathway();
   const [guidance, setGuidance] = useState("");
   const [isCustom, setIsCustom] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -16,14 +18,19 @@ export default function BarriersPrompt() {
   const [resetting, setResetting] = useState(false);
   const { toast } = useToast();
 
+  const cpParam = selectedCPId ? `clientPathwayId=${selectedCPId}` : "";
+
   useEffect(() => {
-    fetchGuidance();
-  }, []);
+    if (selectedCPId) {
+      fetchGuidance();
+    }
+  }, [selectedCPId]);
 
   async function fetchGuidance() {
+    if (!selectedCPId) return;
     try {
       setLoading(true);
-      const res = await fetch("/api/settings/barriers-guidance");
+      const res = await fetch(`/api/settings/barriers-guidance?${cpParam}`);
       if (!res.ok) throw new Error("Failed to load");
       const data = await res.json();
       setGuidance(data.guidance || DEFAULT_BARRIERS_GUIDANCE);
@@ -38,10 +45,10 @@ export default function BarriersPrompt() {
   async function handleSave() {
     try {
       setSaving(true);
-      const res = await fetch("/api/settings/barriers-guidance", {
+      const res = await fetch(`/api/settings/barriers-guidance?${cpParam}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ guidance }),
+        body: JSON.stringify({ guidance, clientPathwayId: selectedCPId }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -59,7 +66,7 @@ export default function BarriersPrompt() {
   async function handleReset() {
     try {
       setResetting(true);
-      const res = await fetch("/api/settings/barriers-guidance", { method: "DELETE" });
+      const res = await fetch(`/api/settings/barriers-guidance?${cpParam}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to reset");
       setGuidance(DEFAULT_BARRIERS_GUIDANCE);
       setIsCustom(false);
@@ -69,6 +76,17 @@ export default function BarriersPrompt() {
     } finally {
       setResetting(false);
     }
+  }
+
+  if (!selectedCPId) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <p className="text-sm text-muted-foreground">No client & pathway selected.</p>
+          <p className="text-xs text-muted-foreground/70 mt-1">Create or select one from the sidebar to configure barriers prompt.</p>
+        </div>
+      </div>
+    );
   }
 
   if (loading) {

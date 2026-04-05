@@ -243,31 +243,38 @@ function rowToObservation(row: any): Observation {
 }
 
 export interface IStorage {
-  getObservations(): Promise<Observation[]>;
-  getActiveObservations(): Promise<Observation[]>;
-  getObservation(id: number): Promise<Observation | undefined>;
-  createObservation(observation: InsertObservation): Promise<Observation>;
-  updateObservation(id: number, observation: Partial<InsertObservation>): Promise<Observation | undefined>;
-  deleteObservation(id: number): Promise<boolean>;
-  reorderObservations(orderedIds: number[]): Promise<void>;
-  getSetting(key: string): Promise<string | null>;
-  setSetting(key: string, value: string): Promise<void>;
-  getContextParameters(): Promise<ContextParameter[]>;
-  getActiveContextParameters(): Promise<ContextParameter[]>;
-  getContextParameter(id: number): Promise<ContextParameter | undefined>;
-  createContextParameter(param: InsertContextParameter): Promise<ContextParameter>;
-  updateContextParameter(id: number, param: Partial<InsertContextParameter>): Promise<ContextParameter | undefined>;
-  deleteContextParameter(id: number): Promise<boolean>;
-  reorderContextParameters(orderedIds: number[]): Promise<void>;
-  getCallQAPrompts(): Promise<CallQAPrompt[]>;
-  getActiveCallQAPrompts(): Promise<CallQAPrompt[]>;
-  getCallQAPrompt(id: number): Promise<CallQAPrompt | undefined>;
-  createCallQAPrompt(qa: InsertCallQAPrompt): Promise<CallQAPrompt>;
-  updateCallQAPrompt(id: number, qa: Partial<InsertCallQAPrompt>): Promise<CallQAPrompt | undefined>;
-  deleteCallQAPrompt(id: number): Promise<boolean>;
-  getClientPathway(): Promise<ClientPathway | null>;
-  setClientPathway(data: InsertClientPathway): Promise<ClientPathway>;
-  deleteClientPathway(): Promise<boolean>;
+  getClientPathways(): Promise<ClientPathway[]>;
+  getClientPathway(id: number): Promise<ClientPathway | null>;
+  createClientPathway(data: InsertClientPathway): Promise<ClientPathway>;
+  updateClientPathway(id: number, data: Partial<InsertClientPathway>): Promise<ClientPathway | null>;
+  deleteClientPathway(id: number): Promise<boolean>;
+
+  getObservations(clientPathwayId: number): Promise<Observation[]>;
+  getActiveObservations(clientPathwayId: number): Promise<Observation[]>;
+  getObservation(id: number, clientPathwayId?: number): Promise<Observation | undefined>;
+  createObservation(clientPathwayId: number, observation: InsertObservation): Promise<Observation>;
+  updateObservation(id: number, observation: Partial<InsertObservation>, clientPathwayId?: number): Promise<Observation | undefined>;
+  deleteObservation(id: number, clientPathwayId?: number): Promise<boolean>;
+  reorderObservations(orderedIds: number[], clientPathwayId?: number): Promise<void>;
+
+  getSetting(clientPathwayId: number, key: string): Promise<string | null>;
+  setSetting(clientPathwayId: number, key: string, value: string): Promise<void>;
+  deleteSetting(clientPathwayId: number, key: string): Promise<void>;
+
+  getContextParameters(clientPathwayId: number): Promise<ContextParameter[]>;
+  getActiveContextParameters(clientPathwayId: number): Promise<ContextParameter[]>;
+  getContextParameter(id: number, clientPathwayId?: number): Promise<ContextParameter | undefined>;
+  createContextParameter(clientPathwayId: number, param: InsertContextParameter): Promise<ContextParameter>;
+  updateContextParameter(id: number, param: Partial<InsertContextParameter>, clientPathwayId?: number): Promise<ContextParameter | undefined>;
+  deleteContextParameter(id: number, clientPathwayId?: number): Promise<boolean>;
+  reorderContextParameters(orderedIds: number[], clientPathwayId?: number): Promise<void>;
+
+  getCallQAPrompts(clientPathwayId: number): Promise<CallQAPrompt[]>;
+  getActiveCallQAPrompts(clientPathwayId: number): Promise<CallQAPrompt[]>;
+  getCallQAPrompt(id: number, clientPathwayId?: number): Promise<CallQAPrompt | undefined>;
+  createCallQAPrompt(clientPathwayId: number, qa: InsertCallQAPrompt): Promise<CallQAPrompt>;
+  updateCallQAPrompt(id: number, qa: Partial<InsertCallQAPrompt>, clientPathwayId?: number): Promise<CallQAPrompt | undefined>;
+  deleteCallQAPrompt(id: number, clientPathwayId?: number): Promise<boolean>;
 }
 
 export class BigQueryStorage implements IStorage {
@@ -275,46 +282,125 @@ export class BigQueryStorage implements IStorage {
     const projectId = process.env.GCP_PROJECT_ID;
     return `\`${projectId}.${DATASET_ID}.${TABLE_ID}\``;
   }
-
-  async getObservations(): Promise<Observation[]> {
-    await ensureObservationsTable();
-    const client = getBigQueryClient();
-    const table = this.getProjectTable();
-    const [rows] = await client.query({ query: `SELECT * FROM ${table} ORDER BY display_order ASC` });
-    return rows.map(rowToObservation);
+  private getContextParamsTable(): string {
+    const projectId = process.env.GCP_PROJECT_ID;
+    return `\`${projectId}.${DATASET_ID}.${CONTEXT_PARAMS_TABLE_ID}\``;
+  }
+  private getCallQAPromptsTable(): string {
+    const projectId = process.env.GCP_PROJECT_ID;
+    return `\`${projectId}.${DATASET_ID}.${CALL_QA_PROMPTS_TABLE_ID}\``;
+  }
+  private getSettingsTable(): string {
+    const projectId = process.env.GCP_PROJECT_ID;
+    return `\`${projectId}.${DATASET_ID}.${SETTINGS_TABLE_ID}\``;
+  }
+  private getClientPathwayTable(): string {
+    const projectId = process.env.GCP_PROJECT_ID;
+    return `\`${projectId}.${DATASET_ID}.${CLIENT_PATHWAY_TABLE_ID}\``;
   }
 
-  async getActiveObservations(): Promise<Observation[]> {
-    await ensureObservationsTable();
+  private async getNextIdForTable(tableRef: string): Promise<number> {
     const client = getBigQueryClient();
-    const table = this.getProjectTable();
-    const [rows] = await client.query({ query: `SELECT * FROM ${table} WHERE is_active = TRUE ORDER BY display_order ASC` });
-    return rows.map(rowToObservation);
-  }
-
-  async getObservation(id: number): Promise<Observation | undefined> {
-    await ensureObservationsTable();
-    const client = getBigQueryClient();
-    const table = this.getProjectTable();
-    const [rows] = await client.query({
-      query: `SELECT * FROM ${table} WHERE id = @id`,
-      params: { id },
-    });
-    return rows.length > 0 ? rowToObservation(rows[0]) : undefined;
-  }
-
-  private async getNextId(): Promise<number> {
-    const client = getBigQueryClient();
-    const table = this.getProjectTable();
-    const [rows] = await client.query({ query: `SELECT COALESCE(MAX(id), 0) + 1 as next_id FROM ${table}` });
+    const [rows] = await client.query({ query: `SELECT COALESCE(MAX(id), 0) + 1 as next_id FROM ${tableRef}` });
     return rows[0].next_id;
   }
 
-  async createObservation(observation: InsertObservation): Promise<Observation> {
+  async getClientPathways(): Promise<ClientPathway[]> {
+    await ensureClientPathwayTable();
+    const client = getBigQueryClient();
+    const table = this.getClientPathwayTable();
+    const [rows] = await client.query({ query: `SELECT * FROM ${table} ORDER BY id ASC` });
+    return rows.map((row: any) => ({ id: row.id, client: row.client, pathway: row.pathway, description: row.description || "" }));
+  }
+
+  async getClientPathway(id: number): Promise<ClientPathway | null> {
+    await ensureClientPathwayTable();
+    const client = getBigQueryClient();
+    const table = this.getClientPathwayTable();
+    const [rows] = await client.query({ query: `SELECT * FROM ${table} WHERE id = @id`, params: { id } });
+    if (rows.length === 0) return null;
+    const row = rows[0] as any;
+    return { id: row.id, client: row.client, pathway: row.pathway, description: row.description || "" };
+  }
+
+  async createClientPathway(data: InsertClientPathway): Promise<ClientPathway> {
+    await ensureClientPathwayTable();
+    const client = getBigQueryClient();
+    const table = this.getClientPathwayTable();
+    const id = await this.getNextIdForTable(table);
+    const row = { id, client: data.client, pathway: data.pathway, description: data.description || "" };
+    await client.query({
+      query: `INSERT INTO ${table} (id, client, pathway, description) VALUES (@id, @client, @pathway, @description)`,
+      params: row,
+    });
+    return row;
+  }
+
+  async updateClientPathway(id: number, data: Partial<InsertClientPathway>): Promise<ClientPathway | null> {
+    await ensureClientPathwayTable();
+    const existing = await this.getClientPathway(id);
+    if (!existing) return null;
+    const client = getBigQueryClient();
+    const table = this.getClientPathwayTable();
+    const setClauses: string[] = [];
+    const params: Record<string, any> = { id };
+    if (data.client !== undefined) { setClauses.push("client = @client"); params.client = data.client; }
+    if (data.pathway !== undefined) { setClauses.push("pathway = @pathway"); params.pathway = data.pathway; }
+    if (data.description !== undefined) { setClauses.push("description = @description"); params.description = data.description; }
+    if (setClauses.length > 0) {
+      await client.query({ query: `UPDATE ${table} SET ${setClauses.join(", ")} WHERE id = @id`, params });
+    }
+    return this.getClientPathway(id);
+  }
+
+  async deleteClientPathway(id: number): Promise<boolean> {
+    await ensureClientPathwayTable();
+    await migrateConfigTablesForClientPathway();
+    const client = getBigQueryClient();
+    const table = this.getClientPathwayTable();
+    await client.query({ query: `DELETE FROM ${table} WHERE id = @id`, params: { id } });
+    await client.query({ query: `DELETE FROM ${this.getProjectTable()} WHERE client_pathway_id = @id`, params: { id } });
+    await client.query({ query: `DELETE FROM ${this.getContextParamsTable()} WHERE client_pathway_id = @id`, params: { id } });
+    await client.query({ query: `DELETE FROM ${this.getCallQAPromptsTable()} WHERE client_pathway_id = @id`, params: { id } });
+    await client.query({ query: `DELETE FROM ${this.getSettingsTable()} WHERE client_pathway_id = @id`, params: { id } });
+    return true;
+  }
+
+  async getObservations(clientPathwayId: number): Promise<Observation[]> {
+    await ensureObservationsTable();
+    await migrateConfigTablesForClientPathway();
+    const client = getBigQueryClient();
+    const table = this.getProjectTable();
+    const [rows] = await client.query({ query: `SELECT * FROM ${table} WHERE client_pathway_id = @cpId ORDER BY display_order ASC`, params: { cpId: clientPathwayId } });
+    return rows.map(rowToObservation);
+  }
+
+  async getActiveObservations(clientPathwayId: number): Promise<Observation[]> {
+    await ensureObservationsTable();
+    await migrateConfigTablesForClientPathway();
+    const client = getBigQueryClient();
+    const table = this.getProjectTable();
+    const [rows] = await client.query({ query: `SELECT * FROM ${table} WHERE client_pathway_id = @cpId AND is_active = TRUE ORDER BY display_order ASC`, params: { cpId: clientPathwayId } });
+    return rows.map(rowToObservation);
+  }
+
+  async getObservation(id: number, clientPathwayId?: number): Promise<Observation | undefined> {
     await ensureObservationsTable();
     const client = getBigQueryClient();
     const table = this.getProjectTable();
-    const id = await this.getNextId();
+    const cpClause = clientPathwayId != null ? " AND client_pathway_id = @cpId" : "";
+    const params: Record<string, any> = { id };
+    if (clientPathwayId != null) params.cpId = clientPathwayId;
+    const [rows] = await client.query({ query: `SELECT * FROM ${table} WHERE id = @id${cpClause}`, params });
+    return rows.length > 0 ? rowToObservation(rows[0]) : undefined;
+  }
+
+  async createObservation(clientPathwayId: number, observation: InsertObservation): Promise<Observation> {
+    await ensureObservationsTable();
+    await migrateConfigTablesForClientPathway();
+    const client = getBigQueryClient();
+    const table = this.getProjectTable();
+    const id = await this.getNextIdForTable(table);
 
     const row = {
       id,
@@ -327,27 +413,26 @@ export class BigQueryStorage implements IStorage {
       value: JSON.stringify(observation.value || []),
       is_active: observation.isActive !== false,
       prompt_guidance: observation.promptGuidance || "",
+      client_pathway_id: clientPathwayId,
     };
 
     await client.query({
-      query: `INSERT INTO ${table} (id, name, display_name, description, domain, display_order, value_type, value, is_active, prompt_guidance) VALUES (@id, @name, @display_name, @description, @domain, @display_order, @value_type, @value, @is_active, @prompt_guidance)`,
+      query: `INSERT INTO ${table} (id, name, display_name, description, domain, display_order, value_type, value, is_active, prompt_guidance, client_pathway_id) VALUES (@id, @name, @display_name, @description, @domain, @display_order, @value_type, @value, @is_active, @prompt_guidance, @client_pathway_id)`,
       params: row,
     });
 
     return rowToObservation(row);
   }
 
-  async updateObservation(id: number, data: Partial<InsertObservation>): Promise<Observation | undefined> {
+  async updateObservation(id: number, data: Partial<InsertObservation>, clientPathwayId?: number): Promise<Observation | undefined> {
     await ensureObservationsTable();
     const client = getBigQueryClient();
     const table = this.getProjectTable();
-
-    const existing = await this.getObservation(id);
+    const existing = await this.getObservation(id, clientPathwayId);
     if (!existing) return undefined;
 
     const setClauses: string[] = [];
     const params: Record<string, any> = { id };
-
     if (data.name !== undefined) { setClauses.push("name = @name"); params.name = data.name; }
     if (data.displayName !== undefined) { setClauses.push("display_name = @displayName"); params.displayName = data.displayName; }
     if (data.description !== undefined) { setClauses.push("description = @description"); params.description = data.description; }
@@ -357,88 +442,72 @@ export class BigQueryStorage implements IStorage {
     if (data.value !== undefined) { setClauses.push("value = @value"); params.value = JSON.stringify(data.value); }
     if (data.isActive !== undefined) { setClauses.push("is_active = @isActive"); params.isActive = data.isActive; }
     if (data.promptGuidance !== undefined) { setClauses.push("prompt_guidance = @promptGuidance"); params.promptGuidance = data.promptGuidance; }
-
     if (setClauses.length === 0) return existing;
 
-    await client.query({
-      query: `UPDATE ${table} SET ${setClauses.join(", ")} WHERE id = @id`,
-      params,
-    });
-
+    await client.query({ query: `UPDATE ${table} SET ${setClauses.join(", ")} WHERE id = @id`, params });
     return this.getObservation(id);
   }
 
-  async deleteObservation(id: number): Promise<boolean> {
+  async deleteObservation(id: number, clientPathwayId?: number): Promise<boolean> {
     await ensureObservationsTable();
     const client = getBigQueryClient();
     const table = this.getProjectTable();
-
-    const existing = await this.getObservation(id);
+    const existing = await this.getObservation(id, clientPathwayId);
     if (!existing) return false;
-
-    await client.query({
-      query: `DELETE FROM ${table} WHERE id = @id`,
-      params: { id },
-    });
+    const cpClause = clientPathwayId != null ? " AND client_pathway_id = @cpId" : "";
+    const params: Record<string, any> = { id };
+    if (clientPathwayId != null) params.cpId = clientPathwayId;
+    await client.query({ query: `DELETE FROM ${table} WHERE id = @id${cpClause}`, params });
     return true;
   }
 
-  async reorderObservations(orderedIds: number[]): Promise<void> {
+  async reorderObservations(orderedIds: number[], clientPathwayId?: number): Promise<void> {
     await ensureObservationsTable();
     const client = getBigQueryClient();
     const table = this.getProjectTable();
-
+    const cpClause = clientPathwayId != null ? " AND client_pathway_id = @cpId" : "";
     for (let i = 0; i < orderedIds.length; i++) {
-      await client.query({
-        query: `UPDATE ${table} SET display_order = @order WHERE id = @id`,
-        params: { order: i, id: orderedIds[i] },
-      });
+      const params: Record<string, any> = { order: i, id: orderedIds[i] };
+      if (clientPathwayId != null) params.cpId = clientPathwayId;
+      await client.query({ query: `UPDATE ${table} SET display_order = @order WHERE id = @id${cpClause}`, params });
     }
   }
-  private getContextParamsTable(): string {
-    const projectId = process.env.GCP_PROJECT_ID;
-    return `\`${projectId}.${DATASET_ID}.${CONTEXT_PARAMS_TABLE_ID}\``;
-  }
 
-  async getContextParameters(): Promise<ContextParameter[]> {
+  async getContextParameters(clientPathwayId: number): Promise<ContextParameter[]> {
     await ensureContextParamsTable();
+    await migrateConfigTablesForClientPathway();
     const client = getBigQueryClient();
     const table = this.getContextParamsTable();
-    const [rows] = await client.query({ query: `SELECT * FROM ${table} ORDER BY display_order ASC` });
+    const [rows] = await client.query({ query: `SELECT * FROM ${table} WHERE client_pathway_id = @cpId ORDER BY display_order ASC`, params: { cpId: clientPathwayId } });
     return rows.map(rowToContextParameter);
   }
 
-  async getActiveContextParameters(): Promise<ContextParameter[]> {
+  async getActiveContextParameters(clientPathwayId: number): Promise<ContextParameter[]> {
     await ensureContextParamsTable();
+    await migrateConfigTablesForClientPathway();
     const client = getBigQueryClient();
     const table = this.getContextParamsTable();
-    const [rows] = await client.query({ query: `SELECT * FROM ${table} WHERE is_active = TRUE ORDER BY display_order ASC` });
+    const [rows] = await client.query({ query: `SELECT * FROM ${table} WHERE client_pathway_id = @cpId AND is_active = TRUE ORDER BY display_order ASC`, params: { cpId: clientPathwayId } });
     return rows.map(rowToContextParameter);
   }
 
-  async getContextParameter(id: number): Promise<ContextParameter | undefined> {
+  async getContextParameter(id: number, clientPathwayId?: number): Promise<ContextParameter | undefined> {
     await ensureContextParamsTable();
     const client = getBigQueryClient();
     const table = this.getContextParamsTable();
-    const [rows] = await client.query({
-      query: `SELECT * FROM ${table} WHERE id = @id`,
-      params: { id },
-    });
+    const cpClause = clientPathwayId != null ? " AND client_pathway_id = @cpId" : "";
+    const params: Record<string, any> = { id };
+    if (clientPathwayId != null) params.cpId = clientPathwayId;
+    const [rows] = await client.query({ query: `SELECT * FROM ${table} WHERE id = @id${cpClause}`, params });
     return rows.length > 0 ? rowToContextParameter(rows[0]) : undefined;
   }
 
-  private async getNextContextParamId(): Promise<number> {
-    const client = getBigQueryClient();
-    const table = this.getContextParamsTable();
-    const [rows] = await client.query({ query: `SELECT COALESCE(MAX(id), 0) + 1 as next_id FROM ${table}` });
-    return rows[0].next_id;
-  }
-
-  async createContextParameter(param: InsertContextParameter): Promise<ContextParameter> {
+  async createContextParameter(clientPathwayId: number, param: InsertContextParameter): Promise<ContextParameter> {
     await ensureContextParamsTable();
+    await migrateConfigTablesForClientPathway();
     const client = getBigQueryClient();
     const table = this.getContextParamsTable();
-    const id = await this.getNextContextParamId();
+    const id = await this.getNextIdForTable(table);
 
     const row = {
       id,
@@ -452,27 +521,26 @@ export class BigQueryStorage implements IStorage {
       awell_data_point_key: param.awellDataPointKey || "",
       awell_mapping_type: param.awellMappingType || "none",
       awell_patient_profile_field: param.awellPatientProfileField || "",
+      client_pathway_id: clientPathwayId,
     };
 
     await client.query({
-      query: `INSERT INTO ${table} (id, name, display_name, description, data_type, enum_values, is_active, display_order, awell_data_point_key, awell_mapping_type, awell_patient_profile_field) VALUES (@id, @name, @display_name, @description, @data_type, @enum_values, @is_active, @display_order, @awell_data_point_key, @awell_mapping_type, @awell_patient_profile_field)`,
+      query: `INSERT INTO ${table} (id, name, display_name, description, data_type, enum_values, is_active, display_order, awell_data_point_key, awell_mapping_type, awell_patient_profile_field, client_pathway_id) VALUES (@id, @name, @display_name, @description, @data_type, @enum_values, @is_active, @display_order, @awell_data_point_key, @awell_mapping_type, @awell_patient_profile_field, @client_pathway_id)`,
       params: row,
     });
 
     return rowToContextParameter(row);
   }
 
-  async updateContextParameter(id: number, data: Partial<InsertContextParameter>): Promise<ContextParameter | undefined> {
+  async updateContextParameter(id: number, data: Partial<InsertContextParameter>, clientPathwayId?: number): Promise<ContextParameter | undefined> {
     await ensureContextParamsTable();
     const client = getBigQueryClient();
     const table = this.getContextParamsTable();
-
-    const existing = await this.getContextParameter(id);
+    const existing = await this.getContextParameter(id, clientPathwayId);
     if (!existing) return undefined;
 
     const setClauses: string[] = [];
     const params: Record<string, any> = { id };
-
     if (data.name !== undefined) { setClauses.push("name = @name"); params.name = data.name; }
     if (data.displayName !== undefined) { setClauses.push("display_name = @displayName"); params.displayName = data.displayName; }
     if (data.description !== undefined) { setClauses.push("description = @description"); params.description = data.description; }
@@ -483,93 +551,76 @@ export class BigQueryStorage implements IStorage {
     if (data.awellDataPointKey !== undefined) { setClauses.push("awell_data_point_key = @awellDataPointKey"); params.awellDataPointKey = data.awellDataPointKey; }
     if (data.awellMappingType !== undefined) { setClauses.push("awell_mapping_type = @awellMappingType"); params.awellMappingType = data.awellMappingType; }
     if (data.awellPatientProfileField !== undefined) { setClauses.push("awell_patient_profile_field = @awellPatientProfileField"); params.awellPatientProfileField = data.awellPatientProfileField; }
-
     if (setClauses.length === 0) return existing;
 
-    await client.query({
-      query: `UPDATE ${table} SET ${setClauses.join(", ")} WHERE id = @id`,
-      params,
-    });
-
+    await client.query({ query: `UPDATE ${table} SET ${setClauses.join(", ")} WHERE id = @id`, params });
     return this.getContextParameter(id);
   }
 
-  async deleteContextParameter(id: number): Promise<boolean> {
+  async deleteContextParameter(id: number, clientPathwayId?: number): Promise<boolean> {
     await ensureContextParamsTable();
     const client = getBigQueryClient();
     const table = this.getContextParamsTable();
-
-    const existing = await this.getContextParameter(id);
+    const existing = await this.getContextParameter(id, clientPathwayId);
     if (!existing) return false;
-
-    await client.query({
-      query: `DELETE FROM ${table} WHERE id = @id`,
-      params: { id },
-    });
+    const cpClause = clientPathwayId != null ? " AND client_pathway_id = @cpId" : "";
+    const params: Record<string, any> = { id };
+    if (clientPathwayId != null) params.cpId = clientPathwayId;
+    await client.query({ query: `DELETE FROM ${table} WHERE id = @id${cpClause}`, params });
     return true;
   }
 
-  async reorderContextParameters(orderedIds: number[]): Promise<void> {
+  async reorderContextParameters(orderedIds: number[], clientPathwayId?: number): Promise<void> {
     await ensureContextParamsTable();
     const client = getBigQueryClient();
     const table = this.getContextParamsTable();
-
+    const cpClause = clientPathwayId != null ? " AND client_pathway_id = @cpId" : "";
     for (let i = 0; i < orderedIds.length; i++) {
-      await client.query({
-        query: `UPDATE ${table} SET display_order = @order WHERE id = @id`,
-        params: { order: i, id: orderedIds[i] },
-      });
+      const params: Record<string, any> = { order: i, id: orderedIds[i] };
+      if (clientPathwayId != null) params.cpId = clientPathwayId;
+      await client.query({ query: `UPDATE ${table} SET display_order = @order WHERE id = @id${cpClause}`, params });
     }
   }
 
-  private getCallQAPromptsTable(): string {
-    const projectId = process.env.GCP_PROJECT_ID;
-    return `\`${projectId}.${DATASET_ID}.${CALL_QA_PROMPTS_TABLE_ID}\``;
-  }
-
-  private async getNextCallQAPromptId(): Promise<number> {
-    const client = getBigQueryClient();
-    const table = this.getCallQAPromptsTable();
-    const [rows] = await client.query({ query: `SELECT COALESCE(MAX(id), 0) + 1 as next_id FROM ${table}` });
-    return rows[0].next_id;
-  }
-
-  async getCallQAPrompts(): Promise<CallQAPrompt[]> {
+  async getCallQAPrompts(clientPathwayId: number): Promise<CallQAPrompt[]> {
     await ensureCallQAPromptsTable();
+    await migrateConfigTablesForClientPathway();
     const client = getBigQueryClient();
     const table = this.getCallQAPromptsTable();
-    const [rows] = await client.query({ query: `SELECT * FROM ${table} ORDER BY display_order ASC` });
+    const [rows] = await client.query({ query: `SELECT * FROM ${table} WHERE client_pathway_id = @cpId ORDER BY display_order ASC`, params: { cpId: clientPathwayId } });
     return rows.map(rowToCallQAPrompt);
   }
 
-  async getActiveCallQAPrompts(): Promise<CallQAPrompt[]> {
+  async getActiveCallQAPrompts(clientPathwayId: number): Promise<CallQAPrompt[]> {
     await ensureCallQAPromptsTable();
+    await migrateConfigTablesForClientPathway();
     const client = getBigQueryClient();
     const table = this.getCallQAPromptsTable();
-    const [rows] = await client.query({ query: `SELECT * FROM ${table} WHERE is_active = TRUE ORDER BY display_order ASC` });
+    const [rows] = await client.query({ query: `SELECT * FROM ${table} WHERE client_pathway_id = @cpId AND is_active = TRUE ORDER BY display_order ASC`, params: { cpId: clientPathwayId } });
     return rows.map(rowToCallQAPrompt);
   }
 
-  async getCallQAPrompt(id: number): Promise<CallQAPrompt | undefined> {
+  async getCallQAPrompt(id: number, clientPathwayId?: number): Promise<CallQAPrompt | undefined> {
     await ensureCallQAPromptsTable();
     const client = getBigQueryClient();
     const table = this.getCallQAPromptsTable();
-    const [rows] = await client.query({
-      query: `SELECT * FROM ${table} WHERE id = @id`,
-      params: { id },
-    });
+    const cpClause = clientPathwayId != null ? " AND client_pathway_id = @cpId" : "";
+    const params: Record<string, any> = { id };
+    if (clientPathwayId != null) params.cpId = clientPathwayId;
+    const [rows] = await client.query({ query: `SELECT * FROM ${table} WHERE id = @id${cpClause}`, params });
     return rows.length > 0 ? rowToCallQAPrompt(rows[0]) : undefined;
   }
 
-  async createCallQAPrompt(qa: InsertCallQAPrompt): Promise<CallQAPrompt> {
+  async createCallQAPrompt(clientPathwayId: number, qa: InsertCallQAPrompt): Promise<CallQAPrompt> {
     await ensureCallQAPromptsTable();
+    await migrateConfigTablesForClientPathway();
     const client = getBigQueryClient();
     const table = this.getCallQAPromptsTable();
-    const id = await this.getNextCallQAPromptId();
+    const id = await this.getNextIdForTable(table);
 
     await client.query({
-      query: `INSERT INTO ${table} (id, name, display_name, prompt_text, response_type, response_options, is_active, display_order)
-              VALUES (@id, @name, @display_name, @prompt_text, @response_type, @response_options, @is_active, @display_order)`,
+      query: `INSERT INTO ${table} (id, name, display_name, prompt_text, response_type, response_options, is_active, display_order, client_pathway_id)
+              VALUES (@id, @name, @display_name, @prompt_text, @response_type, @response_options, @is_active, @display_order, @client_pathway_id)`,
       params: {
         id,
         name: qa.name,
@@ -579,22 +630,21 @@ export class BigQueryStorage implements IStorage {
         response_options: JSON.stringify(qa.responseOptions || []),
         is_active: qa.isActive !== false,
         display_order: qa.displayOrder ?? 0,
+        client_pathway_id: clientPathwayId,
       },
     });
 
     return { id, name: qa.name, displayName: qa.displayName, promptText: qa.promptText, responseType: qa.responseType || "enum", responseOptions: qa.responseOptions || [], isActive: qa.isActive !== false, displayOrder: qa.displayOrder ?? 0 };
   }
 
-  async updateCallQAPrompt(id: number, qa: Partial<InsertCallQAPrompt>): Promise<CallQAPrompt | undefined> {
+  async updateCallQAPrompt(id: number, qa: Partial<InsertCallQAPrompt>, clientPathwayId?: number): Promise<CallQAPrompt | undefined> {
     await ensureCallQAPromptsTable();
-    const existing = await this.getCallQAPrompt(id);
+    const existing = await this.getCallQAPrompt(id, clientPathwayId);
     if (!existing) return undefined;
-
     const client = getBigQueryClient();
     const table = this.getCallQAPromptsTable();
     const updates: string[] = [];
     const params: any = { id };
-
     if (qa.name !== undefined) { updates.push("name = @name"); params.name = qa.name; }
     if (qa.displayName !== undefined) { updates.push("display_name = @display_name"); params.display_name = qa.displayName; }
     if (qa.promptText !== undefined) { updates.push("prompt_text = @prompt_text"); params.prompt_text = qa.promptText; }
@@ -602,101 +652,66 @@ export class BigQueryStorage implements IStorage {
     if (qa.responseOptions !== undefined) { updates.push("response_options = @response_options"); params.response_options = JSON.stringify(qa.responseOptions); }
     if (qa.isActive !== undefined) { updates.push("is_active = @is_active"); params.is_active = qa.isActive; }
     if (qa.displayOrder !== undefined) { updates.push("display_order = @display_order"); params.display_order = qa.displayOrder; }
-
     if (updates.length > 0) {
-      await client.query({
-        query: `UPDATE ${table} SET ${updates.join(", ")} WHERE id = @id`,
-        params,
-      });
+      await client.query({ query: `UPDATE ${table} SET ${updates.join(", ")} WHERE id = @id`, params });
     }
-
     return this.getCallQAPrompt(id);
   }
 
-  async deleteCallQAPrompt(id: number): Promise<boolean> {
+  async deleteCallQAPrompt(id: number, clientPathwayId?: number): Promise<boolean> {
     await ensureCallQAPromptsTable();
-    const existing = await this.getCallQAPrompt(id);
+    const existing = await this.getCallQAPrompt(id, clientPathwayId);
     if (!existing) return false;
     const client = getBigQueryClient();
     const table = this.getCallQAPromptsTable();
-    await client.query({
-      query: `DELETE FROM ${table} WHERE id = @id`,
-      params: { id },
-    });
+    const cpClause = clientPathwayId != null ? " AND client_pathway_id = @cpId" : "";
+    const params: Record<string, any> = { id };
+    if (clientPathwayId != null) params.cpId = clientPathwayId;
+    await client.query({ query: `DELETE FROM ${table} WHERE id = @id${cpClause}`, params });
     return true;
   }
 
-  private getSettingsTable(): string {
-    const projectId = process.env.GCP_PROJECT_ID;
-    return `\`${projectId}.${DATASET_ID}.${SETTINGS_TABLE_ID}\``;
-  }
-
-  async getSetting(key: string): Promise<string | null> {
+  async getSetting(clientPathwayId: number, key: string): Promise<string | null> {
     await ensureSettingsTable();
+    await migrateConfigTablesForClientPathway();
     const client = getBigQueryClient();
     const table = this.getSettingsTable();
     const [rows] = await client.query({
-      query: `SELECT value FROM ${table} WHERE key = @key LIMIT 1`,
-      params: { key },
+      query: `SELECT value FROM ${table} WHERE key = @key AND client_pathway_id = @cpId LIMIT 1`,
+      params: { key, cpId: clientPathwayId },
     });
     return rows.length > 0 ? rows[0].value : null;
   }
 
-  async setSetting(key: string, value: string): Promise<void> {
+  async setSetting(clientPathwayId: number, key: string, value: string): Promise<void> {
     await ensureSettingsTable();
+    await migrateConfigTablesForClientPathway();
     const client = getBigQueryClient();
     const table = this.getSettingsTable();
 
-    const existing = await this.getSetting(key);
+    const existing = await this.getSetting(clientPathwayId, key);
     if (existing !== null) {
       await client.query({
-        query: `UPDATE ${table} SET value = @value WHERE key = @key`,
-        params: { key, value },
+        query: `UPDATE ${table} SET value = @value WHERE key = @key AND client_pathway_id = @cpId`,
+        params: { key, value, cpId: clientPathwayId },
       });
     } else {
       await client.query({
-        query: `INSERT INTO ${table} (key, value) VALUES (@key, @value)`,
-        params: { key, value },
+        query: `INSERT INTO ${table} (key, value, client_pathway_id) VALUES (@key, @value, @cpId)`,
+        params: { key, value, cpId: clientPathwayId },
       });
     }
   }
 
-  private getClientPathwayTable(): string {
-    const projectId = process.env.GCP_PROJECT_ID;
-    return `\`${projectId}.${DATASET_ID}.${CLIENT_PATHWAY_TABLE_ID}\``;
-  }
-
-  async getClientPathway(): Promise<ClientPathway | null> {
-    await ensureClientPathwayTable();
+  async deleteSetting(clientPathwayId: number, key: string): Promise<void> {
+    await ensureSettingsTable();
+    await migrateConfigTablesForClientPathway();
     const client = getBigQueryClient();
-    const table = this.getClientPathwayTable();
-    const [rows] = await client.query({ query: `SELECT * FROM ${table} LIMIT 1` });
-    if (rows.length === 0) return null;
-    const row = rows[0] as any;
-    return { id: row.id, client: row.client, pathway: row.pathway };
-  }
-
-  async setClientPathway(data: InsertClientPathway): Promise<ClientPathway> {
-    await ensureClientPathwayTable();
-    const client = getBigQueryClient();
-    const table = this.getClientPathwayTable();
-
-    await client.query({ query: `DELETE FROM ${table} WHERE TRUE` });
-
-    const row = { id: 1, client: data.client, pathway: data.pathway };
+    const table = this.getSettingsTable();
     await client.query({
-      query: `INSERT INTO ${table} (id, client, pathway) VALUES (@id, @client, @pathway)`,
-      params: row,
+      query: `DELETE FROM ${table} WHERE key = @key AND client_pathway_id = @cpId`,
+      params: { key, cpId: clientPathwayId },
     });
-    return row;
-  }
-
-  async deleteClientPathway(): Promise<boolean> {
-    await ensureClientPathwayTable();
-    const client = getBigQueryClient();
-    const table = this.getClientPathwayTable();
-    await client.query({ query: `DELETE FROM ${table} WHERE TRUE` });
-    return true;
   }
 }
 
@@ -712,7 +727,8 @@ async function ensureClientPathwayTable(): Promise<void> {
       query: `CREATE TABLE IF NOT EXISTS \`${fullTable}\` (
         id INT64 NOT NULL,
         client STRING NOT NULL,
-        pathway STRING NOT NULL
+        pathway STRING NOT NULL,
+        description STRING
       )`,
     });
     console.log(`BigQuery table ${DATASET_ID}.${CLIENT_PATHWAY_TABLE_ID} ready.`);
@@ -724,7 +740,38 @@ async function ensureClientPathwayTable(): Promise<void> {
     }
   }
 
+  try {
+    await client.query({
+      query: `ALTER TABLE \`${fullTable}\` ADD COLUMN IF NOT EXISTS description STRING`,
+    });
+  } catch {}
+
   clientPathwayTableInitialized = true;
+}
+
+async function migrateConfigTablesForClientPathway(): Promise<void> {
+  const client = getBigQueryClient();
+  const projectId = process.env.GCP_PROJECT_ID;
+
+  const tables = [TABLE_ID, CONTEXT_PARAMS_TABLE_ID, CALL_QA_PROMPTS_TABLE_ID, SETTINGS_TABLE_ID];
+  for (const tbl of tables) {
+    const fullTable = `${projectId}.${DATASET_ID}.${tbl}`;
+    try {
+      const [cols] = await client.query({
+        query: `SELECT column_name FROM \`${projectId}.${DATASET_ID}.INFORMATION_SCHEMA.COLUMNS\` WHERE table_name = '${tbl}' AND column_name = 'client_pathway_id'`,
+      });
+      if (cols.length === 0) {
+        await client.query({
+          query: `ALTER TABLE \`${fullTable}\` ADD COLUMN client_pathway_id INT64`,
+        });
+        console.log(`Added client_pathway_id column to ${tbl} table.`);
+      }
+    } catch (err: any) {
+      if (!err.message?.includes("Duplicate column") && !err.message?.includes("Already Exists")) {
+        console.error(`Migration error for ${tbl}:`, err.message);
+      }
+    }
+  }
 }
 
 export const storage = new BigQueryStorage();

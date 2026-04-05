@@ -7,27 +7,27 @@ import { storage } from "./storage";
 import { insertObservationSchema, enumValueSchema, insertContextParameterSchema, insertCallQAPromptSchema } from "@shared/schema";
 import { z } from "zod";
 
-async function getPromptWithVersion() {
-  const activeObs = await storage.getActiveObservations();
-  const summaryInstruction = await storage.getSetting("summary_instruction");
-  const observationsGuidance = await storage.getSetting("observations_prompt_guidance");
-  const barriersGuidance = await storage.getSetting("barriers_prompt_guidance");
-  const contextParams = await storage.getActiveContextParameters();
-  const callQAPrompts = await storage.getActiveCallQAPrompts();
+async function getPromptWithVersion(clientPathwayId: number) {
+  const activeObs = await storage.getActiveObservations(clientPathwayId);
+  const summaryInstruction = await storage.getSetting(clientPathwayId, "summary_instruction");
+  const observationsGuidance = await storage.getSetting(clientPathwayId, "observations_prompt_guidance");
+  const barriersGuidance = await storage.getSetting(clientPathwayId, "barriers_prompt_guidance");
+  const contextParams = await storage.getActiveContextParameters(clientPathwayId);
+  const callQAPrompts = await storage.getActiveCallQAPrompts(clientPathwayId);
   const prompt = buildPromptTemplate(activeObs, summaryInstruction || undefined, contextParams, observationsGuidance || undefined, barriersGuidance || undefined, callQAPrompts);
 
   const hash = createHash("sha256").update(prompt).digest("hex");
-  const storedHash = await storage.getSetting("prompt_hash");
+  const storedHash = await storage.getSetting(clientPathwayId, "prompt_hash");
 
-  let version = parseInt(await storage.getSetting("prompt_version") || "0", 10);
-  let versionDate = await storage.getSetting("prompt_version_date") || new Date().toISOString();
+  let version = parseInt(await storage.getSetting(clientPathwayId, "prompt_version") || "0", 10);
+  let versionDate = await storage.getSetting(clientPathwayId, "prompt_version_date") || new Date().toISOString();
 
   if (hash !== storedHash) {
     version = version + 1;
     versionDate = new Date().toISOString();
-    await storage.setSetting("prompt_hash", hash);
-    await storage.setSetting("prompt_version", String(version));
-    await storage.setSetting("prompt_version_date", versionDate);
+    await storage.setSetting(clientPathwayId, "prompt_hash", hash);
+    await storage.setSetting(clientPathwayId, "prompt_version", String(version));
+    await storage.setSetting(clientPathwayId, "prompt_version_date", versionDate);
   }
 
   return { prompt, promptVersion: version, promptVersionDate: versionDate };
@@ -38,8 +38,15 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
-  app.get("/api/prompt", async (_req, res) => {
-    const { prompt, promptVersion, promptVersionDate } = await getPromptWithVersion();
+  app.get("/api/prompt", async (req, res) => {
+    const cpId = Number(req.query.clientPathwayId);
+    if (!cpId) {
+      const allCPs = await storage.getClientPathways();
+      if (allCPs.length === 0) return res.status(400).json({ message: "No client/pathway configuration found." });
+      const { prompt, promptVersion, promptVersionDate } = await getPromptWithVersion(allCPs[0].id);
+      return res.json({ prompt, promptVersion, promptVersionDate });
+    }
+    const { prompt, promptVersion, promptVersionDate } = await getPromptWithVersion(cpId);
     res.json({ prompt, promptVersion, promptVersionDate });
   });
 
@@ -68,14 +75,35 @@ export async function registerRoutes(
     }
 
     const resolvedSourceId = source_id || `call_${randomUUID().slice(0, 12)}`;
+    const clientPathwayId = req.body.client_pathway_id ? Number(req.body.client_pathway_id) : null;
 
     try {
-      const { prompt: _promptText, promptVersion, promptVersionDate } = await getPromptWithVersion();
-      const activeObs = await storage.getActiveObservations();
-      const summaryInstruction = await storage.getSetting("summary_instruction");
-      const observationsGuidance = await storage.getSetting("observations_prompt_guidance");
-      const barriersGuidance = await storage.getSetting("barriers_prompt_guidance");
-      const contextParams = await storage.getActiveContextParameters();
+      let cpId = clientPathwayId;
+      if (!cpId) {
+        const allCPs = await storage.getClientPathways();
+        if (reqClient && reqPathway) {
+          const match = allCPs.find((cp: any) => cp.client === reqClient && cp.pathway === reqPathway);
+          if (match) cpId = match.id;
+        }
+        if (!cpId && allCPs.length > 0) {
+          cpId = allCPs[0].id;
+        }
+      }
+
+      if (!cpId) {
+        return res.status(400).json({ status: "error", message: "No client/pathway configuration found. Please create one first." });
+      }
+
+      const cpRecord = await storage.getClientPathway(cpId);
+      const resolvedClient = reqClient || cpRecord?.client || null;
+      const resolvedPathway = reqPathway || cpRecord?.pathway || null;
+
+      const { prompt: _promptText, promptVersion, promptVersionDate } = await getPromptWithVersion(cpId);
+      const activeObs = await storage.getActiveObservations(cpId);
+      const summaryInstruction = await storage.getSetting(cpId, "summary_instruction");
+      const observationsGuidance = await storage.getSetting(cpId, "observations_prompt_guidance");
+      const barriersGuidance = await storage.getSetting(cpId, "barriers_prompt_guidance");
+      const contextParams = await storage.getActiveContextParameters(cpId);
 
       const contextValues: Record<string, string> = {};
       const contextSource = (context && typeof context === "object") ? context : rest;
@@ -85,11 +113,7 @@ export async function registerRoutes(
         }
       }
 
-      const callQAPrompts = await storage.getActiveCallQAPrompts();
-
-      const configuredCP = await storage.getClientPathway();
-      const resolvedClient = reqClient || configuredCP?.client || null;
-      const resolvedPathway = reqPathway || configuredCP?.pathway || null;
+      const callQAPrompts = await storage.getActiveCallQAPrompts(cpId);
 
       const { analysis, tokenUsage } = await analyzeTranscript(
         resolvedSourceId,
@@ -208,11 +232,12 @@ export async function registerRoutes(
 
   app.post("/api/observations/ai-suggest", async (req, res) => {
     try {
-      const { message, history } = req.body;
+      const { message, history, clientPathwayId } = req.body;
       if (!message || typeof message !== "string") {
         return res.status(400).json({ error: "Message is required" });
       }
-      const observations = await storage.getObservations();
+      if (!clientPathwayId) return res.status(400).json({ error: "clientPathwayId is required" });
+      const observations = await storage.getObservations(Number(clientPathwayId));
       const response = await aiObservationAssistant(observations, message, history || []);
       return res.json({ response });
     } catch (error: any) {
@@ -221,8 +246,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/observations", async (_req, res) => {
-    const obs = await storage.getObservations();
+  app.get("/api/observations", async (req, res) => {
+    const cpId = Number(req.query.clientPathwayId);
+    if (!cpId) return res.status(400).json({ message: "clientPathwayId query param required" });
+    const obs = await storage.getObservations(cpId);
     res.json(obs);
   });
 
@@ -241,12 +268,14 @@ export async function registerRoutes(
   const observationUpdateSchema = observationCreateSchema.partial();
 
   app.post("/api/observations", async (req, res) => {
+    const cpId = Number(req.body.clientPathwayId || req.query.clientPathwayId);
+    if (!cpId) return res.status(400).json({ message: "clientPathwayId is required" });
     const parsed = observationCreateSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: parsed.error.errors.map(e => e.message).join(", ") });
     }
     try {
-      const obs = await storage.createObservation(parsed.data);
+      const obs = await storage.createObservation(cpId, parsed.data);
       res.status(201).json(obs);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -258,8 +287,9 @@ export async function registerRoutes(
     if (!Array.isArray(orderedIds) || !orderedIds.every((id: any) => typeof id === "number")) {
       return res.status(400).json({ message: "orderedIds must be an array of numbers" });
     }
-    await storage.reorderObservations(orderedIds);
-    const obs = await storage.getObservations();
+    const cpId = Number(req.body.clientPathwayId || req.query.clientPathwayId) || undefined;
+    await storage.reorderObservations(orderedIds, cpId);
+    const obs = cpId ? await storage.getObservations(cpId) : [];
     res.json(obs);
   });
 
@@ -272,7 +302,8 @@ export async function registerRoutes(
       return res.status(400).json({ message: parsed.error.errors.map(e => e.message).join(", ") });
     }
 
-    const obs = await storage.updateObservation(id, parsed.data);
+    const cpId = Number(req.body.clientPathwayId || req.query.clientPathwayId) || undefined;
+    const obs = await storage.updateObservation(id, parsed.data, cpId);
     if (!obs) return res.status(404).json({ message: "Observation not found" });
     res.json(obs);
   });
@@ -281,13 +312,16 @@ export async function registerRoutes(
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
 
-    const deleted = await storage.deleteObservation(id);
+    const cpId = Number(req.query.clientPathwayId) || undefined;
+    const deleted = await storage.deleteObservation(id, cpId);
     if (!deleted) return res.status(404).json({ message: "Observation not found" });
     res.json({ success: true });
   });
 
-  app.get("/api/context-parameters", async (_req, res) => {
-    const params = await storage.getContextParameters();
+  app.get("/api/context-parameters", async (req, res) => {
+    const cpId = Number(req.query.clientPathwayId);
+    if (!cpId) return res.status(400).json({ message: "clientPathwayId query param required" });
+    const params = await storage.getContextParameters(cpId);
     res.json(params);
   });
 
@@ -307,16 +341,18 @@ export async function registerRoutes(
   const contextParamUpdateSchema = contextParamCreateSchema.partial();
 
   app.post("/api/context-parameters", async (req, res) => {
+    const cpId = Number(req.body.clientPathwayId || req.query.clientPathwayId);
+    if (!cpId) return res.status(400).json({ message: "clientPathwayId is required" });
     const parsed = contextParamCreateSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: parsed.error.errors.map(e => e.message).join(", ") });
     }
     try {
-      const existing = await storage.getContextParameters();
+      const existing = await storage.getContextParameters(cpId);
       if (existing.some(p => p.name === parsed.data.name)) {
         return res.status(400).json({ message: `A context parameter with name "${parsed.data.name}" already exists.` });
       }
-      const param = await storage.createContextParameter(parsed.data);
+      const param = await storage.createContextParameter(cpId, parsed.data);
       res.status(201).json(param);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -328,8 +364,9 @@ export async function registerRoutes(
     if (!Array.isArray(orderedIds) || !orderedIds.every((id: any) => typeof id === "number")) {
       return res.status(400).json({ message: "orderedIds must be an array of numbers" });
     }
-    await storage.reorderContextParameters(orderedIds);
-    const params = await storage.getContextParameters();
+    const cpId = Number(req.body.clientPathwayId || req.query.clientPathwayId) || undefined;
+    await storage.reorderContextParameters(orderedIds, cpId);
+    const params = cpId ? await storage.getContextParameters(cpId) : [];
     res.json(params);
   });
 
@@ -342,7 +379,8 @@ export async function registerRoutes(
       return res.status(400).json({ message: parsed.error.errors.map(e => e.message).join(", ") });
     }
 
-    const param = await storage.updateContextParameter(id, parsed.data);
+    const cpId = Number(req.body.clientPathwayId || req.query.clientPathwayId) || undefined;
+    const param = await storage.updateContextParameter(id, parsed.data, cpId);
     if (!param) return res.status(404).json({ message: "Context parameter not found" });
     res.json(param);
   });
@@ -351,48 +389,86 @@ export async function registerRoutes(
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
 
-    const deleted = await storage.deleteContextParameter(id);
+    const cpId = Number(req.query.clientPathwayId) || undefined;
+    const deleted = await storage.deleteContextParameter(id, cpId);
     if (!deleted) return res.status(404).json({ message: "Context parameter not found" });
     res.json({ success: true });
   });
 
-  app.get("/api/client-pathway", async (_req, res) => {
+  app.get("/api/client-pathways", async (_req, res) => {
     try {
-      const cp = await storage.getClientPathway();
+      const cps = await storage.getClientPathways();
+      res.json(cps);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/client-pathways/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+    try {
+      const cp = await storage.getClientPathway(id);
+      if (!cp) return res.status(404).json({ message: "Not found" });
       res.json(cp);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
 
-  app.put("/api/client-pathway", async (req, res) => {
+  app.post("/api/client-pathways", async (req, res) => {
     const parsed = z.object({
       client: z.string().min(1, "Client is required"),
       pathway: z.string().min(1, "Pathway is required"),
+      description: z.string().optional().default(""),
     }).safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: parsed.error.errors.map(e => e.message).join(", ") });
     }
     try {
-      const cp = await storage.setClientPathway(parsed.data);
+      const cp = await storage.createClientPathway(parsed.data);
+      res.status(201).json(cp);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/client-pathways/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+    const parsed = z.object({
+      client: z.string().min(1).optional(),
+      pathway: z.string().min(1).optional(),
+      description: z.string().optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.errors.map(e => e.message).join(", ") });
+    }
+    try {
+      const cp = await storage.updateClientPathway(id, parsed.data);
+      if (!cp) return res.status(404).json({ message: "Not found" });
       res.json(cp);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
 
-  app.delete("/api/client-pathway", async (_req, res) => {
+  app.delete("/api/client-pathways/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
     try {
-      await storage.deleteClientPathway();
+      await storage.deleteClientPathway(id);
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
 
-  app.get("/api/settings/summary-instruction", async (_req, res) => {
+  app.get("/api/settings/summary-instruction", async (req, res) => {
+    const cpId = Number(req.query.clientPathwayId);
+    if (!cpId) return res.status(400).json({ message: "clientPathwayId query param required" });
     try {
-      const stored = await storage.getSetting("summary_instruction");
+      const stored = await storage.getSetting(cpId, "summary_instruction");
       res.json({
         instruction: stored || DEFAULT_SUMMARY_INSTRUCTION,
         isCustom: stored !== null,
@@ -404,38 +480,36 @@ export async function registerRoutes(
   });
 
   app.put("/api/settings/summary-instruction", async (req, res) => {
+    const cpId = Number(req.body.clientPathwayId || req.query.clientPathwayId);
+    if (!cpId) return res.status(400).json({ message: "clientPathwayId is required" });
     try {
       const { instruction } = req.body;
       if (!instruction || typeof instruction !== "string" || instruction.trim().length === 0) {
         return res.status(400).json({ message: "A non-empty instruction string is required." });
       }
-      await storage.setSetting("summary_instruction", instruction.trim());
+      await storage.setSetting(cpId, "summary_instruction", instruction.trim());
       res.json({ success: true, instruction: instruction.trim() });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
 
-  app.delete("/api/settings/summary-instruction", async (_req, res) => {
+  app.delete("/api/settings/summary-instruction", async (req, res) => {
+    const cpId = Number(req.query.clientPathwayId);
+    if (!cpId) return res.status(400).json({ message: "clientPathwayId query param required" });
     try {
-      const client = (await import("@google-cloud/bigquery")).BigQuery;
-      const raw = process.env.GCP_SERVICE_ACCOUNT_KEY;
-      const projectId = process.env.GCP_PROJECT_ID;
-      if (!raw || !projectId) throw new Error("GCP credentials not set");
-      const bq = new client({ projectId, credentials: JSON.parse(raw) });
-      await bq.query({
-        query: `DELETE FROM \`${projectId}.call_information.settings\` WHERE key = @key`,
-        params: { key: "summary_instruction" },
-      });
+      await storage.deleteSetting(cpId, "summary_instruction");
       res.json({ success: true, instruction: DEFAULT_SUMMARY_INSTRUCTION });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
 
-  app.get("/api/settings/observations-guidance", async (_req, res) => {
+  app.get("/api/settings/observations-guidance", async (req, res) => {
+    const cpId = Number(req.query.clientPathwayId);
+    if (!cpId) return res.status(400).json({ message: "clientPathwayId query param required" });
     try {
-      const stored = await storage.getSetting("observations_prompt_guidance");
+      const stored = await storage.getSetting(cpId, "observations_prompt_guidance");
       res.json({
         guidance: stored || "",
         isCustom: stored !== null,
@@ -446,49 +520,39 @@ export async function registerRoutes(
   });
 
   app.put("/api/settings/observations-guidance", async (req, res) => {
+    const cpId = Number(req.body.clientPathwayId || req.query.clientPathwayId);
+    if (!cpId) return res.status(400).json({ message: "clientPathwayId is required" });
     try {
       const { guidance } = req.body;
       if (typeof guidance !== "string") {
         return res.status(400).json({ message: "A guidance string is required." });
       }
       if (guidance.trim().length === 0) {
-        const client = (await import("@google-cloud/bigquery")).BigQuery;
-        const raw = process.env.GCP_SERVICE_ACCOUNT_KEY;
-        const projectId = process.env.GCP_PROJECT_ID;
-        if (!raw || !projectId) throw new Error("GCP credentials not set");
-        const bq = new client({ projectId, credentials: JSON.parse(raw) });
-        await bq.query({
-          query: `DELETE FROM \`${projectId}.call_information.settings\` WHERE key = @key`,
-          params: { key: "observations_prompt_guidance" },
-        });
+        await storage.deleteSetting(cpId, "observations_prompt_guidance");
         return res.json({ success: true, guidance: "" });
       }
-      await storage.setSetting("observations_prompt_guidance", guidance.trim());
+      await storage.setSetting(cpId, "observations_prompt_guidance", guidance.trim());
       res.json({ success: true, guidance: guidance.trim() });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
 
-  app.delete("/api/settings/observations-guidance", async (_req, res) => {
+  app.delete("/api/settings/observations-guidance", async (req, res) => {
+    const cpId = Number(req.query.clientPathwayId);
+    if (!cpId) return res.status(400).json({ message: "clientPathwayId query param required" });
     try {
-      const client = (await import("@google-cloud/bigquery")).BigQuery;
-      const raw = process.env.GCP_SERVICE_ACCOUNT_KEY;
-      const projectId = process.env.GCP_PROJECT_ID;
-      if (!raw || !projectId) throw new Error("GCP credentials not set");
-      const bq = new client({ projectId, credentials: JSON.parse(raw) });
-      await bq.query({
-        query: `DELETE FROM \`${projectId}.call_information.settings\` WHERE key = @key`,
-        params: { key: "observations_prompt_guidance" },
-      });
+      await storage.deleteSetting(cpId, "observations_prompt_guidance");
       res.json({ success: true, guidance: "" });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
 
-  app.get("/api/call-qa-prompts", async (_req, res) => {
-    const prompts = await storage.getCallQAPrompts();
+  app.get("/api/call-qa-prompts", async (req, res) => {
+    const cpId = Number(req.query.clientPathwayId);
+    if (!cpId) return res.status(400).json({ message: "clientPathwayId query param required" });
+    const prompts = await storage.getCallQAPrompts(cpId);
     res.json(prompts);
   });
 
@@ -505,12 +569,14 @@ export async function registerRoutes(
   const callQAUpdateSchema = callQACreateSchema.partial();
 
   app.post("/api/call-qa-prompts", async (req, res) => {
+    const cpId = Number(req.body.clientPathwayId || req.query.clientPathwayId);
+    if (!cpId) return res.status(400).json({ message: "clientPathwayId is required" });
     const parsed = callQACreateSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: parsed.error.errors.map(e => e.message).join(", ") });
     }
     try {
-      const prompt = await storage.createCallQAPrompt(parsed.data);
+      const prompt = await storage.createCallQAPrompt(cpId, parsed.data);
       res.status(201).json(prompt);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -526,7 +592,8 @@ export async function registerRoutes(
       return res.status(400).json({ message: parsed.error.errors.map(e => e.message).join(", ") });
     }
 
-    const prompt = await storage.updateCallQAPrompt(id, parsed.data);
+    const cpId = Number(req.body.clientPathwayId || req.query.clientPathwayId) || undefined;
+    const prompt = await storage.updateCallQAPrompt(id, parsed.data, cpId);
     if (!prompt) return res.status(404).json({ message: "Call QA prompt not found" });
     res.json(prompt);
   });
@@ -535,14 +602,17 @@ export async function registerRoutes(
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
 
-    const deleted = await storage.deleteCallQAPrompt(id);
+    const cpId = Number(req.query.clientPathwayId) || undefined;
+    const deleted = await storage.deleteCallQAPrompt(id, cpId);
     if (!deleted) return res.status(404).json({ message: "Call QA prompt not found" });
     res.json({ success: true });
   });
 
-  app.get("/api/settings/barriers-guidance", async (_req, res) => {
+  app.get("/api/settings/barriers-guidance", async (req, res) => {
+    const cpId = Number(req.query.clientPathwayId);
+    if (!cpId) return res.status(400).json({ message: "clientPathwayId query param required" });
     try {
-      const stored = await storage.getSetting("barriers_prompt_guidance");
+      const stored = await storage.getSetting(cpId, "barriers_prompt_guidance");
       res.json({
         guidance: stored || "",
         isCustom: stored !== null,
@@ -554,41 +624,29 @@ export async function registerRoutes(
   });
 
   app.put("/api/settings/barriers-guidance", async (req, res) => {
+    const cpId = Number(req.body.clientPathwayId || req.query.clientPathwayId);
+    if (!cpId) return res.status(400).json({ message: "clientPathwayId is required" });
     try {
       const { guidance } = req.body;
       if (typeof guidance !== "string") {
         return res.status(400).json({ message: "A guidance string is required." });
       }
       if (guidance.trim().length === 0) {
-        const client = (await import("@google-cloud/bigquery")).BigQuery;
-        const raw = process.env.GCP_SERVICE_ACCOUNT_KEY;
-        const projectId = process.env.GCP_PROJECT_ID;
-        if (!raw || !projectId) throw new Error("GCP credentials not set");
-        const bq = new client({ projectId, credentials: JSON.parse(raw) });
-        await bq.query({
-          query: `DELETE FROM \`${projectId}.call_information.settings\` WHERE key = @key`,
-          params: { key: "barriers_prompt_guidance" },
-        });
+        await storage.deleteSetting(cpId, "barriers_prompt_guidance");
         return res.json({ success: true, guidance: "" });
       }
-      await storage.setSetting("barriers_prompt_guidance", guidance.trim());
+      await storage.setSetting(cpId, "barriers_prompt_guidance", guidance.trim());
       res.json({ success: true, guidance: guidance.trim() });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
 
-  app.delete("/api/settings/barriers-guidance", async (_req, res) => {
+  app.delete("/api/settings/barriers-guidance", async (req, res) => {
+    const cpId = Number(req.query.clientPathwayId);
+    if (!cpId) return res.status(400).json({ message: "clientPathwayId query param required" });
     try {
-      const client = (await import("@google-cloud/bigquery")).BigQuery;
-      const raw = process.env.GCP_SERVICE_ACCOUNT_KEY;
-      const projectId = process.env.GCP_PROJECT_ID;
-      if (!raw || !projectId) throw new Error("GCP credentials not set");
-      const bq = new client({ projectId, credentials: JSON.parse(raw) });
-      await bq.query({
-        query: `DELETE FROM \`${projectId}.call_information.settings\` WHERE key = @key`,
-        params: { key: "barriers_prompt_guidance" },
-      });
+      await storage.deleteSetting(cpId, "barriers_prompt_guidance");
       res.json({ success: true, guidance: "" });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -664,7 +722,16 @@ export async function registerRoutes(
 
       let contextByCareFlow: Record<string, Record<string, string>> | undefined;
       if (useKnownContext && careFlowIds && careFlowIds.length > 0) {
-        const contextParams = await storage.getActiveContextParameters();
+        const loadCpId = Number(req.body.clientPathwayId) || null;
+        let resolvedLoadCpId = loadCpId;
+        if (!resolvedLoadCpId) {
+          const allCPs = await storage.getClientPathways();
+          if (allCPs.length > 0) resolvedLoadCpId = allCPs[0].id;
+        }
+        if (!resolvedLoadCpId) {
+          return res.status(400).json({ message: "No client/pathway configuration found." });
+        }
+        const contextParams = await storage.getActiveContextParameters(resolvedLoadCpId);
         const paramsWithMapping = contextParams
           .filter(p =>
             (p.awellMappingType === "data_point" && p.awellDataPointKey && p.awellDataPointKey.trim().length > 0) ||
@@ -720,7 +787,16 @@ export async function registerRoutes(
       }
 
       const results: { callId: string; status: string; error?: string }[] = [];
-      const batchCP = await storage.getClientPathway();
+      const batchCpId = Number(req.query.clientPathwayId) || null;
+      let resolvedBatchCpId = batchCpId;
+      if (!resolvedBatchCpId) {
+        const allCPs = await storage.getClientPathways();
+        if (allCPs.length > 0) resolvedBatchCpId = allCPs[0].id;
+      }
+      if (!resolvedBatchCpId) {
+        return res.status(400).json({ message: "No client/pathway configuration found." });
+      }
+      const batchCPRecord = await storage.getClientPathway(resolvedBatchCpId);
 
       for (const item of pendingItems) {
         const claimed = await updateBatchItemStatus(item.bland_call_id, "processing");
@@ -730,13 +806,13 @@ export async function registerRoutes(
         }
 
         try {
-          const activeObs = await storage.getActiveObservations();
-          const summaryInstruction = await storage.getSetting("summary_instruction");
-          const observationsGuidance = await storage.getSetting("observations_prompt_guidance");
-          const barriersGuidance = await storage.getSetting("barriers_prompt_guidance");
-          const contextParams = await storage.getActiveContextParameters();
-          const callQAPromptsForBatch = await storage.getActiveCallQAPrompts();
-          const { prompt: _p, promptVersion, promptVersionDate } = await getPromptWithVersion();
+          const activeObs = await storage.getActiveObservations(resolvedBatchCpId);
+          const summaryInstruction = await storage.getSetting(resolvedBatchCpId, "summary_instruction");
+          const observationsGuidance = await storage.getSetting(resolvedBatchCpId, "observations_prompt_guidance");
+          const barriersGuidance = await storage.getSetting(resolvedBatchCpId, "barriers_prompt_guidance");
+          const contextParams = await storage.getActiveContextParameters(resolvedBatchCpId);
+          const callQAPromptsForBatch = await storage.getActiveCallQAPrompts(resolvedBatchCpId);
+          const { prompt: _p, promptVersion, promptVersionDate } = await getPromptWithVersion(resolvedBatchCpId);
 
           const callId = item.bland_call_id;
           const startTime = Date.now();
@@ -779,8 +855,8 @@ export async function registerRoutes(
             estimatedCost: tokenUsage.estimatedCost,
             status: "success",
             requestBody: JSON.stringify({ batch_id: item.batch_id, bland_call_id: item.bland_call_id }),
-            client: batchCP?.client || null,
-            pathway: batchCP?.pathway || null,
+            client: batchCPRecord?.client || null,
+            pathway: batchCPRecord?.pathway || null,
           });
 
           await insertCallObservations(callId, analysis.observations);

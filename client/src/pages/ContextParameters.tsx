@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, GripVertical, Variable, X } from "lucide-react";
+import { useClientPathway } from "@/contexts/ClientPathwayContext";
 
 interface ContextParameter {
   id: number;
@@ -66,6 +67,7 @@ const emptyForm = {
 };
 
 export default function ContextParameters() {
+  const { selectedCPId } = useClientPathway();
   const [params, setParams] = useState<ContextParameter[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -73,11 +75,15 @@ export default function ContextParameters() {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
+  const cpParam = selectedCPId ? `clientPathwayId=${selectedCPId}` : "";
+
   const fetchParams = async () => {
+    if (!selectedCPId) { setLoading(false); return; }
     try {
-      const res = await fetch("/api/context-parameters");
+      const res = await fetch(`/api/context-parameters?${cpParam}`);
+      if (!res.ok) throw new Error("Failed to load");
       const data = await res.json();
-      setParams(data);
+      setParams(Array.isArray(data) ? data : []);
     } catch {
       toast({ title: "Error", description: "Failed to load context parameters.", variant: "destructive" });
     } finally {
@@ -85,7 +91,13 @@ export default function ContextParameters() {
     }
   };
 
-  useEffect(() => { fetchParams(); }, []);
+  useEffect(() => {
+    if (selectedCPId) {
+      fetchParams();
+    } else {
+      setParams([]);
+    }
+  }, [selectedCPId]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -135,10 +147,10 @@ export default function ContextParameters() {
         body: JSON.stringify(payload),
       });
     } else {
-      res = await fetch("/api/context-parameters", {
+      res = await fetch(`/api/context-parameters?${cpParam}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payload, displayOrder: params.length }),
+        body: JSON.stringify({ ...payload, displayOrder: params.length, clientPathwayId: selectedCPId }),
       });
     }
 
@@ -181,6 +193,17 @@ export default function ContextParameters() {
     }
     return name;
   };
+
+  if (!selectedCPId) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <p className="text-sm text-muted-foreground">No client & pathway selected.</p>
+          <p className="text-xs text-muted-foreground/70 mt-1">Create or select one from the sidebar to configure context parameters.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full overflow-y-auto bg-background">

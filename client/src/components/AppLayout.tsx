@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
-import { Settings, FlaskConical, LayoutDashboard, BookOpen, ChevronRight, FileText, Variable, Eye, Phone, Box, Code2, Layers, Package, ShieldAlert, ClipboardCheck, Building2 } from "lucide-react";
+import { Settings, FlaskConical, LayoutDashboard, BookOpen, ChevronRight, FileText, Variable, Eye, Phone, Box, Code2, Layers, Package, ShieldAlert, ClipboardCheck, Building2, ChevronDown } from "lucide-react";
+import { useClientPathway } from "@/contexts/ClientPathwayContext";
 
 interface NavItem {
   label: string;
@@ -12,10 +13,10 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: "Setup",
     items: [
+      { label: "Client & Pathway", href: "/client-pathway", icon: <Building2 className="h-4 w-4" />, section: "setup" },
       { label: "Summary Prompt", href: "/summary-prompt", icon: <FileText className="h-4 w-4" />, section: "setup" },
       { label: "Barriers Prompt", href: "/barriers-prompt", icon: <ShieldAlert className="h-4 w-4" />, section: "setup" },
       { label: "Call QA", href: "/call-qa", icon: <ClipboardCheck className="h-4 w-4" />, section: "setup" },
-      { label: "Client & Pathway", href: "/client-pathway", icon: <Building2 className="h-4 w-4" />, section: "setup" },
       { label: "Context Parameters", href: "/context-parameters", icon: <Variable className="h-4 w-4" />, section: "setup" },
       { label: "Observations", href: "/observations", icon: <Settings className="h-4 w-4" />, section: "setup" },
       { label: "Generated Prompt", href: "/generated-prompt", icon: <Eye className="h-4 w-4" />, section: "setup" },
@@ -45,6 +46,44 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   },
 ];
 
+function ClientPathwaySelector() {
+  const { clientPathways, selectedCPId, selectedCP, setSelectedCPId, loading } = useClientPathway();
+
+  if (loading) return null;
+  if (clientPathways.length === 0) {
+    return (
+      <div className="px-3 py-2">
+        <Link href="/client-pathway">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-md text-xs cursor-pointer bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100 transition-colors" data-testid="link-add-client-pathway">
+            <Building2 className="h-3.5 w-3.5" />
+            <span>Add Client & Pathway</span>
+          </div>
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-3 py-2 border-b border-border">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 px-1 mb-1">
+        Active Configuration
+      </p>
+      <select
+        value={selectedCPId ?? ""}
+        onChange={(e) => setSelectedCPId(Number(e.target.value))}
+        className="w-full text-xs px-2 py-1.5 rounded-md border border-border bg-white text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 cursor-pointer"
+        data-testid="select-client-pathway"
+      >
+        {clientPathways.map(cp => (
+          <option key={cp.id} value={cp.id}>
+            {cp.client} — {cp.pathway}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
 
@@ -71,6 +110,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       <div className="flex flex-1 overflow-hidden">
         <aside className="w-56 bg-white border-r border-border flex flex-col shrink-0 overflow-y-auto">
+          <ClientPathwaySelector />
           <nav className="flex-1 py-4 px-3 space-y-5">
             {NAV_SECTIONS.map((section) => (
               <div key={section.title}>
