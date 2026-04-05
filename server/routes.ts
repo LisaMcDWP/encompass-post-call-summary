@@ -294,6 +294,7 @@ export async function registerRoutes(
     enumValues: z.array(z.string()).optional().default([]),
     isActive: z.boolean().default(true),
     displayOrder: z.number().int().min(0).default(0),
+    awellDataPointKey: z.string().optional().default(""),
   });
 
   const contextParamUpdateSchema = contextParamCreateSchema.partial();
