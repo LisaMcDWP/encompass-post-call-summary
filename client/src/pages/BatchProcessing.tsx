@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import {
   Loader2, Package, Play, RotateCcw, CheckCircle2, XCircle, Clock, Search,
-  ChevronDown, ChevronRight, AlertCircle, Zap
+  ChevronDown, ChevronRight, AlertCircle, Zap, RefreshCw
 } from "lucide-react";
 
 interface BlandCall {
@@ -637,7 +637,7 @@ export default function BatchProcessing() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-2 mb-4">
+          <div className="flex gap-2 mb-4 items-center">
             {["", "pending", "processing", "completed", "failed"].map((s) => (
               <Button
                 key={s || "all"}
@@ -654,6 +654,20 @@ export default function BatchProcessing() {
                 {s === "failed" && summary ? ` (${summary.failed})` : ""}
               </Button>
             ))}
+            <div className="ml-auto">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  queryClient.invalidateQueries({ queryKey: ["/api/batch/summary"] });
+                  queryClient.invalidateQueries({ queryKey: ["/api/batch/items"] });
+                }}
+                data-testid="button-refresh-batch"
+              >
+                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                Refresh
+              </Button>
+            </div>
           </div>
 
           {batchItemsQuery.isLoading ? (
