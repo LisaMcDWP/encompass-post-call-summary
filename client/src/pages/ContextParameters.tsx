@@ -20,6 +20,7 @@ interface ContextParameter {
   enumValues: string[];
   isActive: boolean;
   displayOrder: number;
+  awellDataPointKey: string;
 }
 
 const DATA_TYPE_OPTIONS = ["string", "number", "date", "boolean", "enum"];
@@ -39,6 +40,7 @@ const emptyForm = {
   dataType: "string",
   enumValues: [] as string[],
   isActive: true,
+  awellDataPointKey: "",
 };
 
 export default function ContextParameters() {
@@ -78,6 +80,7 @@ export default function ContextParameters() {
       dataType: p.dataType,
       enumValues: p.enumValues || [],
       isActive: p.isActive,
+      awellDataPointKey: p.awellDataPointKey || "",
     });
     setIsDialogOpen(true);
   };
@@ -95,6 +98,7 @@ export default function ContextParameters() {
       dataType: form.dataType,
       enumValues: form.dataType === "enum" ? form.enumValues : [],
       isActive: form.isActive,
+      awellDataPointKey: form.awellDataPointKey.trim(),
     };
 
     let res;
@@ -225,6 +229,9 @@ ${params.filter(p => p.isActive).slice(0, 3).map(p => `    "${p.name}": "${p.dat
                         ))}
                       </div>
                     )}
+                    {p.awellDataPointKey && (
+                      <p className="text-[11px] text-muted-foreground mt-1 font-mono">Awell key: {p.awellDataPointKey}</p>
+                    )}
                     {p.description && (
                       <p className="text-[11px] text-muted-foreground mt-1">{p.description}</p>
                     )}
@@ -337,6 +344,21 @@ ${params.filter(p => p.isActive).slice(0, 3).map(p => `    "${p.name}": "${p.dat
                   <p className="text-[11px] text-muted-foreground">Press Enter to add each value. These are the allowed options for this parameter.</p>
                 </div>
               )}
+
+              <div className="space-y-1.5">
+                <Label className="text-sm font-semibold">
+                  Awell Data Point Key
+                  <span className="text-muted-foreground font-normal ml-1">(optional)</span>
+                </Label>
+                <Input
+                  placeholder="e.g. home_health_ordered"
+                  value={form.awellDataPointKey}
+                  onChange={(e) => setForm({ ...form, awellDataPointKey: e.target.value })}
+                  className="text-sm font-mono"
+                  data-testid="input-awell-data-point-key"
+                />
+                <p className="text-[11px] text-muted-foreground">The Awell data point definition key used to pull this value during batch processing.</p>
+              </div>
 
               <div className="space-y-1.5">
                 <Label className="text-sm font-semibold">

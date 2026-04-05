@@ -66,6 +66,10 @@ async function ensureContextParamsTable(): Promise<void> {
     if (rows.length === 0) {
       await client.query({ query: `DROP TABLE IF EXISTS \`${fullTable}\`` });
     }
+    const [akRows] = await client.query({ query: `SELECT column_name FROM \`${projectId}.${DATASET_ID}.INFORMATION_SCHEMA.COLUMNS\` WHERE table_name = '${CONTEXT_PARAMS_TABLE_ID}' AND column_name = 'awell_data_point_key'` });
+    if (akRows.length === 0) {
+      try { await client.query({ query: `ALTER TABLE \`${fullTable}\` ADD COLUMN awell_data_point_key STRING` }); } catch {}
+    }
     await client.query({
       query: `CREATE TABLE IF NOT EXISTS \`${fullTable}\` (
         id INT64 NOT NULL,
@@ -75,7 +79,8 @@ async function ensureContextParamsTable(): Promise<void> {
         data_type STRING NOT NULL,
         enum_values STRING,
         is_active BOOL NOT NULL,
-        display_order INT64 NOT NULL
+        display_order INT64 NOT NULL,
+        awell_data_point_key STRING
       )`,
     });
     console.log(`BigQuery table ${DATASET_ID}.${CONTEXT_PARAMS_TABLE_ID} ready.`);
@@ -106,6 +111,7 @@ function rowToContextParameter(row: any): ContextParameter {
     enumValues,
     isActive: row.is_active,
     displayOrder: row.display_order,
+    awellDataPointKey: row.awell_data_point_key || "",
   };
 }
 
@@ -425,10 +431,11 @@ export class BigQueryStorage implements IStorage {
       enum_values: JSON.stringify(param.enumValues || []),
       is_active: param.isActive !== false,
       display_order: param.displayOrder ?? 0,
+      awell_data_point_key: param.awellDataPointKey || "",
     };
 
     await client.query({
-      query: `INSERT INTO ${table} (id, name, display_name, description, data_type, enum_values, is_active, display_order) VALUES (@id, @name, @display_name, @description, @data_type, @enum_values, @is_active, @display_order)`,
+      query: `INSERT INTO ${table} (id, name, display_name, description, data_type, enum_values, is_active, display_order, awell_data_point_key) VALUES (@id, @name, @display_name, @description, @data_type, @enum_values, @is_active, @display_order, @awell_data_point_key)`,
       params: row,
     });
 
@@ -453,6 +460,7 @@ export class BigQueryStorage implements IStorage {
     if (data.enumValues !== undefined) { setClauses.push("enum_values = @enumValues"); params.enumValues = JSON.stringify(data.enumValues); }
     if (data.isActive !== undefined) { setClauses.push("is_active = @isActive"); params.isActive = data.isActive; }
     if (data.displayOrder !== undefined) { setClauses.push("display_order = @displayOrder"); params.displayOrder = data.displayOrder; }
+    if (data.awellDataPointKey !== undefined) { setClauses.push("awell_data_point_key = @awellDataPointKey"); params.awellDataPointKey = data.awellDataPointKey; }
 
     if (setClauses.length === 0) return existing;
 
