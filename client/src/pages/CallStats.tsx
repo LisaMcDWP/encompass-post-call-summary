@@ -24,9 +24,10 @@ function rangeToDays(range: DateRange): number {
   if (range === "ytd") {
     const now = new Date();
     const jan1 = new Date(now.getFullYear(), 0, 1);
-    return Math.ceil((now.getTime() - jan1.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    return Math.ceil((now.getTime() - jan1.getTime()) / (1000 * 60 * 60 * 24));
   }
-  return parseInt(range);
+  if (range === "1") return 0;
+  return parseInt(range) - 1;
 }
 
 interface DailyStat {

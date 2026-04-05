@@ -710,7 +710,7 @@ export async function getCallStatsByDay(days = 30): Promise<any[]> {
   const client = getBigQueryClient();
   const query = `
     SELECT
-      DATE(processed_at) as date,
+      DATE(processed_at, 'America/New_York') as date,
       IFNULL(client, 'Unknown') as client,
       IFNULL(pathway, 'Unknown') as pathway,
       IFNULL(source_type, 'unknown') as source_type,
@@ -721,7 +721,7 @@ export async function getCallStatsByDay(days = 30): Promise<any[]> {
       SUM(total_tokens) as total_tokens,
       ROUND(SUM(estimated_cost), 4) as total_cost
     FROM \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\`
-    WHERE processed_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @days DAY)
+    WHERE DATE(processed_at, 'America/New_York') >= DATE_SUB(CURRENT_DATE('America/New_York'), INTERVAL @days DAY)
     GROUP BY date, client, pathway, source_type
     ORDER BY date DESC, client, pathway, source_type
   `;
