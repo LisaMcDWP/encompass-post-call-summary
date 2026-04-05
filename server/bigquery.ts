@@ -154,13 +154,27 @@ async function migrateCallInfoColumns(): Promise<void> {
     const table = dataset.table(CALL_INFO_TABLE_ID);
     const [metadata] = await table.getMetadata();
     const fields = metadata.schema?.fields || [];
-    const hasRequestBody = fields.some((f: any) => f.name === "request_body");
-    if (!hasRequestBody) {
+    const fieldNames = new Set(fields.map((f: any) => f.name));
+    if (!fieldNames.has("request_body")) {
       await client.query({
         query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\` ADD COLUMN request_body STRING`,
         location: "US",
       });
       console.log("Added request_body column to call_info table.");
+    }
+    if (!fieldNames.has("client")) {
+      await client.query({
+        query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\` ADD COLUMN client STRING`,
+        location: "US",
+      });
+      console.log("Added client column to call_info table.");
+    }
+    if (!fieldNames.has("pathway")) {
+      await client.query({
+        query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\` ADD COLUMN pathway STRING`,
+        location: "US",
+      });
+      console.log("Added pathway column to call_info table.");
     }
   } catch (err: any) {
     console.error("Migration check for call_info columns:", err.message);
@@ -203,6 +217,8 @@ export interface CallInfoEntry {
   estimatedCost?: number;
   status: "success" | "error";
   errorMessage?: string;
+  client?: string | null;
+  pathway?: string | null;
 }
 
 async function deleteExistingCallData(callId: string, tableId: string): Promise<void> {
@@ -247,6 +263,8 @@ export async function insertCallInfo(entry: CallInfoEntry): Promise<void> {
       status: entry.status,
       error_message: entry.errorMessage || null,
       request_body: entry.requestBody || null,
+      client: entry.client || null,
+      pathway: entry.pathway || null,
     };
 
     await client
@@ -637,7 +655,7 @@ export async function getCallInfoList(limit = 100): Promise<any[]> {
     LIMIT @limit
   `;
   const [rows] = await client.query({ query, params: { limit }, location: "US" });
-  const knownNonContext = new Set(["source_id", "source_type", "source_text", "care_flow_id", "processed_datetime", "context", "batch_id", "bland_call_id"]);
+  const knownNonContext = new Set(["source_id", "source_type", "source_text", "care_flow_id", "processed_datetime", "context", "batch_id", "bland_call_id", "client", "pathway"]);
   return (rows as CallInfoRow[]).map(row => {
     let contextValues: Record<string, string> | null = null;
     if (row.context_values) {
@@ -680,6 +698,8 @@ export async function getCallInfoList(limit = 100): Promise<any[]> {
       status: row.status,
       error_message: row.error_message,
       request_body: row.request_body ? JSON.parse(row.request_body) : null,
+      client: row.client || null,
+      pathway: row.pathway || null,
     };
   });
 }
@@ -1302,7 +1322,7 @@ export async function getCallDetail(callId: string): Promise<{ callInfo: any | n
   const [obsRows] = await client.query({ query: obsQuery, params: { callId }, location: "US" });
 
   const callInfo = row ? (() => {
-    const knownNonContext = new Set(["source_id", "source_type", "source_text", "care_flow_id", "processed_datetime", "context", "batch_id", "bland_call_id"]);
+    const knownNonContext = new Set(["source_id", "source_type", "source_text", "care_flow_id", "processed_datetime", "context", "batch_id", "bland_call_id", "client", "pathway"]);
     let contextValues: Record<string, string> | null = null;
     if (row.context_values) {
       try {
@@ -1344,6 +1364,8 @@ export async function getCallDetail(callId: string): Promise<{ callInfo: any | n
       status: row.status,
       error_message: row.error_message,
       request_body: row.request_body ? JSON.parse(row.request_body) : null,
+      client: row.client || null,
+      pathway: row.pathway || null,
     };
   })() : null;
 

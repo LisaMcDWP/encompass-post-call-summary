@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Settings, FlaskConical, LayoutDashboard, BookOpen, ChevronRight, FileText, Variable, Eye, Phone, Box, Code2, Layers, Package, ShieldAlert, ClipboardCheck } from "lucide-react";
+import { Settings, FlaskConical, LayoutDashboard, BookOpen, ChevronRight, FileText, Variable, Eye, Phone, Box, Code2, Layers, Package, ShieldAlert, ClipboardCheck, Building2 } from "lucide-react";
 
 interface NavItem {
   label: string;
@@ -15,6 +15,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { label: "Summary Prompt", href: "/summary-prompt", icon: <FileText className="h-4 w-4" />, section: "setup" },
       { label: "Barriers Prompt", href: "/barriers-prompt", icon: <ShieldAlert className="h-4 w-4" />, section: "setup" },
       { label: "Call QA", href: "/call-qa", icon: <ClipboardCheck className="h-4 w-4" />, section: "setup" },
+      { label: "Client & Pathway", href: "/client-pathway", icon: <Building2 className="h-4 w-4" />, section: "setup" },
       { label: "Context Parameters", href: "/context-parameters", icon: <Variable className="h-4 w-4" />, section: "setup" },
       { label: "Observations", href: "/observations", icon: <Settings className="h-4 w-4" />, section: "setup" },
       { label: "Generated Prompt", href: "/generated-prompt", icon: <Eye className="h-4 w-4" />, section: "setup" },

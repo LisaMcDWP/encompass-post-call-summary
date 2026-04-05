@@ -1,11 +1,12 @@
 import { BigQuery } from "@google-cloud/bigquery";
-import type { Observation, InsertObservation, EnumValue, ContextParameter, InsertContextParameter, CallQAPrompt, InsertCallQAPrompt } from "@shared/schema";
+import type { Observation, InsertObservation, EnumValue, ContextParameter, InsertContextParameter, CallQAPrompt, InsertCallQAPrompt, ClientPathway, InsertClientPathway } from "@shared/schema";
 
 const DATASET_ID = "call_information";
 const TABLE_ID = "observations";
 const SETTINGS_TABLE_ID = "settings";
 const CONTEXT_PARAMS_TABLE_ID = "context_parameters";
 const CALL_QA_PROMPTS_TABLE_ID = "call_qa_prompts";
+const CLIENT_PATHWAY_TABLE_ID = "client_pathway";
 
 let bigquery: BigQuery | null = null;
 
@@ -27,6 +28,7 @@ let tableInitialized = false;
 let settingsTableInitialized = false;
 let contextParamsTableInitialized = false;
 let callQAPromptsTableInitialized = false;
+let clientPathwayTableInitialized = false;
 
 async function ensureSettingsTable(): Promise<void> {
   if (settingsTableInitialized) return;
@@ -263,6 +265,9 @@ export interface IStorage {
   createCallQAPrompt(qa: InsertCallQAPrompt): Promise<CallQAPrompt>;
   updateCallQAPrompt(id: number, qa: Partial<InsertCallQAPrompt>): Promise<CallQAPrompt | undefined>;
   deleteCallQAPrompt(id: number): Promise<boolean>;
+  getClientPathway(): Promise<ClientPathway | null>;
+  setClientPathway(data: InsertClientPathway): Promise<ClientPathway>;
+  deleteClientPathway(): Promise<boolean>;
 }
 
 export class BigQueryStorage implements IStorage {
@@ -655,6 +660,71 @@ export class BigQueryStorage implements IStorage {
       });
     }
   }
+
+  private getClientPathwayTable(): string {
+    const projectId = process.env.GCP_PROJECT_ID;
+    return `\`${projectId}.${DATASET_ID}.${CLIENT_PATHWAY_TABLE_ID}\``;
+  }
+
+  async getClientPathway(): Promise<ClientPathway | null> {
+    await ensureClientPathwayTable();
+    const client = getBigQueryClient();
+    const table = this.getClientPathwayTable();
+    const [rows] = await client.query({ query: `SELECT * FROM ${table} LIMIT 1` });
+    if (rows.length === 0) return null;
+    const row = rows[0] as any;
+    return { id: row.id, client: row.client, pathway: row.pathway };
+  }
+
+  async setClientPathway(data: InsertClientPathway): Promise<ClientPathway> {
+    await ensureClientPathwayTable();
+    const client = getBigQueryClient();
+    const table = this.getClientPathwayTable();
+
+    await client.query({ query: `DELETE FROM ${table} WHERE TRUE` });
+
+    const row = { id: 1, client: data.client, pathway: data.pathway };
+    await client.query({
+      query: `INSERT INTO ${table} (id, client, pathway) VALUES (@id, @client, @pathway)`,
+      params: row,
+    });
+    return row;
+  }
+
+  async deleteClientPathway(): Promise<boolean> {
+    await ensureClientPathwayTable();
+    const client = getBigQueryClient();
+    const table = this.getClientPathwayTable();
+    await client.query({ query: `DELETE FROM ${table} WHERE TRUE` });
+    return true;
+  }
+}
+
+async function ensureClientPathwayTable(): Promise<void> {
+  if (clientPathwayTableInitialized) return;
+
+  const client = getBigQueryClient();
+  const projectId = process.env.GCP_PROJECT_ID;
+  const fullTable = `${projectId}.${DATASET_ID}.${CLIENT_PATHWAY_TABLE_ID}`;
+
+  try {
+    await client.query({
+      query: `CREATE TABLE IF NOT EXISTS \`${fullTable}\` (
+        id INT64 NOT NULL,
+        client STRING NOT NULL,
+        pathway STRING NOT NULL
+      )`,
+    });
+    console.log(`BigQuery table ${DATASET_ID}.${CLIENT_PATHWAY_TABLE_ID} ready.`);
+  } catch (err: any) {
+    if (err.message?.includes("Already Exists")) {
+      console.log(`BigQuery table ${DATASET_ID}.${CLIENT_PATHWAY_TABLE_ID} already exists.`);
+    } else {
+      throw err;
+    }
+  }
+
+  clientPathwayTableInitialized = true;
 }
 
 export const storage = new BigQueryStorage();

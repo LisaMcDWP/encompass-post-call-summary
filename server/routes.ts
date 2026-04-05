@@ -45,7 +45,7 @@ export async function registerRoutes(
 
   async function handleAnalyze(req: any, res: any) {
     const startTime = Date.now();
-    const { care_flow_id, processed_datetime, source_type, source_id, source_text, context, ...rest } = req.body;
+    const { care_flow_id, processed_datetime, source_type, source_id, source_text, context, client: reqClient, pathway: reqPathway, ...rest } = req.body;
     const { source_text: _omit, ...requestMeta } = req.body;
     const requestBodyJson = JSON.stringify(requestMeta);
 
@@ -87,6 +87,10 @@ export async function registerRoutes(
 
       const callQAPrompts = await storage.getActiveCallQAPrompts();
 
+      const configuredCP = await storage.getClientPathway();
+      const resolvedClient = reqClient || configuredCP?.client || null;
+      const resolvedPathway = reqPathway || configuredCP?.pathway || null;
+
       const { analysis, tokenUsage } = await analyzeTranscript(
         resolvedSourceId,
         source_text.trim(),
@@ -124,6 +128,8 @@ export async function registerRoutes(
         estimatedCost: tokenUsage.estimatedCost,
         status: "success",
         requestBody: requestBodyJson,
+        client: resolvedClient,
+        pathway: resolvedPathway,
       });
 
       await insertCallObservations(resolvedSourceId, analysis.observations);
@@ -348,6 +354,40 @@ export async function registerRoutes(
     const deleted = await storage.deleteContextParameter(id);
     if (!deleted) return res.status(404).json({ message: "Context parameter not found" });
     res.json({ success: true });
+  });
+
+  app.get("/api/client-pathway", async (_req, res) => {
+    try {
+      const cp = await storage.getClientPathway();
+      res.json(cp);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/client-pathway", async (req, res) => {
+    const parsed = z.object({
+      client: z.string().min(1, "Client is required"),
+      pathway: z.string().min(1, "Pathway is required"),
+    }).safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.errors.map(e => e.message).join(", ") });
+    }
+    try {
+      const cp = await storage.setClientPathway(parsed.data);
+      res.json(cp);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/client-pathway", async (_req, res) => {
+    try {
+      await storage.deleteClientPathway();
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
   });
 
   app.get("/api/settings/summary-instruction", async (_req, res) => {
@@ -680,6 +720,7 @@ export async function registerRoutes(
       }
 
       const results: { callId: string; status: string; error?: string }[] = [];
+      const batchCP = await storage.getClientPathway();
 
       for (const item of pendingItems) {
         const claimed = await updateBatchItemStatus(item.bland_call_id, "processing");
@@ -738,6 +779,8 @@ export async function registerRoutes(
             estimatedCost: tokenUsage.estimatedCost,
             status: "success",
             requestBody: JSON.stringify({ batch_id: item.batch_id, bland_call_id: item.bland_call_id }),
+            client: batchCP?.client || null,
+            pathway: batchCP?.pathway || null,
           });
 
           await insertCallObservations(callId, analysis.observations);

@@ -46,6 +46,19 @@ export interface ContextParameter {
   awellPatientProfileField: string;
 }
 
+export const insertClientPathwaySchema = z.object({
+  client: z.string().min(1),
+  pathway: z.string().min(1),
+});
+
+export type InsertClientPathway = z.infer<typeof insertClientPathwaySchema>;
+
+export interface ClientPathway {
+  id: number;
+  client: string;
+  pathway: string;
+}
+
 export const enumValueSchema = z.object({
   label: z.string(),
   color: z.enum(["GREEN", "YELLOW", "RED", "BLUE", "GRAY"]),

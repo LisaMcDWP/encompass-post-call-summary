@@ -18,6 +18,7 @@ import ProductReference from "@/pages/ProductReference";
 import BatchProcessing from "@/pages/BatchProcessing";
 import BarriersPrompt from "@/pages/BarriersPrompt";
 import CallQA from "@/pages/CallQA";
+import ClientPathway from "@/pages/ClientPathway";
 
 function Router() {
   return (
@@ -31,6 +32,7 @@ function Router() {
         <Route path="/barriers-prompt" component={BarriersPrompt} />
         <Route path="/call-qa" component={CallQA} />
         <Route path="/context-parameters" component={ContextParameters} />
+        <Route path="/client-pathway" component={ClientPathway} />
         <Route path="/generated-prompt" component={GeneratedPrompt} />
         <Route path="/api-reference" component={ApiReference} />
         <Route path="/batch" component={BatchProcessing} />

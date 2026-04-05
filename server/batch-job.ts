@@ -1,4 +1,4 @@
-import { getPendingBatchItems, updateBatchItemStatus, initializeBatchTable, ensureCallQATable } from "./bigquery";
+import { getPendingBatchItems, updateBatchItemStatus, initializeBatchTable, ensureCallQATable, initializeCallTables } from "./bigquery";
 import { insertCallInfo, insertCallObservations, insertCallQAResults } from "./bigquery";
 import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION } from "./gemini";
 import { storage } from "./storage";
@@ -38,7 +38,9 @@ async function processBatch() {
 
   await initializeBatchTable();
   await ensureCallQATable();
+  await initializeCallTables();
 
+  const batchCP = await storage.getClientPathway();
   const pendingItems = await getPendingBatchItems(BATCH_SIZE);
   console.log(`Found ${pendingItems.length} pending items to process.`);
 
@@ -111,6 +113,8 @@ async function processBatch() {
         estimatedCost: tokenUsage.estimatedCost,
         status: "success",
         requestBody: JSON.stringify({ batch_id: item.batch_id, bland_call_id: item.bland_call_id }),
+        client: batchCP?.client || null,
+        pathway: batchCP?.pathway || null,
       });
 
       await insertCallObservations(sourceId, analysis.observations);
