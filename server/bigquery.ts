@@ -617,29 +617,51 @@ export async function getCallInfoList(limit = 100): Promise<any[]> {
     LIMIT @limit
   `;
   const [rows] = await client.query({ query, params: { limit }, location: "US" });
-  return (rows as CallInfoRow[]).map(row => ({
-    call_id: row.call_id,
-    care_flow_id: row.care_flow_id,
-    processed_datetime: extractTimestamp(row.processed_datetime),
-    source_type: row.source_type,
-    source_id: row.source_id,
-    processed_at: extractTimestamp(row.processed_at),
-    processing_time_ms: row.processing_time_ms,
-    prompt_version: row.prompt_version,
-    prompt_version_date: extractTimestamp(row.prompt_version_date),
-    context_values: row.context_values ? JSON.parse(row.context_values) : null,
-    transcript_length: row.transcript_length,
-    summary: row.summary,
-    follow_up_areas: row.follow_up_areas,
-    transition_status: row.transition_status,
-    prompt_tokens: row.prompt_tokens,
-    completion_tokens: row.completion_tokens,
-    total_tokens: row.total_tokens,
-    estimated_cost: row.estimated_cost,
-    status: row.status,
-    error_message: row.error_message,
-    request_body: row.request_body ? JSON.parse(row.request_body) : null,
-  }));
+  const knownNonContext = new Set(["source_id", "source_type", "source_text", "care_flow_id", "processed_datetime", "context", "batch_id", "bland_call_id"]);
+  return (rows as CallInfoRow[]).map(row => {
+    let contextValues: Record<string, string> | null = null;
+    if (row.context_values) {
+      try {
+        const parsed = JSON.parse(row.context_values);
+        if (parsed && typeof parsed === "object" && Object.keys(parsed).length > 0) contextValues = parsed;
+      } catch {}
+    }
+    if (!contextValues && row.request_body) {
+      try {
+        const rb = JSON.parse(row.request_body);
+        const extracted: Record<string, string> = {};
+        for (const [k, v] of Object.entries(rb)) {
+          if (!knownNonContext.has(k) && v !== undefined && v !== null && v !== "") {
+            extracted[k] = String(v);
+          }
+        }
+        if (Object.keys(extracted).length > 0) contextValues = extracted;
+      } catch {}
+    }
+    return {
+      call_id: row.call_id,
+      care_flow_id: row.care_flow_id,
+      processed_datetime: extractTimestamp(row.processed_datetime),
+      source_type: row.source_type,
+      source_id: row.source_id,
+      processed_at: extractTimestamp(row.processed_at),
+      processing_time_ms: row.processing_time_ms,
+      prompt_version: row.prompt_version,
+      prompt_version_date: extractTimestamp(row.prompt_version_date),
+      context_values: contextValues,
+      transcript_length: row.transcript_length,
+      summary: row.summary,
+      follow_up_areas: row.follow_up_areas,
+      transition_status: row.transition_status,
+      prompt_tokens: row.prompt_tokens,
+      completion_tokens: row.completion_tokens,
+      total_tokens: row.total_tokens,
+      estimated_cost: row.estimated_cost,
+      status: row.status,
+      error_message: row.error_message,
+      request_body: row.request_body ? JSON.parse(row.request_body) : null,
+    };
+  });
 }
 
 export interface BatchProcessingRow {
@@ -1209,29 +1231,51 @@ export async function getCallDetail(callId: string): Promise<{ callInfo: any | n
   `;
   const [obsRows] = await client.query({ query: obsQuery, params: { callId }, location: "US" });
 
-  const callInfo = row ? {
-    call_id: row.call_id,
-    care_flow_id: row.care_flow_id,
-    processed_datetime: extractTimestamp(row.processed_datetime),
-    source_type: row.source_type,
-    source_id: row.source_id,
-    processed_at: extractTimestamp(row.processed_at),
-    processing_time_ms: row.processing_time_ms,
-    prompt_version: row.prompt_version,
-    prompt_version_date: extractTimestamp(row.prompt_version_date),
-    context_values: row.context_values ? JSON.parse(row.context_values) : null,
-    transcript_length: row.transcript_length,
-    summary: row.summary,
-    follow_up_areas: row.follow_up_areas,
-    transition_status: row.transition_status,
-    prompt_tokens: row.prompt_tokens,
-    completion_tokens: row.completion_tokens,
-    total_tokens: row.total_tokens,
-    estimated_cost: row.estimated_cost,
-    status: row.status,
-    error_message: row.error_message,
-    request_body: row.request_body ? JSON.parse(row.request_body) : null,
-  } : null;
+  const callInfo = row ? (() => {
+    const knownNonContext = new Set(["source_id", "source_type", "source_text", "care_flow_id", "processed_datetime", "context", "batch_id", "bland_call_id"]);
+    let contextValues: Record<string, string> | null = null;
+    if (row.context_values) {
+      try {
+        const parsed = JSON.parse(row.context_values);
+        if (parsed && typeof parsed === "object" && Object.keys(parsed).length > 0) contextValues = parsed;
+      } catch {}
+    }
+    if (!contextValues && row.request_body) {
+      try {
+        const rb = JSON.parse(row.request_body);
+        const extracted: Record<string, string> = {};
+        for (const [k, v] of Object.entries(rb)) {
+          if (!knownNonContext.has(k) && v !== undefined && v !== null && v !== "") {
+            extracted[k] = String(v);
+          }
+        }
+        if (Object.keys(extracted).length > 0) contextValues = extracted;
+      } catch {}
+    }
+    return {
+      call_id: row.call_id,
+      care_flow_id: row.care_flow_id,
+      processed_datetime: extractTimestamp(row.processed_datetime),
+      source_type: row.source_type,
+      source_id: row.source_id,
+      processed_at: extractTimestamp(row.processed_at),
+      processing_time_ms: row.processing_time_ms,
+      prompt_version: row.prompt_version,
+      prompt_version_date: extractTimestamp(row.prompt_version_date),
+      context_values: contextValues,
+      transcript_length: row.transcript_length,
+      summary: row.summary,
+      follow_up_areas: row.follow_up_areas,
+      transition_status: row.transition_status,
+      prompt_tokens: row.prompt_tokens,
+      completion_tokens: row.completion_tokens,
+      total_tokens: row.total_tokens,
+      estimated_cost: row.estimated_cost,
+      status: row.status,
+      error_message: row.error_message,
+      request_body: row.request_body ? JSON.parse(row.request_body) : null,
+    };
+  })() : null;
 
   const qaQuery = `
     SELECT *
