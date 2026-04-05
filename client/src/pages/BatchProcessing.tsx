@@ -95,7 +95,7 @@ export default function BatchProcessing() {
   const [minDuration, setMinDuration] = useState("30");
   const [maxDuration, setMaxDuration] = useState("");
   const [requiredTags, setRequiredTags] = useState<string[]>([]);
-  const [excludeTags, setExcludeTags] = useState<string[]>(["patient_deceased"]);
+  const [excludeTags, setExcludeTags] = useState<string[]>([]);
   const [processedFilter, setProcessedFilter] = useState<"unprocessed" | "processed" | "all">("unprocessed");
 
   const tagsQuery = useQuery<string[]>({
