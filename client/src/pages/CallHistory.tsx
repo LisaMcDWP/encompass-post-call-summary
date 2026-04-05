@@ -3,7 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Phone, Clock, Coins, ChevronRight, X, FileText, Activity, ListChecks, ClipboardList, AlertCircle, MessageSquare, ShieldAlert, ClipboardCheck, RefreshCw } from "lucide-react";
+import { Loader2, Phone, Clock, Coins, ChevronRight, X, FileText, Activity, ListChecks, ClipboardList, AlertCircle, MessageSquare, ShieldAlert, ClipboardCheck, RefreshCw, Download } from "lucide-react";
+import { exportCallDetailPdf } from "@/lib/exportPdf";
 
 interface CallInfo {
   call_id: string;
@@ -144,9 +145,20 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
             </h2>
             <p className="text-xs text-muted-foreground font-mono mt-0.5" data-testid="text-call-id">{info.call_id}</p>
           </div>
-          <Button variant="ghost" size="icon" onClick={onClose} data-testid="button-close-detail">
-            <X className="h-5 w-5" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => exportCallDetailPdf(info, obs, qaPairs, barriers, callQA)}
+              data-testid="button-export-pdf"
+            >
+              <Download className="h-3.5 w-3.5 mr-1.5" />
+              Export PDF
+            </Button>
+            <Button variant="ghost" size="icon" onClick={onClose} data-testid="button-close-detail">
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
 
         <div className="p-6 space-y-6">
