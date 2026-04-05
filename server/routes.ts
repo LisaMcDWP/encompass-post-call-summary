@@ -722,6 +722,7 @@ export async function registerRoutes(
             processingTimeMs,
             promptVersion,
             promptVersionDate,
+            contextValues: Object.keys(batchContext).length > 0 ? batchContext : undefined,
             transcriptLength: item.transcript.length,
             summary: analysis.summary,
             followUpAreas: analysis.follow_up_areas,
