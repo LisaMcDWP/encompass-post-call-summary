@@ -205,12 +205,24 @@ export interface CallInfoEntry {
   errorMessage?: string;
 }
 
+async function deleteExistingCallData(callId: string, tableId: string): Promise<void> {
+  try {
+    const client = getBigQueryClient();
+    const query = `DELETE FROM \`${client.projectId}.${DATASET_ID}.${tableId}\` WHERE call_id = @callId`;
+    await client.query({ query, params: { callId }, location: "US" });
+  } catch (err: any) {
+    console.warn(`Could not delete existing rows from ${tableId} for call ${callId}: ${err.message}`);
+  }
+}
+
 export async function insertCallInfo(entry: CallInfoEntry): Promise<void> {
   try {
     if (!callInfoInitialized) {
       await ensureCallInfoTable();
       callInfoInitialized = true;
     }
+
+    await deleteExistingCallData(entry.callId, CALL_INFO_TABLE_ID);
 
     const client = getBigQueryClient();
     const row = {
@@ -259,6 +271,8 @@ export async function insertCallObservations(callId: string, observations: Obser
     }
 
     if (!observations || observations.length === 0) return;
+
+    await deleteExistingCallData(callId, OBSERVATIONS_TABLE_ID);
 
     const client = getBigQueryClient();
     const rows = observations.map(obs => ({
@@ -336,6 +350,8 @@ export async function insertCallQAPairs(callId: string, qaPairs: QAPair[]): Prom
       console.warn(`Dropped ${qaPairs.length - validPairs.length} invalid Q&A pairs for call ${callId}`);
     }
 
+    await deleteExistingCallData(callId, QA_PAIRS_TABLE_ID);
+
     const client = getBigQueryClient();
     const rows = validPairs.map((qa, index) => ({
       call_id: callId,
@@ -410,6 +426,8 @@ export async function insertCallBarriers(callId: string, barriers: Barrier[]): P
       console.warn(`Dropped ${barriers.length - validBarriers.length} invalid barriers for call ${callId}`);
     }
 
+    await deleteExistingCallData(callId, BARRIERS_TABLE_ID);
+
     const client = getBigQueryClient();
     const rows = validBarriers.map((b) => ({
       call_id: callId,
@@ -483,6 +501,8 @@ export async function insertCallQAResults(callId: string, results: CallQAResult[
     );
 
     if (validResults.length === 0) return;
+
+    await deleteExistingCallData(callId, CALL_QA_TABLE_ID);
 
     const client = getBigQueryClient();
     const rows = validResults.map((r) => ({
