@@ -1,5 +1,5 @@
-import { getPendingBatchItems, updateBatchItemStatus, initializeBatchTable } from "./bigquery";
-import { insertCallInfo, insertCallObservations } from "./bigquery";
+import { getPendingBatchItems, updateBatchItemStatus, initializeBatchTable, ensureCallQATable } from "./bigquery";
+import { insertCallInfo, insertCallObservations, insertCallQAResults } from "./bigquery";
 import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION } from "./gemini";
 import { storage } from "./storage";
 import { createHash } from "crypto";
@@ -10,7 +10,8 @@ async function getPromptWithVersion() {
   const observationsGuidance = await storage.getSetting("observations_prompt_guidance");
   const barriersGuidance = await storage.getSetting("barriers_prompt_guidance");
   const contextParams = await storage.getActiveContextParameters();
-  const prompt = buildPromptTemplate(activeObs, summaryInstruction || undefined, contextParams, observationsGuidance || undefined, barriersGuidance || undefined);
+  const callQAPrompts = await storage.getActiveCallQAPrompts();
+  const prompt = buildPromptTemplate(activeObs, summaryInstruction || undefined, contextParams, observationsGuidance || undefined, barriersGuidance || undefined, callQAPrompts);
 
   const hash = createHash("sha256").update(prompt).digest("hex");
   const storedHash = await storage.getSetting("prompt_hash");
@@ -36,6 +37,7 @@ async function processBatch() {
   console.log(`Batch job starting. Batch size: ${BATCH_SIZE}, Delay: ${DELAY_MS}ms`);
 
   await initializeBatchTable();
+  await ensureCallQATable();
 
   const pendingItems = await getPendingBatchItems(BATCH_SIZE);
   console.log(`Found ${pendingItems.length} pending items to process.`);
@@ -67,6 +69,7 @@ async function processBatch() {
       const sourceId = `batch_${item.bland_call_id}`;
       const startTime = Date.now();
 
+      const batchCallQAPrompts = await storage.getActiveCallQAPrompts();
       const { analysis, tokenUsage } = await analyzeTranscript(
         sourceId,
         item.transcript.trim(),
@@ -76,7 +79,8 @@ async function processBatch() {
         contextParams,
         {},
         observationsGuidance || undefined,
-        barriersGuidance || undefined
+        barriersGuidance || undefined,
+        batchCallQAPrompts
       );
 
       const processingTimeMs = Date.now() - startTime;
@@ -104,6 +108,7 @@ async function processBatch() {
       });
 
       await insertCallObservations(sourceId, analysis.observations);
+      await insertCallQAResults(sourceId, analysis.call_qa || []);
       await updateBatchItemStatus(item.bland_call_id, "completed", sourceId);
 
       successCount++;

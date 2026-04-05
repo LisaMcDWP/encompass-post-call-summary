@@ -1,5 +1,5 @@
 import { BigQuery } from "@google-cloud/bigquery";
-import type { ObservationResult, QAPair, Barrier } from "./gemini";
+import type { ObservationResult, QAPair, Barrier, CallQAResult } from "./gemini";
 
 const DATASET_ID = "call_information";
 const CALL_INFO_TABLE_ID = "call_info";
@@ -7,6 +7,7 @@ const OBSERVATIONS_TABLE_ID = "call_observations";
 const QA_PAIRS_TABLE_ID = "call_qa_pairs";
 const BARRIERS_TABLE_ID = "call_barriers";
 const BATCH_PROCESSING_TABLE_ID = "batch_processing";
+const CALL_QA_TABLE_ID = "call_qa_results";
 
 export interface CallInfoRow {
   call_id: string;
@@ -442,6 +443,78 @@ export async function getCallBarriers(callId: string): Promise<any[]> {
     return rows;
   } catch (error: any) {
     console.error("Failed to get call barriers:", error.message);
+    return [];
+  }
+}
+
+export async function ensureCallQATable(): Promise<void> {
+  try {
+    const client = getBigQueryClient();
+    const dataset = client.dataset(DATASET_ID);
+    const table = dataset.table(CALL_QA_TABLE_ID);
+    const [exists] = await table.exists();
+    if (!exists) {
+      await dataset.createTable(CALL_QA_TABLE_ID, {
+        schema: {
+          fields: [
+            { name: "call_id", type: "STRING", mode: "REQUIRED" },
+            { name: "name", type: "STRING", mode: "REQUIRED" },
+            { name: "display_name", type: "STRING", mode: "NULLABLE" },
+            { name: "value", type: "STRING", mode: "NULLABLE" },
+            { name: "detail", type: "STRING", mode: "NULLABLE" },
+            { name: "evidence", type: "STRING", mode: "NULLABLE" },
+          ],
+        },
+      });
+      console.log("Created call_qa_results table");
+    }
+  } catch (error: any) {
+    console.error("Failed to ensure call_qa_results table:", error.message);
+  }
+}
+
+export async function insertCallQAResults(callId: string, results: CallQAResult[]): Promise<void> {
+  try {
+    if (!results || !Array.isArray(results) || results.length === 0) return;
+
+    const validResults = results.filter(
+      (r) => r.name && typeof r.name === "string" && r.name.trim().length > 0
+    );
+
+    if (validResults.length === 0) return;
+
+    const client = getBigQueryClient();
+    const rows = validResults.map((r) => ({
+      call_id: callId,
+      name: r.name,
+      display_name: r.display_name || null,
+      value: r.value || null,
+      detail: r.detail || null,
+      evidence: r.evidence || null,
+    }));
+
+    await client
+      .dataset(DATASET_ID)
+      .table(CALL_QA_TABLE_ID)
+      .insert(rows);
+
+    console.log(`BigQuery call_qa_results inserted: ${rows.length} rows for call ${callId}`);
+  } catch (error: any) {
+    console.error("Failed to insert call_qa_results:", error.message);
+    if (error.errors) {
+      console.error("BigQuery errors:", JSON.stringify(error.errors));
+    }
+  }
+}
+
+export async function getCallQAResults(callId: string): Promise<any[]> {
+  try {
+    const client = getBigQueryClient();
+    const query = `SELECT * FROM \`${client.projectId}.${DATASET_ID}.${CALL_QA_TABLE_ID}\` WHERE call_id = @callId`;
+    const [rows] = await client.query({ query, params: { callId } });
+    return rows;
+  } catch (error: any) {
+    console.error("Failed to get call QA results:", error.message);
     return [];
   }
 }
@@ -976,7 +1049,7 @@ export async function resetFailedBatchItems(batchId?: string): Promise<number> {
   return Number((response as any)?.dmlStats?.updatedRowCount || (response as any)?.numDmlAffectedRows || 0);
 }
 
-export async function getCallDetail(callId: string): Promise<{ callInfo: any | null; observations: CallObservationRow[]; qaPairs: any[]; barriers: any[] }> {
+export async function getCallDetail(callId: string): Promise<{ callInfo: any | null; observations: CallObservationRow[]; qaPairs: any[]; barriers: any[]; callQA: any[] }> {
   const client = getBigQueryClient();
 
   const infoQuery = `
@@ -1046,5 +1119,18 @@ export async function getCallDetail(callId: string): Promise<{ callInfo: any | n
     console.warn("Barriers table not found or query failed:", err.message);
   }
 
-  return { callInfo, observations: obsRows as CallObservationRow[], qaPairs: qaRows, barriers: barrierRows };
+  let callQARows: any[] = [];
+  try {
+    const callQAQuery = `
+      SELECT *
+      FROM \`${client.projectId}.${DATASET_ID}.${CALL_QA_TABLE_ID}\`
+      WHERE call_id = @callId
+    `;
+    const [cqRows] = await client.query({ query: callQAQuery, params: { callId }, location: "US" });
+    callQARows = cqRows;
+  } catch (err: any) {
+    console.warn("Call QA results table not found or query failed:", err.message);
+  }
+
+  return { callInfo, observations: obsRows as CallObservationRow[], qaPairs: qaRows, barriers: barrierRows, callQA: callQARows };
 }

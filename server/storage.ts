@@ -1,10 +1,11 @@
 import { BigQuery } from "@google-cloud/bigquery";
-import type { Observation, InsertObservation, EnumValue, ContextParameter, InsertContextParameter } from "@shared/schema";
+import type { Observation, InsertObservation, EnumValue, ContextParameter, InsertContextParameter, CallQAPrompt, InsertCallQAPrompt } from "@shared/schema";
 
 const DATASET_ID = "call_information";
 const TABLE_ID = "observations";
 const SETTINGS_TABLE_ID = "settings";
 const CONTEXT_PARAMS_TABLE_ID = "context_parameters";
+const CALL_QA_PROMPTS_TABLE_ID = "call_qa_prompts";
 
 let bigquery: BigQuery | null = null;
 
@@ -25,6 +26,7 @@ function getBigQueryClient(): BigQuery {
 let tableInitialized = false;
 let settingsTableInitialized = false;
 let contextParamsTableInitialized = false;
+let callQAPromptsTableInitialized = false;
 
 async function ensureSettingsTable(): Promise<void> {
   if (settingsTableInitialized) return;
@@ -160,6 +162,50 @@ async function ensureObservationsTable(): Promise<void> {
   tableInitialized = true;
 }
 
+async function ensureCallQAPromptsTable(): Promise<void> {
+  if (callQAPromptsTableInitialized) return;
+
+  const client = getBigQueryClient();
+  const projectId = process.env.GCP_PROJECT_ID;
+  const fullTable = `${projectId}.${DATASET_ID}.${CALL_QA_PROMPTS_TABLE_ID}`;
+
+  try {
+    await client.query({
+      query: `CREATE TABLE IF NOT EXISTS \`${fullTable}\` (
+        id INT64 NOT NULL,
+        name STRING NOT NULL,
+        display_name STRING NOT NULL,
+        prompt_text STRING NOT NULL,
+        response_type STRING DEFAULT 'enum',
+        response_options STRING,
+        is_active BOOL DEFAULT TRUE,
+        display_order INT64 DEFAULT 0
+      )`,
+    });
+    console.log(`BigQuery table ${DATASET_ID}.${CALL_QA_PROMPTS_TABLE_ID} ready.`);
+  } catch (err: any) {
+    if (err.message?.includes("Already Exists")) {
+      console.log(`BigQuery table ${DATASET_ID}.${CALL_QA_PROMPTS_TABLE_ID} already exists.`);
+    } else {
+      throw err;
+    }
+  }
+  callQAPromptsTableInitialized = true;
+}
+
+function rowToCallQAPrompt(row: any): CallQAPrompt {
+  return {
+    id: row.id,
+    name: row.name,
+    displayName: row.display_name,
+    promptText: row.prompt_text,
+    responseType: row.response_type || "enum",
+    responseOptions: row.response_options ? JSON.parse(row.response_options) : [],
+    isActive: row.is_active,
+    displayOrder: row.display_order,
+  };
+}
+
 function rowToObservation(row: any): Observation {
   return {
     id: row.id,
@@ -192,6 +238,12 @@ export interface IStorage {
   updateContextParameter(id: number, param: Partial<InsertContextParameter>): Promise<ContextParameter | undefined>;
   deleteContextParameter(id: number): Promise<boolean>;
   reorderContextParameters(orderedIds: number[]): Promise<void>;
+  getCallQAPrompts(): Promise<CallQAPrompt[]>;
+  getActiveCallQAPrompts(): Promise<CallQAPrompt[]>;
+  getCallQAPrompt(id: number): Promise<CallQAPrompt | undefined>;
+  createCallQAPrompt(qa: InsertCallQAPrompt): Promise<CallQAPrompt>;
+  updateCallQAPrompt(id: number, qa: Partial<InsertCallQAPrompt>): Promise<CallQAPrompt | undefined>;
+  deleteCallQAPrompt(id: number): Promise<boolean>;
 }
 
 export class BigQueryStorage implements IStorage {
@@ -438,6 +490,110 @@ export class BigQueryStorage implements IStorage {
         params: { order: i, id: orderedIds[i] },
       });
     }
+  }
+
+  private getCallQAPromptsTable(): string {
+    const projectId = process.env.GCP_PROJECT_ID;
+    return `\`${projectId}.${DATASET_ID}.${CALL_QA_PROMPTS_TABLE_ID}\``;
+  }
+
+  private async getNextCallQAPromptId(): Promise<number> {
+    const client = getBigQueryClient();
+    const table = this.getCallQAPromptsTable();
+    const [rows] = await client.query({ query: `SELECT COALESCE(MAX(id), 0) + 1 as next_id FROM ${table}` });
+    return rows[0].next_id;
+  }
+
+  async getCallQAPrompts(): Promise<CallQAPrompt[]> {
+    await ensureCallQAPromptsTable();
+    const client = getBigQueryClient();
+    const table = this.getCallQAPromptsTable();
+    const [rows] = await client.query({ query: `SELECT * FROM ${table} ORDER BY display_order ASC` });
+    return rows.map(rowToCallQAPrompt);
+  }
+
+  async getActiveCallQAPrompts(): Promise<CallQAPrompt[]> {
+    await ensureCallQAPromptsTable();
+    const client = getBigQueryClient();
+    const table = this.getCallQAPromptsTable();
+    const [rows] = await client.query({ query: `SELECT * FROM ${table} WHERE is_active = TRUE ORDER BY display_order ASC` });
+    return rows.map(rowToCallQAPrompt);
+  }
+
+  async getCallQAPrompt(id: number): Promise<CallQAPrompt | undefined> {
+    await ensureCallQAPromptsTable();
+    const client = getBigQueryClient();
+    const table = this.getCallQAPromptsTable();
+    const [rows] = await client.query({
+      query: `SELECT * FROM ${table} WHERE id = @id`,
+      params: { id },
+    });
+    return rows.length > 0 ? rowToCallQAPrompt(rows[0]) : undefined;
+  }
+
+  async createCallQAPrompt(qa: InsertCallQAPrompt): Promise<CallQAPrompt> {
+    await ensureCallQAPromptsTable();
+    const client = getBigQueryClient();
+    const table = this.getCallQAPromptsTable();
+    const id = await this.getNextCallQAPromptId();
+
+    await client.query({
+      query: `INSERT INTO ${table} (id, name, display_name, prompt_text, response_type, response_options, is_active, display_order)
+              VALUES (@id, @name, @display_name, @prompt_text, @response_type, @response_options, @is_active, @display_order)`,
+      params: {
+        id,
+        name: qa.name,
+        display_name: qa.displayName,
+        prompt_text: qa.promptText,
+        response_type: qa.responseType || "enum",
+        response_options: JSON.stringify(qa.responseOptions || []),
+        is_active: qa.isActive !== false,
+        display_order: qa.displayOrder ?? 0,
+      },
+    });
+
+    return { id, name: qa.name, displayName: qa.displayName, promptText: qa.promptText, responseType: qa.responseType || "enum", responseOptions: qa.responseOptions || [], isActive: qa.isActive !== false, displayOrder: qa.displayOrder ?? 0 };
+  }
+
+  async updateCallQAPrompt(id: number, qa: Partial<InsertCallQAPrompt>): Promise<CallQAPrompt | undefined> {
+    await ensureCallQAPromptsTable();
+    const existing = await this.getCallQAPrompt(id);
+    if (!existing) return undefined;
+
+    const client = getBigQueryClient();
+    const table = this.getCallQAPromptsTable();
+    const updates: string[] = [];
+    const params: any = { id };
+
+    if (qa.name !== undefined) { updates.push("name = @name"); params.name = qa.name; }
+    if (qa.displayName !== undefined) { updates.push("display_name = @display_name"); params.display_name = qa.displayName; }
+    if (qa.promptText !== undefined) { updates.push("prompt_text = @prompt_text"); params.prompt_text = qa.promptText; }
+    if (qa.responseType !== undefined) { updates.push("response_type = @response_type"); params.response_type = qa.responseType; }
+    if (qa.responseOptions !== undefined) { updates.push("response_options = @response_options"); params.response_options = JSON.stringify(qa.responseOptions); }
+    if (qa.isActive !== undefined) { updates.push("is_active = @is_active"); params.is_active = qa.isActive; }
+    if (qa.displayOrder !== undefined) { updates.push("display_order = @display_order"); params.display_order = qa.displayOrder; }
+
+    if (updates.length > 0) {
+      await client.query({
+        query: `UPDATE ${table} SET ${updates.join(", ")} WHERE id = @id`,
+        params,
+      });
+    }
+
+    return this.getCallQAPrompt(id);
+  }
+
+  async deleteCallQAPrompt(id: number): Promise<boolean> {
+    await ensureCallQAPromptsTable();
+    const existing = await this.getCallQAPrompt(id);
+    if (!existing) return false;
+    const client = getBigQueryClient();
+    const table = this.getCallQAPromptsTable();
+    await client.query({
+      query: `DELETE FROM ${table} WHERE id = @id`,
+      params: { id },
+    });
+    return true;
   }
 
   private getSettingsTable(): string {

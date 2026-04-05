@@ -21,6 +21,7 @@ A full-stack application that provides a Gemini-powered transcript analysis API.
 - `client/src/pages/Home.tsx` — Test interface for the API
 - `client/src/pages/Observations.tsx` — Observation definitions management UI
 - `client/src/pages/ContextParameters.tsx` — Context parameter management UI
+- `client/src/pages/CallQA.tsx` — Call QA prompt management UI
 - `client/src/pages/Reference.tsx` — API reference documentation
 - `Dockerfile` — Multi-stage Docker build for GCP Cloud Run
 - `cloudbuild.yaml` — GCP Cloud Build CI/CD pipeline
@@ -77,6 +78,8 @@ Returns service connectivity status.
 - Table: `call_observations` — One row per observation per call (call_id, observation_name, observation_display_name, observation_domain, observation_value_type, observation_value, observation_detail, observation_evidence, observation_confidence)
 - Table: `call_qa_pairs` — One row per Q&A exchange per call (call_id, sequence_number, question, answer, asked_by, answered_by, observation_name, observation_display_name, category)
 - Table: `call_barriers` — One row per identified barrier per call (call_id, barrier, context, category, severity, observation_name, observation_display_name, evidence)
+- Table: `call_qa_results` — One row per Call QA assessment per call (call_id, name, display_name, value, detail, evidence)
+- Table: `call_qa_prompts` — Call QA prompt configuration (id, name, display_name, prompt_text, response_type, response_options, is_active, display_order)
 - Table: `observations` — Observation configuration (id, name, display_name, domain, display_order, value_type, value, is_active, prompt_guidance)
 - Table: `context_parameters` — Context parameter definitions (id, name, display_name, description, data_type, is_required, is_active, display_order)
 - **IMPORTANT**: `call_info` and `call_observations` tables are LIVE PRODUCTION tables. NEVER drop, delete, or recreate them unless explicitly instructed by the user. Code only creates them if they don't exist.

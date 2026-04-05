@@ -1,5 +1,5 @@
 import { VertexAI } from "@google-cloud/vertexai";
-import type { Observation, EnumValue, ContextParameter } from "@shared/schema";
+import type { Observation, EnumValue, ContextParameter, CallQAPrompt } from "@shared/schema";
 
 function getCredentials() {
   const raw = process.env.GCP_SERVICE_ACCOUNT_KEY;
@@ -63,6 +63,14 @@ export interface Barrier {
   evidence: string | null;
 }
 
+export interface CallQAResult {
+  name: string;
+  display_name: string;
+  value: string;
+  detail: string;
+  evidence: string | null;
+}
+
 export interface TranscriptAnalysis {
   summary: string;
   transition_status: string;
@@ -70,6 +78,7 @@ export interface TranscriptAnalysis {
   observations: ObservationResult[];
   qa_pairs: QAPair[];
   barriers: Barrier[];
+  call_qa: CallQAResult[];
 }
 
 const COLOR_STYLES: Record<string, string> = {
@@ -144,7 +153,23 @@ IMPORTANT CONTEXT RULES:
 `;
 }
 
-export function buildPromptTemplate(activeObservations: Observation[], summaryInstruction?: string, contextParams?: ContextParameter[], observationsGuidance?: string, barriersGuidance?: string): string {
+function buildCallQABlock(callQAPrompts: CallQAPrompt[]): string {
+  if (callQAPrompts.length === 0) return "";
+  const items = callQAPrompts.map(qa => {
+    let responseInstruction = "";
+    if (qa.responseType === "enum" && qa.responseOptions.length > 0) {
+      responseInstruction = `Choose one of: ${qa.responseOptions.join(", ")}`;
+    } else if (qa.responseType === "boolean") {
+      responseInstruction = "Answer with 'Yes' or 'No'";
+    } else {
+      responseInstruction = "Provide a brief text response";
+    }
+    return `    - name: "${qa.name}", display_name: "${qa.displayName}", prompt: "${qa.promptText}", response_instruction: "${responseInstruction}"`;
+  });
+  return items.join("\n");
+}
+
+export function buildPromptTemplate(activeObservations: Observation[], summaryInstruction?: string, contextParams?: ContextParameter[], observationsGuidance?: string, barriersGuidance?: string, callQAPrompts?: CallQAPrompt[]): string {
   const instruction = summaryInstruction || DEFAULT_SUMMARY_INSTRUCTION;
   const contextBlock = buildContextBlock(contextParams || []);
 
@@ -179,12 +204,25 @@ Your response MUST be valid JSON with exactly this structure:
       "observation_display_name": null,
       "evidence": "Direct quote from the transcript that reveals this barrier"
     }
-  ]
+  ],
+  "call_qa": [${(callQAPrompts || []).length > 0 ? `
+    {
+      "name": "The prompt name",
+      "display_name": "The prompt display name",
+      "value": "The evaluated response value",
+      "detail": "Brief explanation of why this value was chosen based on the transcript",
+      "evidence": "Direct quote from the transcript supporting this evaluation, or null if not applicable"
+    }
+  ` : ""}]
 }
 
 Guidelines:
 - qa_pairs: Extract EVERY question and answer exchange from the transcript, in chronological order. Include ALL exchanges — greetings, identity verification, clinical questions, scheduling, and any other conversation. Set observation_name and observation_display_name to null (no observations configured). Assign a descriptive category to every Q&A pair.
-- barriers: ${barriersGuidance || "Extract ANY barriers to care, recovery, or well-being that the patient or caregiver mentions or that can be identified from the conversation. A barrier is anything that may prevent or hinder the patient from following their care plan, recovering properly, or accessing needed services. Include barriers that are explicitly stated AND those clearly implied. If no barriers are identified, return an empty array. Common barrier categories include: Transportation, Financial, Medication Access, Social Support, Health Literacy, Language, Housing, Caregiver Burden, Emotional/Mental Health, Physical Limitation, Insurance/Coverage. Assign a severity based on potential impact on patient outcomes."}
+- barriers: ${barriersGuidance || "Extract ANY barriers to care, recovery, or well-being that the patient or caregiver mentions or that can be identified from the conversation. A barrier is anything that may prevent or hinder the patient from following their care plan, recovering properly, or accessing needed services. Include barriers that are explicitly stated AND those clearly implied. If no barriers are identified, return an empty array. Common barrier categories include: Transportation, Financial, Medication Access, Social Support, Health Literacy, Language, Housing, Caregiver Burden, Emotional/Mental Health, Physical Limitation, Insurance/Coverage. Assign a severity based on potential impact on patient outcomes."}${(callQAPrompts || []).length > 0 ? `
+- call_qa: For each of the following call experience evaluation prompts, assess the overall call and provide a response:
+${buildCallQABlock(callQAPrompts || [])}
+  Return one object per prompt with the name, display_name, value (your assessment), detail (brief explanation), and evidence (supporting quote or null).` : `
+- call_qa: Return an empty array [].`}
 Source ID: {{SOURCE_ID}}
 
 SOURCE TEXT:
@@ -239,7 +277,16 @@ ${observationsSchema}
       "observation_display_name": "The display name of the related observation, or null if no relation",
       "evidence": "Direct quote from the transcript that reveals or supports this barrier"
     }
-  ]
+  ],
+  "call_qa": [${(callQAPrompts || []).length > 0 ? `
+    {
+      "name": "The prompt name",
+      "display_name": "The prompt display name",
+      "value": "The evaluated response value",
+      "detail": "Brief explanation of why this value was chosen based on the transcript",
+      "evidence": "Direct quote from the transcript supporting this evaluation, or null if not applicable"
+    }
+  ` : ""}]
 }
 
 Guidelines:
@@ -251,7 +298,11 @@ Guidelines:
 - transition_status: Return a single HTML string as a valid JSON string value. The detail text after each status badge MUST be a brief original sentence about what was observed — NEVER repeat or paraphrase the evaluation guidance instructions. Do NOT start the string with a quote or any character before the first <b> tag. Use inline style attributes with single quotes for color-coded status badges (e.g. style='display:inline-block;padding:1px 8px;...'). Use <b> for topic labels, <span style='...'> for colored status badges, and <br> for line breaks. The text inside each <span> badge MUST be the actual enum value chosen for that observation (e.g. "Fair", "Picked Up", "Not Discussed") — NEVER use the color name (GREEN, YELLOW, RED, etc.) as badge text. Include all ${topicCount} topics. The entire value must be a properly quoted JSON string. The first character of the string content must be the opening < of the first <b> tag. IMPORTANT: List all discussed topics first, then group any "Not Discussed" topics together at the bottom of the output.
 - follow_up_areas: Return a single HTML string as a valid JSON string value. Use <ul>/<li> with <b> for topic names. Use single quotes for any HTML attributes. Only include items with issues. If none, return "<p>No follow-up areas identified.</p>".
 - qa_pairs: Extract EVERY question and answer exchange from the transcript, in chronological order. Include ALL exchanges — greetings, identity verification, clinical questions, scheduling, and any other conversation. Each entry should capture the question asked, the answer given, who asked it, and who answered it. Try to match each Q&A to the closest configured observation topic if applicable, setting observation_name and observation_display_name. If a Q&A does not match any configured observation, set those fields to null and still include it. Assign a descriptive category to every Q&A pair. Do not skip any exchanges.
-- barriers: ${barriersGuidance || "Extract ANY barriers to care, recovery, or well-being that the patient or caregiver mentions or that can be identified from the conversation. A barrier is anything that may prevent or hinder the patient from following their care plan, recovering properly, or accessing needed services — such as transportation issues, financial hardship, lack of social support, difficulty understanding instructions, medication access problems, housing instability, caregiver burden, emotional/mental health challenges, physical limitations, or insurance/coverage gaps. Include barriers that are explicitly stated AND those clearly implied from the conversation. Try to link each barrier to the most relevant configured observation if applicable. If no barriers are identified, return an empty array []. Assign a severity (high/medium/low) based on the potential impact on the patient's care outcomes."}
+- barriers: ${barriersGuidance || "Extract ANY barriers to care, recovery, or well-being that the patient or caregiver mentions or that can be identified from the conversation. A barrier is anything that may prevent or hinder the patient from following their care plan, recovering properly, or accessing needed services — such as transportation issues, financial hardship, lack of social support, difficulty understanding instructions, medication access problems, housing instability, caregiver burden, emotional/mental health challenges, physical limitations, or insurance/coverage gaps. Include barriers that are explicitly stated AND those clearly implied from the conversation. Try to link each barrier to the most relevant configured observation if applicable. If no barriers are identified, return an empty array []. Assign a severity (high/medium/low) based on the potential impact on the patient's care outcomes."}${(callQAPrompts || []).length > 0 ? `
+- call_qa: For each of the following call experience evaluation prompts, assess the overall call and provide a response:
+${buildCallQABlock(callQAPrompts || [])}
+  Return one object per prompt with the name, display_name, value (your assessment), detail (brief explanation), and evidence (supporting quote or null).` : `
+- call_qa: Return an empty array [].`}
 Source ID: {{SOURCE_ID}}
 
 SOURCE TEXT:
@@ -267,7 +318,8 @@ export async function analyzeTranscript(
   contextParams?: ContextParameter[],
   contextValues?: Record<string, string>,
   observationsGuidance?: string,
-  barriersGuidance?: string
+  barriersGuidance?: string,
+  callQAPrompts?: CallQAPrompt[]
 ): Promise<{ analysis: TranscriptAnalysis; promptUsed: string; tokenUsage: { promptTokens: number; completionTokens: number; totalTokens: number; estimatedCost: number } }> {
   const vertex = getVertexAI();
 
@@ -279,7 +331,7 @@ export async function analyzeTranscript(
     },
   });
 
-  const template = customPrompt || buildPromptTemplate(activeObservations, summaryInstruction, contextParams, observationsGuidance, barriersGuidance);
+  const template = customPrompt || buildPromptTemplate(activeObservations, summaryInstruction, contextParams, observationsGuidance, barriersGuidance, callQAPrompts);
   let prompt = template
     .replace("{{SOURCE_ID}}", sourceId)
     .replace("{{SOURCE_TEXT}}", sourceText);
@@ -335,6 +387,10 @@ export async function analyzeTranscript(
 
   if (!Array.isArray(parsed.barriers)) {
     parsed.barriers = [];
+  }
+
+  if (!Array.isArray(parsed.call_qa)) {
+    parsed.call_qa = [];
   }
 
   return {

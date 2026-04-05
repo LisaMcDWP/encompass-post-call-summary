@@ -73,3 +73,26 @@ export interface Observation {
   isActive: boolean;
   promptGuidance: string;
 }
+
+export const insertCallQAPromptSchema = z.object({
+  name: z.string(),
+  displayName: z.string(),
+  promptText: z.string(),
+  responseType: z.enum(["enum", "text", "boolean"]).default("enum"),
+  responseOptions: z.array(z.string()).optional().default([]),
+  isActive: z.boolean().default(true),
+  displayOrder: z.number().int().default(0),
+});
+
+export type InsertCallQAPrompt = z.infer<typeof insertCallQAPromptSchema>;
+
+export interface CallQAPrompt {
+  id: number;
+  name: string;
+  displayName: string;
+  promptText: string;
+  responseType: string;
+  responseOptions: string[];
+  isActive: boolean;
+  displayOrder: number;
+}

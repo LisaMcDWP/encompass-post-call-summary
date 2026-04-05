@@ -17,6 +17,7 @@ import ApiReference from "@/pages/ApiReference";
 import ProductReference from "@/pages/ProductReference";
 import BatchProcessing from "@/pages/BatchProcessing";
 import BarriersPrompt from "@/pages/BarriersPrompt";
+import CallQA from "@/pages/CallQA";
 
 function Router() {
   return (
@@ -28,6 +29,7 @@ function Router() {
         <Route path="/observations" component={Observations} />
         <Route path="/summary-prompt" component={SummaryPrompt} />
         <Route path="/barriers-prompt" component={BarriersPrompt} />
+        <Route path="/call-qa" component={CallQA} />
         <Route path="/context-parameters" component={ContextParameters} />
         <Route path="/generated-prompt" component={GeneratedPrompt} />
         <Route path="/api-reference" component={ApiReference} />

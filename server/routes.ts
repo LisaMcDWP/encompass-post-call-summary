@@ -1,10 +1,10 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, aiObservationAssistant } from "./gemini";
-import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBarriers, ensureCallBarriersTable, getCallBarriers, getCallInfoList, getCallDetail, queryBlandCalls, loadBlandCallsToBatch, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, resetFailedBatchItems, recreateBatch, getDistinctTags } from "./bigquery";
+import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBarriers, insertCallQAResults, ensureCallBarriersTable, ensureCallQATable, getCallBarriers, getCallInfoList, getCallDetail, queryBlandCalls, loadBlandCallsToBatch, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, resetFailedBatchItems, recreateBatch, getDistinctTags } from "./bigquery";
 import { randomUUID, createHash } from "crypto";
 import { storage } from "./storage";
-import { insertObservationSchema, enumValueSchema, insertContextParameterSchema } from "@shared/schema";
+import { insertObservationSchema, enumValueSchema, insertContextParameterSchema, insertCallQAPromptSchema } from "@shared/schema";
 import { z } from "zod";
 
 async function getPromptWithVersion() {
@@ -13,7 +13,8 @@ async function getPromptWithVersion() {
   const observationsGuidance = await storage.getSetting("observations_prompt_guidance");
   const barriersGuidance = await storage.getSetting("barriers_prompt_guidance");
   const contextParams = await storage.getActiveContextParameters();
-  const prompt = buildPromptTemplate(activeObs, summaryInstruction || undefined, contextParams, observationsGuidance || undefined, barriersGuidance || undefined);
+  const callQAPrompts = await storage.getActiveCallQAPrompts();
+  const prompt = buildPromptTemplate(activeObs, summaryInstruction || undefined, contextParams, observationsGuidance || undefined, barriersGuidance || undefined, callQAPrompts);
 
   const hash = createHash("sha256").update(prompt).digest("hex");
   const storedHash = await storage.getSetting("prompt_hash");
@@ -85,6 +86,8 @@ export async function registerRoutes(
         }
       }
 
+      const callQAPrompts = await storage.getActiveCallQAPrompts();
+
       const { analysis, tokenUsage } = await analyzeTranscript(
         resolvedSourceId,
         source_text.trim(),
@@ -94,7 +97,8 @@ export async function registerRoutes(
         contextParams,
         contextValues,
         observationsGuidance || undefined,
-        barriersGuidance || undefined
+        barriersGuidance || undefined,
+        callQAPrompts
       );
       const processingTime = Date.now() - startTime;
 
@@ -126,6 +130,7 @@ export async function registerRoutes(
       await insertCallObservations(resolvedSourceId, analysis.observations);
       await insertCallQAPairs(resolvedSourceId, analysis.qa_pairs);
       await insertCallBarriers(resolvedSourceId, analysis.barriers);
+      await insertCallQAResults(resolvedSourceId, analysis.call_qa || []);
 
       return res.json({
         status: "success",
@@ -440,6 +445,59 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/call-qa-prompts", async (_req, res) => {
+    const prompts = await storage.getCallQAPrompts();
+    res.json(prompts);
+  });
+
+  const callQACreateSchema = z.object({
+    name: z.string().min(1),
+    displayName: z.string().min(1),
+    promptText: z.string().min(1),
+    responseType: z.enum(["enum", "text", "boolean"]).default("enum"),
+    responseOptions: z.array(z.string()).optional().default([]),
+    isActive: z.boolean().default(true),
+    displayOrder: z.number().int().min(0).default(0),
+  });
+
+  const callQAUpdateSchema = callQACreateSchema.partial();
+
+  app.post("/api/call-qa-prompts", async (req, res) => {
+    const parsed = callQACreateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.errors.map(e => e.message).join(", ") });
+    }
+    try {
+      const prompt = await storage.createCallQAPrompt(parsed.data);
+      res.status(201).json(prompt);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/call-qa-prompts/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+
+    const parsed = callQAUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.errors.map(e => e.message).join(", ") });
+    }
+
+    const prompt = await storage.updateCallQAPrompt(id, parsed.data);
+    if (!prompt) return res.status(404).json({ message: "Call QA prompt not found" });
+    res.json(prompt);
+  });
+
+  app.delete("/api/call-qa-prompts/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+
+    const deleted = await storage.deleteCallQAPrompt(id);
+    if (!deleted) return res.status(404).json({ message: "Call QA prompt not found" });
+    res.json({ success: true });
+  });
+
   app.get("/api/settings/barriers-guidance", async (_req, res) => {
     try {
       const stored = await storage.getSetting("barriers_prompt_guidance");
@@ -520,6 +578,7 @@ export async function registerRoutes(
 
   await initializeBatchTable();
   await ensureCallBarriersTable();
+  await ensureCallQATable();
 
   app.get("/api/batch/tags", async (_req, res) => {
     try {
@@ -616,6 +675,7 @@ export async function registerRoutes(
           const observationsGuidance = await storage.getSetting("observations_prompt_guidance");
           const barriersGuidance = await storage.getSetting("barriers_prompt_guidance");
           const contextParams = await storage.getActiveContextParameters();
+          const callQAPromptsForBatch = await storage.getActiveCallQAPrompts();
           const { prompt: _p, promptVersion, promptVersionDate } = await getPromptWithVersion();
 
           const callId = item.bland_call_id;
@@ -629,7 +689,8 @@ export async function registerRoutes(
             contextParams,
             {},
             observationsGuidance || undefined,
-            barriersGuidance || undefined
+            barriersGuidance || undefined,
+            callQAPromptsForBatch
           );
           const processingTimeMs = Date.now() - startTime;
 
@@ -658,6 +719,7 @@ export async function registerRoutes(
           await insertCallObservations(callId, analysis.observations);
           await insertCallQAPairs(callId, analysis.qa_pairs);
           await insertCallBarriers(callId, analysis.barriers);
+          await insertCallQAResults(callId, analysis.call_qa || []);
           await updateBatchItemStatus(item.bland_call_id, "completed", callId);
           results.push({ callId: item.bland_call_id, status: "completed" });
         } catch (err: any) {
