@@ -80,6 +80,7 @@ Returns service connectivity status.
 - Table: `barriers` — One row per identified barrier per call (call_id, barrier, context, category, severity, observation_name, observation_display_name, evidence)
 - Table: `call_qa_results` — One row per Call QA assessment per call (call_id, name, display_name, value, detail, evidence)
 - Table: `call_qa_prompts` — Call QA prompt configuration (id, name, display_name, prompt_text, response_type, response_options, is_active, display_order)
+- Table: `known_context_details` — Known context per care flow (care_flow_id, parameter_name, display_name, value_type, value, active_ind, created_at, updated_at). Multiple rows per care_flow_id.
 - Table: `observations` — Observation configuration (id, name, display_name, domain, display_order, value_type, value, is_active, prompt_guidance)
 - Table: `context_parameters` — Context parameter definitions (id, name, display_name, description, data_type, is_required, is_active, display_order)
 - **IMPORTANT**: `call_info` and `call_observations` tables are LIVE PRODUCTION tables. NEVER drop, delete, or recreate them unless explicitly instructed by the user. Code only creates them if they don't exist.
