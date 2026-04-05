@@ -1,6 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Star, Target, Layers, Flag, CheckCircle2, Clock, AlertTriangle, Lightbulb, Users, Zap, Shield, BarChart3, GitBranch } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Star, Target, Layers, Flag, CheckCircle2, Clock, AlertTriangle, Lightbulb, Users, Zap, Shield, BarChart3, GitBranch, FileText } from "lucide-react";
+import { jsPDF } from "jspdf";
 
 const STATUS_COLORS: Record<string, string> = {
   done: "bg-green-100 text-green-800 border-green-200",
@@ -338,6 +340,252 @@ const RISKS = [
   { risk: "Gemini model deprecation or behavior change", mitigation: "Model version pinned (gemini-2.0-flash-001); prompt versioning tracks changes", severity: "medium" },
 ];
 
+function exportProductReferencePdf() {
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const mL = 15;
+  const mR = 15;
+  const cW = pageW - mL - mR;
+  let y = 15;
+
+  const PRIMARY: [number, number, number] = [0, 152, 219];
+  const NAVY: [number, number, number] = [23, 41, 56];
+  const GRAY: [number, number, number] = [107, 114, 128];
+  const STATUS_CLR: Record<string, [number, number, number]> = {
+    done: [22, 163, 74],
+    "in-progress": [37, 99, 235],
+    planned: [217, 119, 6],
+    backlog: [107, 114, 128],
+  };
+
+  function pb(needed: number) {
+    if (y + needed > pageH - 15) { doc.addPage(); y = 15; }
+  }
+
+  function heading(title: string) {
+    pb(16);
+    y += 5;
+    doc.setFillColor(...PRIMARY);
+    doc.rect(mL, y, cW, 9, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text(title, mL + 3, y + 6.5);
+    y += 14;
+    doc.setTextColor(0, 0, 0);
+  }
+
+  function subheading(title: string, right?: string) {
+    pb(10);
+    y += 2;
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...NAVY);
+    doc.text(title, mL, y);
+    if (right) {
+      doc.setFontSize(8);
+      doc.setTextColor(...GRAY);
+      doc.setFont("helvetica", "normal");
+      doc.text(right, pageW - mR, y, { align: "right" });
+    }
+    y += 6;
+  }
+
+  function para(text: string, fontSize = 8, indent = 0) {
+    doc.setFontSize(fontSize);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...NAVY);
+    const lines = doc.splitTextToSize(text, cW - indent);
+    for (const l of lines) {
+      pb(5);
+      doc.text(l, mL + indent, y);
+      y += 4;
+    }
+    y += 1;
+  }
+
+  function bullet(text: string, indent = 3) {
+    pb(6);
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...NAVY);
+    const lines = doc.splitTextToSize(text, cW - indent - 4);
+    doc.text("\u2022", mL + indent, y);
+    doc.text(lines, mL + indent + 4, y);
+    y += lines.length * 4 + 1;
+  }
+
+  function storyLine(title: string, status: string, indent = 5) {
+    pb(6);
+    const clr = STATUS_CLR[status] || STATUS_CLR.backlog;
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...clr);
+    const tag = status.replace("-", " ").toUpperCase();
+    const tagW = doc.getTextWidth(tag) + 4;
+    doc.setFillColor(...clr);
+    doc.roundedRect(mL + indent, y - 3, tagW + 2, 4.5, 1, 1, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.text(tag, mL + indent + 1.5, y);
+
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...NAVY);
+    const lines = doc.splitTextToSize(title, cW - indent - tagW - 8);
+    doc.text(lines, mL + indent + tagW + 4, y);
+    y += lines.length * 4 + 1;
+  }
+
+  function divider() {
+    pb(4);
+    doc.setDrawColor(200, 200, 210);
+    doc.line(mL, y, pageW - mR, y);
+    y += 4;
+  }
+
+  doc.setFillColor(...NAVY);
+  doc.rect(0, 0, pageW, 30, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(18);
+  doc.setFont("helvetica", "bold");
+  doc.text("Guideway Care", mL, 13);
+  doc.setFontSize(11);
+  doc.setFont("helvetica", "normal");
+  doc.text("Product Reference — Call Observation Extraction", mL, 21);
+  doc.setFontSize(7);
+  doc.setTextColor(200, 200, 200);
+  doc.text(`Generated: ${new Date().toLocaleString()}`, pageW - mR, 21, { align: "right" });
+  y = 38;
+
+  const totalS = THEMES.flatMap(t => t.epics.flatMap(e => e.stories)).length;
+  const doneS = THEMES.flatMap(t => t.epics.flatMap(e => e.stories.filter(s => s.status === "done"))).length;
+  const ipS = THEMES.flatMap(t => t.epics.flatMap(e => e.stories.filter(s => s.status === "in-progress"))).length;
+  const planS = THEMES.flatMap(t => t.epics.flatMap(e => e.stories.filter(s => s.status === "planned"))).length;
+  const blS = totalS - doneS - ipS - planS;
+  const pct = Math.round((doneS / totalS) * 100);
+
+  doc.setFillColor(245, 247, 250);
+  doc.roundedRect(mL, y, cW, 14, 2, 2, "F");
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...NAVY);
+  const statsText = `Done: ${doneS}   |   In Progress: ${ipS}   |   Planned: ${planS}   |   Backlog: ${blS}   |   ${pct}% Complete`;
+  doc.text(statsText, pageW / 2, y + 9, { align: "center" });
+  y += 20;
+
+  heading("North Star Metric");
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...NAVY);
+  const nsLines = doc.splitTextToSize(NORTH_STAR.metric, cW);
+  for (const l of nsLines) { pb(5); doc.text(l, mL, y); y += 5; }
+  y += 1;
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(...PRIMARY);
+  doc.text(`Target: ${NORTH_STAR.target}`, mL, y);
+  y += 6;
+  para(NORTH_STAR.description);
+
+  heading("Product Vision");
+  para(`"${VISION}"`, 9);
+
+  heading("User Personas");
+  for (const p of PERSONAS) {
+    pb(12);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...NAVY);
+    doc.text(p.name, mL, y);
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...PRIMARY);
+    doc.text(`  (${p.role})`, mL + doc.getTextWidth(p.name), y);
+    y += 5;
+    para(p.needs, 8, 3);
+  }
+
+  for (const theme of THEMES) {
+    const td = theme.epics.flatMap(e => e.stories.filter(s => s.status === "done")).length;
+    const tt = theme.epics.flatMap(e => e.stories).length;
+    const tp = Math.round((td / tt) * 100);
+    heading(`${theme.name}  (${td}/${tt} — ${tp}%)`);
+    para(theme.description);
+    divider();
+
+    for (const epic of theme.epics) {
+      subheading(epic.name);
+      para(epic.description, 7, 2);
+      for (const story of epic.stories) {
+        storyLine(story.title, story.status);
+        if (story.acceptanceCriteria) {
+          for (const ac of story.acceptanceCriteria) {
+            bullet(ac, 10);
+          }
+        }
+      }
+      y += 2;
+    }
+  }
+
+  heading("Risks & Mitigations");
+  for (const r of RISKS) {
+    pb(12);
+    const sevClr = r.severity === "high" ? [220, 38, 38] as [number, number, number] :
+                   r.severity === "medium" ? [217, 119, 6] as [number, number, number] :
+                   [22, 163, 74] as [number, number, number];
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(255, 255, 255);
+    doc.setFillColor(...sevClr);
+    const sevTag = r.severity.toUpperCase();
+    const sevW = doc.getTextWidth(sevTag) + 4;
+    doc.roundedRect(mL, y - 3, sevW + 2, 4.5, 1, 1, "F");
+    doc.text(sevTag, mL + 1.5, y);
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...NAVY);
+    doc.text(r.risk, mL + sevW + 4, y);
+    y += 5;
+    para(`Mitigation: ${r.mitigation}`, 7, 3);
+  }
+
+  heading("Recommended Additions");
+  const recs = [
+    { t: "Multi-Program Support", d: "Different observation sets per program (e.g., cardiac vs orthopedic)." },
+    { t: "Patient Longitudinal View", d: "Track a patient across multiple calls to see observation changes over time." },
+    { t: "Quality Scoring & Benchmarking", d: "Automated quality score per call. Compare care guides against benchmarks." },
+    { t: "Alert Rules Engine", d: "Configurable rules that trigger alerts based on observation values." },
+    { t: "RBAC & Audit Trail", d: "Role-based access control and audit log for configuration changes." },
+    { t: "Model Evaluation Framework", d: "Golden dataset with known-good outputs for prompt regression testing." },
+  ];
+  for (const r of recs) {
+    pb(10);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...NAVY);
+    doc.text(r.t, mL, y);
+    y += 5;
+    para(r.d, 7, 3);
+  }
+
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(7);
+    doc.setTextColor(...GRAY);
+    doc.text(
+      `Guideway Care — Product Reference — Page ${i} of ${totalPages}`,
+      pageW / 2,
+      pageH - 7,
+      { align: "center" }
+    );
+  }
+
+  doc.save("guideway-care-product-reference.pdf");
+}
+
 export default function ProductReference() {
   const totalStories = THEMES.flatMap(t => t.epics.flatMap(e => e.stories)).length;
   const doneStories = THEMES.flatMap(t => t.epics.flatMap(e => e.stories.filter(s => s.status === "done"))).length;
@@ -349,13 +597,24 @@ export default function ProductReference() {
   return (
     <div className="h-full bg-background text-foreground font-sans">
       <div className="max-w-5xl mx-auto p-6 md:p-8 space-y-8">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground" data-testid="text-page-title">
-            Product Reference
-          </h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Agile breakdown of GWC Call Observation Extraction — North Star, themes, epics, and user stories.
-          </p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground" data-testid="text-page-title">
+              Product Reference
+            </h1>
+            <p className="text-muted-foreground text-sm mt-1">
+              Agile breakdown of GWC Call Observation Extraction — North Star, themes, epics, and user stories.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            data-testid="button-export-pdf"
+            onClick={() => exportProductReferencePdf()}
+          >
+            <FileText className="h-4 w-4 mr-2" />
+            Export PDF
+          </Button>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
