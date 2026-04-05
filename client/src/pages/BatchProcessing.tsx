@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import {
   Loader2, Package, Play, RotateCcw, CheckCircle2, XCircle, Clock, Search,
@@ -97,6 +98,7 @@ export default function BatchProcessing() {
   const [requiredTags, setRequiredTags] = useState<string[]>([]);
   const [excludeTags, setExcludeTags] = useState<string[]>([]);
   const [processedFilter, setProcessedFilter] = useState<"unprocessed" | "processed" | "all">("unprocessed");
+  const [useKnownContext, setUseKnownContext] = useState(true);
 
   const tagsQuery = useQuery<string[]>({
     queryKey: ["/api/batch/tags"],
@@ -151,12 +153,19 @@ export default function BatchProcessing() {
 
   const loadMutation = useMutation({
     mutationFn: async () => {
+      const selectedIds = Array.from(selectedCalls);
+      const careFlowIds = searchResults
+        .filter((c: any) => selectedIds.includes(c.call_id) && c.care_flow_id)
+        .map((c: any) => c.care_flow_id)
+        .filter((v: string, i: number, a: string[]) => a.indexOf(v) === i);
       const res = await fetch("/api/batch/load", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          callIds: Array.from(selectedCalls),
+          callIds: selectedIds,
           batchLabel: batchLabel || null,
+          useKnownContext,
+          careFlowIds,
         }),
       });
       if (!res.ok) throw new Error("Failed to load calls");
@@ -530,6 +539,15 @@ export default function BatchProcessing() {
                         className="w-48 h-8 text-sm"
                         data-testid="input-batch-label"
                       />
+                    </div>
+                    <div className="flex items-center gap-1.5 border rounded px-2 py-1">
+                      <Switch
+                        checked={useKnownContext}
+                        onCheckedChange={setUseKnownContext}
+                        id="use-known-context"
+                        data-testid="switch-use-known-context"
+                      />
+                      <Label htmlFor="use-known-context" className="text-xs cursor-pointer whitespace-nowrap">Awell Context</Label>
                     </div>
                     <Button
                       onClick={() => loadMutation.mutate()}

@@ -679,6 +679,7 @@ async function ensureBatchProcessingTable(): Promise<void> {
         { name: "processed_at", type: "TIMESTAMP", mode: "NULLABLE" },
         { name: "batch_label", type: "STRING", mode: "NULLABLE" },
         { name: "care_flow_id", type: "STRING", mode: "NULLABLE" },
+        { name: "context_values", type: "STRING", mode: "NULLABLE" },
       ],
     },
   });
@@ -702,6 +703,14 @@ async function migrateBatchProcessingColumns(): Promise<void> {
         location: "US",
       });
       console.log("Added care_flow_id column to batch_processing table.");
+    }
+    const hasContextValues = fields.some((f: any) => f.name === "context_values");
+    if (!hasContextValues) {
+      await client.query({
+        query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\` ADD COLUMN context_values STRING`,
+        location: "US",
+      });
+      console.log("Added context_values column to batch_processing table.");
     }
   } catch (err: any) {
     console.error("Migration check for batch_processing columns:", err.message);
@@ -829,9 +838,54 @@ export async function getDistinctTags(): Promise<string[]> {
   return (rows as any[]).map(r => r.tag);
 }
 
+export async function fetchAwellContextForCareFlows(
+  careFlowIds: string[],
+  contextParams: { name: string; awellDataPointKey: string }[]
+): Promise<Record<string, Record<string, string>>> {
+  if (!careFlowIds.length || !contextParams.length) return {};
+
+  const keysWithParams = contextParams.filter(p => p.awellDataPointKey && p.awellDataPointKey.trim().length > 0);
+  if (keysWithParams.length === 0) return {};
+
+  const client = getBigQueryClient();
+  const result: Record<string, Record<string, string>> = {};
+
+  for (const param of keysWithParams) {
+    try {
+      const query = `
+        SELECT
+          dp.care_flow_id,
+          REGEXP_REPLACE(dp.value_raw, r'^"(.*)"$', r'\\1') AS value,
+          dp.date
+        FROM \`${client.projectId}.encompass_health.data_points_realtime\` dp
+        JOIN \`${client.projectId}.encompass_health.data_point_definitions_realtime\` df
+          ON df.definition_id = dp.definition_id
+        WHERE df.key = @dataPointKey
+          AND dp.care_flow_id IN UNNEST(@careFlowIds)
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY dp.care_flow_id ORDER BY dp.date DESC) = 1
+      `;
+      const [rows] = await client.query({
+        query,
+        params: { dataPointKey: param.awellDataPointKey, careFlowIds },
+        location: "US",
+      });
+
+      for (const row of rows as any[]) {
+        if (!result[row.care_flow_id]) result[row.care_flow_id] = {};
+        result[row.care_flow_id][param.name] = row.value || "";
+      }
+    } catch (err: any) {
+      console.error(`Failed to fetch Awell data point '${param.awellDataPointKey}':`, err.message);
+    }
+  }
+
+  return result;
+}
+
 export async function loadBlandCallsToBatch(
   callIds: string[],
-  batchLabel: string | null
+  batchLabel: string | null,
+  contextByCareFow?: Record<string, Record<string, string>>
 ): Promise<{ loaded: number; skipped: number }> {
   if (!batchTableInitialized) {
     await ensureBatchProcessingTable();
@@ -873,7 +927,7 @@ export async function loadBlandCallsToBatch(
   const now = new Date().toISOString();
 
   const valuesClauses = validRows.map((_, i) =>
-    `(@batchId, @callId_${i}, @transcript_${i}, 'bland_call', @now, 'pending', CAST(NULL AS STRING), CAST(NULL AS STRING), CAST(NULL AS TIMESTAMP), @batchLabel, @careFlowId_${i})`
+    `(@batchId, @callId_${i}, @transcript_${i}, 'bland_call', @now, 'pending', CAST(NULL AS STRING), CAST(NULL AS STRING), CAST(NULL AS TIMESTAMP), @batchLabel, @careFlowId_${i}, @contextValues_${i})`
   ).join(",\n    ");
 
   const params: Record<string, any> = {
@@ -891,14 +945,18 @@ export async function loadBlandCallsToBatch(
     params[`callId_${i}`] = row.call_id;
     params[`transcript_${i}`] = row.concatenated_transcript;
     params[`careFlowId_${i}`] = row.care_flow_id || null;
+    const cfId = row.care_flow_id;
+    const ctx = cfId && contextByCareFow && contextByCareFow[cfId] ? contextByCareFow[cfId] : null;
+    params[`contextValues_${i}`] = ctx ? JSON.stringify(ctx) : null;
     types[`callId_${i}`] = "STRING";
     types[`transcript_${i}`] = "STRING";
     types[`careFlowId_${i}`] = "STRING";
+    types[`contextValues_${i}`] = "STRING";
   });
 
   const insertQuery = `
     INSERT INTO \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
-    (batch_id, bland_call_id, transcript, source_type, created_at, status, error_message, result_call_id, processed_at, batch_label, care_flow_id)
+    (batch_id, bland_call_id, transcript, source_type, created_at, status, error_message, result_call_id, processed_at, batch_label, care_flow_id, context_values)
     VALUES ${valuesClauses}
   `;
 
@@ -1007,7 +1065,7 @@ export async function getPendingBatchItems(limit = 10, batchId?: string): Promis
   const client = getBigQueryClient();
   const batchFilter = batchId ? "AND batch_id = @batchId" : "";
   const query = `
-    SELECT batch_id, bland_call_id, transcript, source_type, batch_label, care_flow_id
+    SELECT batch_id, bland_call_id, transcript, source_type, batch_label, care_flow_id, context_values
     FROM \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
     WHERE status = 'pending' ${batchFilter}
     ORDER BY created_at DESC

@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, aiObservationAssistant } from "./gemini";
-import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBarriers, insertCallQAResults, ensureCallBarriersTable, ensureCallQATable, getCallBarriers, getCallInfoList, getCallDetail, queryBlandCalls, loadBlandCallsToBatch, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, resetFailedBatchItems, recreateBatch, getDistinctTags } from "./bigquery";
+import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBarriers, insertCallQAResults, ensureCallBarriersTable, ensureCallQATable, getCallBarriers, getCallInfoList, getCallDetail, queryBlandCalls, loadBlandCallsToBatch, fetchAwellContextForCareFlows, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, resetFailedBatchItems, recreateBatch, getDistinctTags } from "./bigquery";
 import { randomUUID, createHash } from "crypto";
 import { storage } from "./storage";
 import { insertObservationSchema, enumValueSchema, insertContextParameterSchema, insertCallQAPromptSchema } from "@shared/schema";
@@ -616,11 +616,24 @@ export async function registerRoutes(
 
   app.post("/api/batch/load", async (req, res) => {
     try {
-      const { callIds, batchLabel } = req.body;
+      const { callIds, batchLabel, useKnownContext, careFlowIds } = req.body;
       if (!callIds || !Array.isArray(callIds) || callIds.length === 0) {
         return res.status(400).json({ message: "callIds array is required" });
       }
-      const result = await loadBlandCallsToBatch(callIds, batchLabel || null);
+
+      let contextByCareFlow: Record<string, Record<string, string>> | undefined;
+      if (useKnownContext && careFlowIds && careFlowIds.length > 0) {
+        const contextParams = await storage.getActiveContextParameters();
+        const paramsWithKeys = contextParams
+          .filter(p => p.awellDataPointKey && p.awellDataPointKey.trim().length > 0)
+          .map(p => ({ name: p.name, awellDataPointKey: p.awellDataPointKey }));
+        if (paramsWithKeys.length > 0) {
+          contextByCareFlow = await fetchAwellContextForCareFlows(careFlowIds, paramsWithKeys);
+          console.log(`Fetched Awell context for ${Object.keys(contextByCareFlow).length} care flows across ${paramsWithKeys.length} data points`);
+        }
+      }
+
+      const result = await loadBlandCallsToBatch(callIds, batchLabel || null, contextByCareFlow);
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -681,6 +694,10 @@ export async function registerRoutes(
 
           const callId = item.bland_call_id;
           const startTime = Date.now();
+          let batchContext: Record<string, string> = {};
+          if (item.context_values) {
+            try { batchContext = JSON.parse(item.context_values); } catch {}
+          }
           const { analysis, tokenUsage } = await analyzeTranscript(
             callId,
             item.transcript.trim(),
@@ -688,7 +705,7 @@ export async function registerRoutes(
             undefined,
             summaryInstruction || undefined,
             contextParams,
-            {},
+            batchContext,
             observationsGuidance || undefined,
             barriersGuidance || undefined,
             callQAPromptsForBatch

@@ -69,6 +69,11 @@ async function processBatch() {
       const sourceId = `batch_${item.bland_call_id}`;
       const startTime = Date.now();
 
+      let batchContext: Record<string, string> = {};
+      if (item.context_values) {
+        try { batchContext = JSON.parse(item.context_values); } catch {}
+      }
+
       const batchCallQAPrompts = await storage.getActiveCallQAPrompts();
       const { analysis, tokenUsage } = await analyzeTranscript(
         sourceId,
@@ -77,7 +82,7 @@ async function processBatch() {
         undefined,
         summaryInstruction || undefined,
         contextParams,
-        {},
+        batchContext,
         observationsGuidance || undefined,
         barriersGuidance || undefined,
         batchCallQAPrompts

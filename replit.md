@@ -89,7 +89,7 @@ Returns service connectivity status.
 - **Table**: `call_information.batch_processing` — stores calls queued for reprocessing
   - Fields: batch_id, bland_call_id, transcript, source_type, created_at, status (pending/processing/completed/failed), error_message, result_call_id, processed_at, batch_label
 - **Source data**: `Bland.calls` table (historical call transcripts)
-- **Flow**: Search Bland calls → select → load to batch table → process (runs each through extraction API with current prompt/observations)
+- **Flow**: Search Bland calls → select → load to batch table (optionally fetching Awell known context per care flow) → process (runs each through extraction API with current prompt/observations/context)
 - **API endpoints**: `GET /api/batch/bland-calls`, `POST /api/batch/load`, `GET /api/batch/items`, `GET /api/batch/summary`, `POST /api/batch/process`, `POST /api/batch/reset-failed`
 - **Cloud Run Job**: `server/batch-job.ts` + `Dockerfile.batch` — standalone job that processes pending batch items
 - **UI**: `/batch` page in Analytics section
