@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import { BookOpen, Code2, Webhook, Server, Key, Activity, Database, Settings, Phone, Download, Layers, MessageSquare } from "lucide-react";
+import { BookOpen, Code2, Webhook, Server, Key, Activity, Database, Settings, Phone, Download, Layers, MessageSquare, ClipboardCheck, FileText } from "lucide-react";
 import { useRef } from "react";
 
 function exportToHtml(contentEl: HTMLElement) {
@@ -210,6 +210,15 @@ export default function Reference() {
           "observation_display_name": "Follow-Up Appointment",
           "evidence": "I don't have a way to get to my appointment next Tuesday."
         }
+      ],
+      "call_qa": [
+        {
+          "name": "empathy_score",
+          "display_name": "Empathy Score",
+          "value": "Good",
+          "detail": "The care guide showed empathy throughout the call.",
+          "evidence": "I'm sorry to hear you're having trouble with that."
+        }
       ]
     },
     "tokenUsage": {
@@ -251,6 +260,10 @@ export default function Reference() {
                 <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
                   <p className="text-primary font-mono text-sm">barriers</p>
                   <p className="text-muted-foreground text-sm mt-1">Array of barriers to care identified from the conversation. Each entry contains: <code className="text-primary">barrier</code> (short description), <code className="text-primary">context</code> (full details about the barrier — circumstances, background, and impact on care), <code className="text-primary">category</code> (e.g. Transportation, Financial, Medication Access, Social Support, Health Literacy, Language, Housing, Caregiver Burden, Emotional/Mental Health, Physical Limitation, Insurance/Coverage), <code className="text-primary">severity</code> (high/medium/low based on impact on patient care), <code className="text-primary">observation_name</code> and <code className="text-primary">observation_display_name</code> (linked observation or null), and <code className="text-primary">evidence</code> (direct transcript quote). Returns empty array if no barriers identified.</p>
+                </div>
+                <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
+                  <p className="text-primary font-mono text-sm">call_qa</p>
+                  <p className="text-muted-foreground text-sm mt-1">Array of call quality assessment results based on configurable Call QA prompts. Each entry contains: <code className="text-primary">name</code> (prompt key), <code className="text-primary">display_name</code> (human-readable label), <code className="text-primary">value</code> (assessment result — enum choice, boolean, or text), <code className="text-primary">detail</code> (brief explanation of the assessment), and <code className="text-primary">evidence</code> (supporting transcript quote or null). Prompts are configured in the Call QA management page. Returns empty array if no Call QA prompts are active.</p>
                 </div>
               </div>
             </div>
@@ -412,6 +425,28 @@ export default function Reference() {
       "observation_name": "overall_feeling",
       "observation_display_name": "Overall Feeling",
       "category": "General Health"
+    }
+  ],
+  "barriers": [
+    {
+      "call_id": "call_987654321",
+      "barrier": "Transportation to follow-up",
+      "context": "Patient has no ride to appointment.",
+      "category": "Transportation",
+      "severity": "high",
+      "observation_name": "follow_up_appointment",
+      "observation_display_name": "Follow-Up Appointment",
+      "evidence": "I don't have a way to get there."
+    }
+  ],
+  "callQA": [
+    {
+      "call_id": "call_987654321",
+      "name": "empathy_score",
+      "display_name": "Empathy Score",
+      "value": "Good",
+      "detail": "Care guide showed empathy.",
+      "evidence": "I'm sorry to hear that."
     }
   ]
 }`}
@@ -710,6 +745,115 @@ export default function Reference() {
         <Card className="border-border/60 shadow-sm mb-6">
           <CardHeader>
             <CardTitle className="text-foreground flex items-center gap-2">
+              <ClipboardCheck className="h-5 w-5 text-primary" />
+              Call QA Prompts CRUD
+              <Badge className="bg-[#96d410]/10 text-[#4d6d08] border-[#96d410]/30 ml-2">Setup</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <p className="text-muted-foreground">Manage Call QA evaluation prompts that assess overall call quality. Each prompt defines a question that Gemini answers about the call as a whole. Stored in BigQuery (<code className="text-primary">call_information.call_qa_prompts</code>). Results are stored in <code className="text-primary">call_information.call_qa_results</code>.</p>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">GET /api/call-qa-prompts</h3>
+              <p className="text-muted-foreground text-sm mb-2">Returns all Call QA prompts ordered by display_order.</p>
+              <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`[
+  {
+    "id": 1,
+    "name": "empathy_score",
+    "displayName": "Empathy Score",
+    "promptText": "Rate the care guide's empathy during the call.",
+    "responseType": "enum",
+    "responseOptions": ["Excellent", "Good", "Fair", "Poor"],
+    "isActive": true,
+    "displayOrder": 0
+  }
+]`}
+              </pre>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">POST /api/call-qa-prompts</h3>
+              <p className="text-muted-foreground text-sm mb-2">Create a new Call QA prompt.</p>
+              <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`{
+  "name": "empathy_score",
+  "displayName": "Empathy Score",
+  "promptText": "Rate the care guide's empathy during the call.",
+  "responseType": "enum",
+  "responseOptions": ["Excellent", "Good", "Fair", "Poor"],
+  "isActive": true
+}`}
+              </pre>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">PUT /api/call-qa-prompts/:id</h3>
+              <p className="text-muted-foreground text-sm">Update an existing Call QA prompt. Partial updates supported.</p>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">DELETE /api/call-qa-prompts/:id</h3>
+              <p className="text-muted-foreground text-sm">Permanently deletes a Call QA prompt by ID.</p>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">Call QA Prompt Fields</h3>
+              <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-2">
+                <p className="text-foreground"><span className="text-primary font-semibold">id</span> <span className="text-muted-foreground">(INT64)</span> — Auto-generated unique identifier.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">name</span> <span className="text-muted-foreground">(string)</span> — Machine-readable key (e.g. "empathy_score").</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">displayName</span> <span className="text-muted-foreground">(string)</span> — Human-readable label.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">promptText</span> <span className="text-muted-foreground">(string)</span> — The instruction sent to Gemini for evaluation.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">responseType</span> <span className="text-muted-foreground">(string)</span> — One of: enum, boolean, text.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">responseOptions</span> <span className="text-muted-foreground">(array)</span> — For enum types, array of allowed response values.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">isActive</span> <span className="text-muted-foreground">(boolean)</span> — Whether this prompt is included in the analysis.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">displayOrder</span> <span className="text-muted-foreground">(integer)</span> — Sort order in output.</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/60 shadow-sm mb-6">
+          <CardHeader>
+            <CardTitle className="text-foreground flex items-center gap-2">
+              <FileText className="h-5 w-5 text-primary" />
+              PDF Export
+              <Badge className="bg-primary/10 text-primary border-primary/20 ml-2">Feature</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-muted-foreground">Individual call details can be exported as PDF reports from the Call History page. Open any call detail panel and click the <strong>"Export PDF"</strong> button.</p>
+            <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-2">
+              <p className="text-foreground font-semibold">PDF Report Contents:</p>
+              <ul className="text-muted-foreground list-disc list-inside space-y-1">
+                <li>Guideway Care branded header with generation timestamp</li>
+                <li>Call metadata (ID, status, processing time, context values, prompt version, token usage)</li>
+                <li>Summary</li>
+                <li>Observations with values, details, evidence, and confidence levels</li>
+                <li>Transition Status</li>
+                <li>Follow-up Areas</li>
+                <li>Barriers to Care with severity and category</li>
+                <li>Call QA assessments</li>
+                <li>Q&A pair exchanges</li>
+                <li>Page numbers and footer</li>
+              </ul>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/60 shadow-sm mb-6">
+          <CardHeader>
+            <CardTitle className="text-foreground flex items-center gap-2">
               <Layers className="h-5 w-5 text-primary" />
               Batch Processing
               <Badge className="bg-blue-500/10 text-blue-600 border-blue-500/20 ml-2">Bulk</Badge>
@@ -897,6 +1041,7 @@ export default function Reference() {
                 <p><code className="text-primary">data.analysis.follow_up_areas</code> → Follow-Up Items (HTML)</p>
                 <p><code className="text-primary">data.analysis.qa_pairs</code> → Array of Q&A exchanges (question, answer, category, observation linkage)</p>
                 <p><code className="text-primary">data.analysis.barriers</code> → Array of barriers to care (barrier, context, category, severity, evidence, observation linkage)</p>
+                <p><code className="text-primary">data.analysis.call_qa</code> → Array of Call QA assessments (name, display_name, value, detail, evidence)</p>
                 <p><code className="text-primary">data.tokenUsage</code> → Token usage and cost metrics</p>
               </div>
             </div>
@@ -950,10 +1095,13 @@ export default function Reference() {
                   <li><code className="text-primary">call_observations</code> — One row per observation per call (name, value, detail, evidence, confidence)</li>
                   <li><code className="text-primary">call_qa_pairs</code> — One row per Q&A exchange per call (sequence_number, question, answer, asked_by, answered_by, observation_name, category)</li>
                   <li><code className="text-primary">barriers</code> — One row per identified barrier per call (barrier, context, category, severity, observation_name, observation_display_name, evidence)</li>
-                  <li><code className="text-primary">batch_processing</code> — Batch processing tracker (bland_call_id, transcript, care_flow_id, status, batch_id, error_message, processed_call_id)</li>
+                  <li><code className="text-primary">call_qa_results</code> — One row per Call QA assessment per call (call_id, name, display_name, value, detail, evidence)</li>
+                  <li><code className="text-primary">batch_processing</code> — Batch processing tracker (bland_call_id, transcript, care_flow_id, status, batch_id, error_message, result_call_id, context_values)</li>
                   <li><code className="text-primary">observations</code> — Observation configuration (id, name, display_name, domain, value_type, value, is_active, prompt_guidance)</li>
                   <li><code className="text-primary">context_parameters</code> — Context parameter definitions (id, name, display_name, data_type, enum_values, is_active)</li>
-                  <li><code className="text-primary">settings</code> — Key-value settings store (summary_instruction, observations_guidance)</li>
+                  <li><code className="text-primary">call_qa_prompts</code> — Call QA prompt configuration (id, name, display_name, prompt_text, response_type, response_options, is_active, display_order)</li>
+                  <li><code className="text-primary">known_context_details</code> — Known context per care flow (care_flow_id, parameter_name, display_name, value, value_type, active_ind, created_at, updated_at)</li>
+                  <li><code className="text-primary">settings</code> — Key-value settings store (summary_instruction, observations_prompt_guidance, barriers_prompt_guidance)</li>
                 </ul>
               </div>
             </div>
