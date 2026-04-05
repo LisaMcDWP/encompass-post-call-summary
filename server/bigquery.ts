@@ -5,7 +5,7 @@ const DATASET_ID = "call_information";
 const CALL_INFO_TABLE_ID = "call_info";
 const OBSERVATIONS_TABLE_ID = "call_observations";
 const QA_PAIRS_TABLE_ID = "call_qa_pairs";
-const BARRIERS_TABLE_ID = "call_barriers";
+const BARRIERS_TABLE_ID = "barriers";
 const BATCH_PROCESSING_TABLE_ID = "batch_processing";
 const CALL_QA_TABLE_ID = "call_qa_results";
 
@@ -383,10 +383,10 @@ export async function ensureCallBarriersTable(): Promise<void> {
           ],
         },
       });
-      console.log("Created call_barriers table");
+      console.log("Created barriers table");
     }
   } catch (error: any) {
-    console.error("Failed to ensure call_barriers table:", error.message);
+    console.error("Failed to ensure barriers table:", error.message);
   }
 }
 
@@ -426,9 +426,9 @@ export async function insertCallBarriers(callId: string, barriers: Barrier[]): P
       .table(BARRIERS_TABLE_ID)
       .insert(rows);
 
-    console.log(`BigQuery call_barriers inserted: ${rows.length} rows for call ${callId}`);
+    console.log(`BigQuery barriers inserted: ${rows.length} rows for call ${callId}`);
   } catch (error: any) {
-    console.error("Failed to insert call_barriers:", error.message);
+    console.error("Failed to insert barriers:", error.message);
     if (error.errors) {
       console.error("BigQuery errors:", JSON.stringify(error.errors));
     }
