@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Settings, FlaskConical, LayoutDashboard, BookOpen, ChevronRight, FileText, Variable, Eye, Phone, Box, Code2, Layers, Package, ShieldAlert, ClipboardCheck, Building2, ChevronDown } from "lucide-react";
+import { Settings, FlaskConical, LayoutDashboard, BookOpen, ChevronRight, FileText, Variable, Eye, Phone, Box, Code2, Layers, Package, ShieldAlert, ClipboardCheck, Building2, ChevronDown, BarChart3 } from "lucide-react";
 import { useClientPathway } from "@/contexts/ClientPathwayContext";
 
 interface NavItem {
@@ -32,6 +32,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     title: "Analytics",
     items: [
       { label: "Processed Calls", href: "/calls", icon: <Phone className="h-4 w-4" />, section: "analytics" },
+      { label: "Call Volume", href: "/call-stats", icon: <BarChart3 className="h-4 w-4" />, section: "analytics" },
       { label: "Batch Processing", href: "/batch", icon: <Package className="h-4 w-4" />, section: "analytics" },
     ],
   },

@@ -706,6 +706,40 @@ export async function getCallInfoList(limit = 100): Promise<any[]> {
   });
 }
 
+export async function getCallStatsByDay(days = 30): Promise<any[]> {
+  const client = getBigQueryClient();
+  const query = `
+    SELECT
+      DATE(processed_at) as date,
+      IFNULL(client, 'Unknown') as client,
+      IFNULL(pathway, 'Unknown') as pathway,
+      IFNULL(source_type, 'unknown') as source_type,
+      COUNT(*) as call_count,
+      COUNTIF(status = 'success') as success_count,
+      COUNTIF(status = 'error') as error_count,
+      ROUND(AVG(processing_time_ms), 0) as avg_processing_ms,
+      SUM(total_tokens) as total_tokens,
+      ROUND(SUM(estimated_cost), 4) as total_cost
+    FROM \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\`
+    WHERE processed_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @days DAY)
+    GROUP BY date, client, pathway, source_type
+    ORDER BY date DESC, client, pathway, source_type
+  `;
+  const [rows] = await client.query({ query, params: { days }, location: "US" });
+  return (rows as any[]).map(row => ({
+    date: row.date?.value || row.date,
+    client: row.client,
+    pathway: row.pathway,
+    source_type: row.source_type,
+    call_count: row.call_count,
+    success_count: row.success_count,
+    error_count: row.error_count,
+    avg_processing_ms: row.avg_processing_ms,
+    total_tokens: row.total_tokens,
+    total_cost: row.total_cost,
+  }));
+}
+
 export interface BatchProcessingRow {
   batch_id: string;
   bland_call_id: string;
