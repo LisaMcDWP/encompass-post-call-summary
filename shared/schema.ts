@@ -26,6 +26,8 @@ export const insertContextParameterSchema = z.object({
   isActive: z.boolean().default(true),
   displayOrder: z.number().int().default(0),
   awellDataPointKey: z.string().optional().default(""),
+  awellMappingType: z.enum(["none", "data_point", "patient_profile"]).optional().default("none"),
+  awellPatientProfileField: z.string().optional().default(""),
 });
 
 export type InsertContextParameter = z.infer<typeof insertContextParameterSchema>;
@@ -40,6 +42,8 @@ export interface ContextParameter {
   isActive: boolean;
   displayOrder: number;
   awellDataPointKey: string;
+  awellMappingType: "none" | "data_point" | "patient_profile";
+  awellPatientProfileField: string;
 }
 
 export const enumValueSchema = z.object({

@@ -882,17 +882,25 @@ export async function getDistinctTags(): Promise<string[]> {
 
 export async function fetchAwellContextForCareFlows(
   careFlowIds: string[],
-  contextParams: { name: string; awellDataPointKey: string }[]
+  contextParams: { name: string; awellDataPointKey: string; awellMappingType?: string; awellPatientProfileField?: string }[]
 ): Promise<Record<string, Record<string, string>>> {
   if (!careFlowIds.length || !contextParams.length) return {};
 
-  const keysWithParams = contextParams.filter(p => p.awellDataPointKey && p.awellDataPointKey.trim().length > 0);
-  if (keysWithParams.length === 0) return {};
+  const dataPointParams = contextParams.filter(p =>
+    (p.awellMappingType === "data_point" || (!p.awellMappingType && p.awellDataPointKey)) &&
+    p.awellDataPointKey && p.awellDataPointKey.trim().length > 0
+  );
+  const profileParams = contextParams.filter(p =>
+    p.awellMappingType === "patient_profile" &&
+    p.awellPatientProfileField && p.awellPatientProfileField.trim().length > 0
+  );
+
+  if (dataPointParams.length === 0 && profileParams.length === 0) return {};
 
   const client = getBigQueryClient();
   const result: Record<string, Record<string, string>> = {};
 
-  for (const param of keysWithParams) {
+  for (const param of dataPointParams) {
     try {
       const query = `
         SELECT
@@ -918,6 +926,48 @@ export async function fetchAwellContextForCareFlows(
       }
     } catch (err: any) {
       console.error(`Failed to fetch Awell data point '${param.awellDataPointKey}':`, err.message);
+    }
+  }
+
+  if (profileParams.length > 0) {
+    try {
+      const validFields = new Set([
+        "first_name", "last_name", "name", "email", "birth_date", "sex",
+        "preferred_language", "national_registry_number", "patient_code",
+        "phone", "mobile_phone", "address_street", "address_city",
+        "address_zip", "address_state", "address_country"
+      ]);
+      const requestedFields = profileParams
+        .map(p => p.awellPatientProfileField!)
+        .filter(f => validFields.has(f));
+
+      if (requestedFields.length > 0) {
+        const fieldSelects = requestedFields.map(f => `pp.${f}`).join(", ");
+        const query = `
+          SELECT cf.id AS care_flow_id, ${fieldSelects}
+          FROM \`${client.projectId}.encompass_health.care_flows_realtime\` cf
+          JOIN \`${client.projectId}.encompass_health.patients_realtime\` p ON p.id = cf.patient_id
+          JOIN \`${client.projectId}.encompass_health.patient_profiles_realtime\` pp ON pp.id = p.profile_id
+          WHERE cf.id IN UNNEST(@careFlowIds)
+        `;
+        const [rows] = await client.query({
+          query,
+          params: { careFlowIds },
+          location: "US",
+        });
+
+        for (const row of rows as any[]) {
+          if (!result[row.care_flow_id]) result[row.care_flow_id] = {};
+          for (const param of profileParams) {
+            const field = param.awellPatientProfileField!;
+            if (row[field] !== undefined && row[field] !== null) {
+              result[row.care_flow_id][param.name] = String(row[field]);
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error(`Failed to fetch Awell patient profile fields:`, err.message);
     }
   }
 

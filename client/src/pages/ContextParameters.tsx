@@ -21,6 +21,8 @@ interface ContextParameter {
   isActive: boolean;
   displayOrder: number;
   awellDataPointKey: string;
+  awellMappingType: "none" | "data_point" | "patient_profile";
+  awellPatientProfileField: string;
 }
 
 const DATA_TYPE_OPTIONS = ["string", "number", "date", "boolean", "enum"];
@@ -33,6 +35,24 @@ const DATA_TYPE_LABELS: Record<string, string> = {
   enum: "Enum",
 };
 
+const PATIENT_PROFILE_FIELDS = [
+  { value: "first_name", label: "First Name" },
+  { value: "last_name", label: "Last Name" },
+  { value: "name", label: "Full Name" },
+  { value: "email", label: "Email" },
+  { value: "birth_date", label: "Birth Date" },
+  { value: "sex", label: "Sex" },
+  { value: "preferred_language", label: "Preferred Language" },
+  { value: "patient_code", label: "Patient Code" },
+  { value: "phone", label: "Phone" },
+  { value: "mobile_phone", label: "Mobile Phone" },
+  { value: "address_street", label: "Street" },
+  { value: "address_city", label: "City" },
+  { value: "address_zip", label: "Zip Code" },
+  { value: "address_state", label: "State" },
+  { value: "address_country", label: "Country" },
+];
+
 const emptyForm = {
   name: "",
   displayName: "",
@@ -41,6 +61,8 @@ const emptyForm = {
   enumValues: [] as string[],
   isActive: true,
   awellDataPointKey: "",
+  awellMappingType: "none" as "none" | "data_point" | "patient_profile",
+  awellPatientProfileField: "",
 };
 
 export default function ContextParameters() {
@@ -81,6 +103,8 @@ export default function ContextParameters() {
       enumValues: p.enumValues || [],
       isActive: p.isActive,
       awellDataPointKey: p.awellDataPointKey || "",
+      awellMappingType: p.awellMappingType || "none",
+      awellPatientProfileField: p.awellPatientProfileField || "",
     });
     setIsDialogOpen(true);
   };
@@ -98,7 +122,9 @@ export default function ContextParameters() {
       dataType: form.dataType,
       enumValues: form.dataType === "enum" ? form.enumValues : [],
       isActive: form.isActive,
-      awellDataPointKey: form.awellDataPointKey.trim(),
+      awellMappingType: form.awellMappingType,
+      awellDataPointKey: form.awellMappingType === "data_point" ? form.awellDataPointKey.trim() : "",
+      awellPatientProfileField: form.awellMappingType === "patient_profile" ? form.awellPatientProfileField : "",
     };
 
     let res;
@@ -229,8 +255,11 @@ ${params.filter(p => p.isActive).slice(0, 3).map(p => `    "${p.name}": "${p.dat
                         ))}
                       </div>
                     )}
-                    {p.awellDataPointKey && (
-                      <p className="text-[11px] text-muted-foreground mt-1 font-mono">Awell key: {p.awellDataPointKey}</p>
+                    {p.awellMappingType === "data_point" && p.awellDataPointKey && (
+                      <p className="text-[11px] text-muted-foreground mt-1 font-mono">Awell Data Point: {p.awellDataPointKey}</p>
+                    )}
+                    {p.awellMappingType === "patient_profile" && p.awellPatientProfileField && (
+                      <p className="text-[11px] text-muted-foreground mt-1 font-mono">Awell Patient Profile: {PATIENT_PROFILE_FIELDS.find(f => f.value === p.awellPatientProfileField)?.label || p.awellPatientProfileField}</p>
                     )}
                     {p.description && (
                       <p className="text-[11px] text-muted-foreground mt-1">{p.description}</p>
@@ -347,18 +376,52 @@ ${params.filter(p => p.isActive).slice(0, 3).map(p => `    "${p.name}": "${p.dat
 
               <div className="space-y-1.5">
                 <Label className="text-sm font-semibold">
-                  Awell Data Point Key
+                  Awell Mapping
                   <span className="text-muted-foreground font-normal ml-1">(optional)</span>
                 </Label>
-                <Input
-                  placeholder="e.g. home_health_ordered"
-                  value={form.awellDataPointKey}
-                  onChange={(e) => setForm({ ...form, awellDataPointKey: e.target.value })}
-                  className="text-sm font-mono"
-                  data-testid="input-awell-data-point-key"
-                />
-                <p className="text-[11px] text-muted-foreground">The Awell data point definition key used to pull this value during batch processing.</p>
+                <Select value={form.awellMappingType} onValueChange={(v) => setForm({ ...form, awellMappingType: v as "none" | "data_point" | "patient_profile" })}>
+                  <SelectTrigger data-testid="select-awell-mapping-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    <SelectItem value="data_point">Data Point</SelectItem>
+                    <SelectItem value="patient_profile">Patient Profile</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">Choose how this value is resolved from Awell during batch processing.</p>
               </div>
+
+              {form.awellMappingType === "data_point" && (
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-semibold">Data Point Key</Label>
+                  <Input
+                    placeholder="e.g. home_health_ordered"
+                    value={form.awellDataPointKey}
+                    onChange={(e) => setForm({ ...form, awellDataPointKey: e.target.value })}
+                    className="text-sm font-mono"
+                    data-testid="input-awell-data-point-key"
+                  />
+                  <p className="text-[11px] text-muted-foreground">The Awell data point definition key used to pull this value from care flow data.</p>
+                </div>
+              )}
+
+              {form.awellMappingType === "patient_profile" && (
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-semibold">Patient Profile Field</Label>
+                  <Select value={form.awellPatientProfileField} onValueChange={(v) => setForm({ ...form, awellPatientProfileField: v })}>
+                    <SelectTrigger data-testid="select-patient-profile-field">
+                      <SelectValue placeholder="Select a field" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PATIENT_PROFILE_FIELDS.map((f) => (
+                        <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">The Awell patient profile field to pull via the care flow's linked patient.</p>
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <Label className="text-sm font-semibold">

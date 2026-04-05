@@ -29,10 +29,13 @@ A full-stack application that provides a Gemini-powered transcript analysis API.
 
 ## Context Parameters
 Configurable input parameters stored in BigQuery (`call_information.context_parameters`) that API callers can pass alongside the transcript to give Gemini known context (e.g. patient name, diagnosis, facility).
-- `id` (INT64), `name` (key), `display_name`, `description`, `data_type` (string/number/date/boolean), `is_required`, `is_active`, `display_order`
+- `id` (INT64), `name` (key), `display_name`, `description`, `data_type` (string/number/date/boolean/enum), `enum_values`, `is_active`, `display_order`, `awell_data_point_key`, `awell_mapping_type`, `awell_patient_profile_field`
 - Active parameters are injected into the Gemini prompt as a "KNOWN CONTEXT" section
 - Values passed via `context` object in POST /api/analyze request body
-- Required parameters are validated server-side; missing ones return 400
+- **Awell Mapping Types**: Each parameter can be mapped to an Awell source for batch processing auto-population:
+  - `none` — No auto-mapping; value must be passed manually via API
+  - `data_point` — Resolves from Awell data points via `data_points_realtime` / `data_point_definitions_realtime` tables using the `awell_data_point_key`
+  - `patient_profile` — Resolves from Awell patient profile via care flow → patient → `patient_profiles_realtime` join using the `awell_patient_profile_field` (e.g. `first_name`, `last_name`, `phone`, `birth_date`, etc.)
 - Management UI at `/context-parameters` in the Setup sidebar section
 
 ## Observations Model

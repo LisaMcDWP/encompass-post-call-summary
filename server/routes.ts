@@ -294,6 +294,8 @@ export async function registerRoutes(
     isActive: z.boolean().default(true),
     displayOrder: z.number().int().min(0).default(0),
     awellDataPointKey: z.string().optional().default(""),
+    awellMappingType: z.enum(["none", "data_point", "patient_profile"]).optional().default("none"),
+    awellPatientProfileField: z.string().optional().default(""),
   });
 
   const contextParamUpdateSchema = contextParamCreateSchema.partial();
@@ -623,12 +625,16 @@ export async function registerRoutes(
       let contextByCareFlow: Record<string, Record<string, string>> | undefined;
       if (useKnownContext && careFlowIds && careFlowIds.length > 0) {
         const contextParams = await storage.getActiveContextParameters();
-        const paramsWithKeys = contextParams
-          .filter(p => p.awellDataPointKey && p.awellDataPointKey.trim().length > 0)
-          .map(p => ({ name: p.name, awellDataPointKey: p.awellDataPointKey }));
-        if (paramsWithKeys.length > 0) {
-          contextByCareFlow = await fetchAwellContextForCareFlows(careFlowIds, paramsWithKeys);
-          console.log(`Fetched Awell context for ${Object.keys(contextByCareFlow).length} care flows across ${paramsWithKeys.length} data points`);
+        const paramsWithMapping = contextParams
+          .filter(p =>
+            (p.awellMappingType === "data_point" && p.awellDataPointKey && p.awellDataPointKey.trim().length > 0) ||
+            (p.awellMappingType === "patient_profile" && p.awellPatientProfileField && p.awellPatientProfileField.trim().length > 0) ||
+            (!p.awellMappingType && p.awellDataPointKey && p.awellDataPointKey.trim().length > 0)
+          )
+          .map(p => ({ name: p.name, awellDataPointKey: p.awellDataPointKey, awellMappingType: p.awellMappingType, awellPatientProfileField: p.awellPatientProfileField }));
+        if (paramsWithMapping.length > 0) {
+          contextByCareFlow = await fetchAwellContextForCareFlows(careFlowIds, paramsWithMapping);
+          console.log(`Fetched Awell context for ${Object.keys(contextByCareFlow).length} care flows across ${paramsWithMapping.length} mapped parameters`);
         }
       }
 

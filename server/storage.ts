@@ -70,6 +70,14 @@ async function ensureContextParamsTable(): Promise<void> {
     if (akRows.length === 0) {
       try { await client.query({ query: `ALTER TABLE \`${fullTable}\` ADD COLUMN awell_data_point_key STRING` }); } catch {}
     }
+    const [mtRows] = await client.query({ query: `SELECT column_name FROM \`${projectId}.${DATASET_ID}.INFORMATION_SCHEMA.COLUMNS\` WHERE table_name = '${CONTEXT_PARAMS_TABLE_ID}' AND column_name = 'awell_mapping_type'` });
+    if (mtRows.length === 0) {
+      try { await client.query({ query: `ALTER TABLE \`${fullTable}\` ADD COLUMN awell_mapping_type STRING` }); } catch {}
+    }
+    const [ppRows] = await client.query({ query: `SELECT column_name FROM \`${projectId}.${DATASET_ID}.INFORMATION_SCHEMA.COLUMNS\` WHERE table_name = '${CONTEXT_PARAMS_TABLE_ID}' AND column_name = 'awell_patient_profile_field'` });
+    if (ppRows.length === 0) {
+      try { await client.query({ query: `ALTER TABLE \`${fullTable}\` ADD COLUMN awell_patient_profile_field STRING` }); } catch {}
+    }
     await client.query({
       query: `CREATE TABLE IF NOT EXISTS \`${fullTable}\` (
         id INT64 NOT NULL,
@@ -80,7 +88,9 @@ async function ensureContextParamsTable(): Promise<void> {
         enum_values STRING,
         is_active BOOL NOT NULL,
         display_order INT64 NOT NULL,
-        awell_data_point_key STRING
+        awell_data_point_key STRING,
+        awell_mapping_type STRING,
+        awell_patient_profile_field STRING
       )`,
     });
     console.log(`BigQuery table ${DATASET_ID}.${CONTEXT_PARAMS_TABLE_ID} ready.`);
@@ -102,6 +112,7 @@ function rowToContextParameter(row: any): ContextParameter {
       enumValues = typeof row.enum_values === "string" ? JSON.parse(row.enum_values) : row.enum_values;
     } catch { enumValues = []; }
   }
+  const mappingType = row.awell_mapping_type || (row.awell_data_point_key ? "data_point" : "none");
   return {
     id: row.id,
     name: row.name,
@@ -112,6 +123,8 @@ function rowToContextParameter(row: any): ContextParameter {
     isActive: row.is_active,
     displayOrder: row.display_order,
     awellDataPointKey: row.awell_data_point_key || "",
+    awellMappingType: mappingType as "none" | "data_point" | "patient_profile",
+    awellPatientProfileField: row.awell_patient_profile_field || "",
   };
 }
 
@@ -432,10 +445,12 @@ export class BigQueryStorage implements IStorage {
       is_active: param.isActive !== false,
       display_order: param.displayOrder ?? 0,
       awell_data_point_key: param.awellDataPointKey || "",
+      awell_mapping_type: param.awellMappingType || "none",
+      awell_patient_profile_field: param.awellPatientProfileField || "",
     };
 
     await client.query({
-      query: `INSERT INTO ${table} (id, name, display_name, description, data_type, enum_values, is_active, display_order, awell_data_point_key) VALUES (@id, @name, @display_name, @description, @data_type, @enum_values, @is_active, @display_order, @awell_data_point_key)`,
+      query: `INSERT INTO ${table} (id, name, display_name, description, data_type, enum_values, is_active, display_order, awell_data_point_key, awell_mapping_type, awell_patient_profile_field) VALUES (@id, @name, @display_name, @description, @data_type, @enum_values, @is_active, @display_order, @awell_data_point_key, @awell_mapping_type, @awell_patient_profile_field)`,
       params: row,
     });
 
@@ -461,6 +476,8 @@ export class BigQueryStorage implements IStorage {
     if (data.isActive !== undefined) { setClauses.push("is_active = @isActive"); params.isActive = data.isActive; }
     if (data.displayOrder !== undefined) { setClauses.push("display_order = @displayOrder"); params.displayOrder = data.displayOrder; }
     if (data.awellDataPointKey !== undefined) { setClauses.push("awell_data_point_key = @awellDataPointKey"); params.awellDataPointKey = data.awellDataPointKey; }
+    if (data.awellMappingType !== undefined) { setClauses.push("awell_mapping_type = @awellMappingType"); params.awellMappingType = data.awellMappingType; }
+    if (data.awellPatientProfileField !== undefined) { setClauses.push("awell_patient_profile_field = @awellPatientProfileField"); params.awellPatientProfileField = data.awellPatientProfileField; }
 
     if (setClauses.length === 0) return existing;
 
