@@ -2,11 +2,32 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Loader2, BarChart3, Calendar, Building2,
   CheckCircle2, XCircle, Coins, Zap, Phone, Activity, Layers
 } from "lucide-react";
+
+type DateRange = "1" | "7" | "30" | "ytd" | "all";
+
+const DATE_RANGE_OPTIONS: { value: DateRange; label: string }[] = [
+  { value: "1", label: "Today" },
+  { value: "7", label: "7D" },
+  { value: "30", label: "30D" },
+  { value: "ytd", label: "YTD" },
+  { value: "all", label: "All" },
+];
+
+function rangeToDays(range: DateRange): number {
+  if (range === "all") return 3650;
+  if (range === "ytd") {
+    const now = new Date();
+    const jan1 = new Date(now.getFullYear(), 0, 1);
+    return Math.ceil((now.getTime() - jan1.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  }
+  return parseInt(range);
+}
 
 interface DailyStat {
   date: string;
@@ -48,15 +69,18 @@ function StackedBarChart({ dates, series, maxVal }: {
 }) {
   if (dates.length === 0) return <p className="text-sm text-muted-foreground text-center py-10">No data</p>;
   const barWidth = Math.max(14, Math.min(36, Math.floor(600 / dates.length)));
+  const showAllLabels = dates.length <= 14;
+  const labelEvery = dates.length <= 31 ? 1 : Math.ceil(dates.length / 15);
 
   return (
-    <div className="flex items-end gap-[2px] h-[160px] overflow-x-auto pb-6 relative">
+    <div className="flex items-end gap-[2px] h-[180px] overflow-x-auto pb-6 pt-5 relative">
       {dates.map((date, i) => {
         const dayTotal = series.reduce((sum, s) => sum + (s.values[date] || 0), 0);
+        const showLabel = showAllLabels || (i % labelEvery === 0);
         return (
           <div key={i} className="flex flex-col items-center group relative h-full" style={{ minWidth: barWidth }}>
-            <div className="absolute -top-6 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-foreground text-background text-[10px] px-1.5 py-0.5 rounded whitespace-nowrap z-10 pointer-events-none">
-              {dayTotal} calls
+            <div className={`absolute -top-1 left-1/2 -translate-x-1/2 text-[9px] font-semibold whitespace-nowrap transition-opacity ${dayTotal > 0 ? "text-foreground/70" : "text-transparent"} ${showAllLabels ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+              {dayTotal}
             </div>
             <div className="flex-1 w-full flex flex-col items-stretch justify-end">
               {series.map((s) => {
@@ -75,9 +99,11 @@ function StackedBarChart({ dates, series, maxVal }: {
                 <div className="w-full rounded-t-sm" style={{ height: "2%", backgroundColor: "#e5e7eb", minHeight: 1, opacity: 0.3 }} />
               )}
             </div>
-            <span className="text-[8px] text-muted-foreground/60 mt-1 absolute -bottom-5 whitespace-nowrap">
-              {formatDate(date)}
-            </span>
+            {showLabel && (
+              <span className="text-[8px] text-muted-foreground/60 mt-1 absolute -bottom-5 whitespace-nowrap">
+                {formatDate(date)}
+              </span>
+            )}
           </div>
         );
       })}
@@ -143,14 +169,16 @@ function SparkLine({ values, color = "#0098db", height = 32 }: { values: number[
 }
 
 export default function CallStats() {
-  const [days, setDays] = useState("30");
+  const [range, setRange] = useState<DateRange>("30");
   const [filterClient, setFilterClient] = useState<string>("all");
   const [filterPathway, setFilterPathway] = useState<string>("all");
 
+  const apiDays = useMemo(() => rangeToDays(range), [range]);
+
   const { data: stats, isLoading } = useQuery<DailyStat[]>({
-    queryKey: ["/api/calls/stats/daily", days],
+    queryKey: ["/api/calls/stats/daily", apiDays],
     queryFn: async () => {
-      const res = await fetch(`/api/calls/stats/daily?days=${days}`);
+      const res = await fetch(`/api/calls/stats/daily?days=${apiDays}`);
       if (!res.ok) throw new Error("Failed to load stats");
       return res.json();
     },
@@ -296,19 +324,20 @@ export default function CallStats() {
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <Select value={days} onValueChange={setDays}>
-              <SelectTrigger className="w-[140px] h-9" data-testid="select-days">
-                <Calendar className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="7">Last 7 days</SelectItem>
-                <SelectItem value="14">Last 14 days</SelectItem>
-                <SelectItem value="30">Last 30 days</SelectItem>
-                <SelectItem value="60">Last 60 days</SelectItem>
-                <SelectItem value="90">Last 90 days</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex items-center bg-muted/40 rounded-lg p-0.5 gap-0.5" data-testid="range-filters">
+              {DATE_RANGE_OPTIONS.map(opt => (
+                <Button
+                  key={opt.value}
+                  variant={range === opt.value ? "default" : "ghost"}
+                  size="sm"
+                  className={`h-8 px-3 text-xs font-medium rounded-md ${range === opt.value ? "shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                  onClick={() => setRange(opt.value)}
+                  data-testid={`filter-range-${opt.value}`}
+                >
+                  {opt.label}
+                </Button>
+              ))}
+            </div>
             <Select value={filterClient} onValueChange={handleClientChange}>
               <SelectTrigger className="w-[170px] h-9" data-testid="select-client-filter">
                 <Building2 className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
