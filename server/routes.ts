@@ -78,11 +78,10 @@ export async function registerRoutes(
       const contextParams = await storage.getActiveContextParameters();
 
       const contextValues: Record<string, string> = {};
-      if (context && typeof context === "object") {
-        for (const param of contextParams) {
-          if (context[param.name] !== undefined && context[param.name] !== null) {
-            contextValues[param.name] = String(context[param.name]);
-          }
+      const contextSource = (context && typeof context === "object") ? context : rest;
+      for (const param of contextParams) {
+        if (contextSource[param.name] !== undefined && contextSource[param.name] !== null) {
+          contextValues[param.name] = String(contextSource[param.name]);
         }
       }
 
