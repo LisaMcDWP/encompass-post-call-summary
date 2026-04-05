@@ -27,6 +27,8 @@ interface CallInfo {
   status: string;
   error_message: string | null;
   request_body: Record<string, any> | null;
+  client: string | null;
+  pathway: string | null;
 }
 
 interface CallObservation {
@@ -215,6 +217,14 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
               <div className="grid grid-cols-[140px_1fr] text-xs">
                 <span className="text-muted-foreground px-3 py-2 font-medium">Source ID</span>
                 <span className="font-mono px-3 py-2" data-testid="detail-source-id">{info.source_id || <span className="text-muted-foreground/50 italic">not provided</span>}</span>
+              </div>
+              <div className="grid grid-cols-[140px_1fr] text-xs">
+                <span className="text-muted-foreground px-3 py-2 font-medium">Client</span>
+                <span className="px-3 py-2" data-testid="detail-client">{info.client || <span className="text-muted-foreground/50 italic">not set</span>}</span>
+              </div>
+              <div className="grid grid-cols-[140px_1fr] text-xs">
+                <span className="text-muted-foreground px-3 py-2 font-medium">Pathway</span>
+                <span className="px-3 py-2" data-testid="detail-pathway">{info.pathway || <span className="text-muted-foreground/50 italic">not set</span>}</span>
               </div>
               <div className="grid grid-cols-[140px_1fr] text-xs">
                 <span className="text-muted-foreground px-3 py-2 font-medium">Processed Datetime</span>
@@ -626,9 +636,10 @@ export default function CallHistory() {
 
       {calls && calls.length > 0 && (
         <div className="space-y-2" data-testid="list-calls">
-          <div className="grid grid-cols-[1fr_1fr_1fr_120px_100px_90px_80px_32px] gap-3 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+          <div className="grid grid-cols-[1fr_1fr_1fr_1fr_120px_100px_90px_80px_32px] gap-3 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
             <span>Call ID</span>
             <span>Source ID</span>
+            <span>Client / Pathway</span>
             <span>Care Flow</span>
             <span>Processed</span>
             <span>Status</span>
@@ -639,7 +650,7 @@ export default function CallHistory() {
           {calls.map((call) => (
             <div
               key={call.call_id}
-              className="grid grid-cols-[1fr_1fr_1fr_120px_100px_90px_80px_32px] gap-3 items-center px-4 py-3 rounded-lg border border-border/50 bg-card hover:bg-muted/30 cursor-pointer transition-colors shadow-sm"
+              className="grid grid-cols-[1fr_1fr_1fr_1fr_120px_100px_90px_80px_32px] gap-3 items-center px-4 py-3 rounded-lg border border-border/50 bg-card hover:bg-muted/30 cursor-pointer transition-colors shadow-sm"
               onClick={() => setSelectedCallId(call.call_id)}
               data-testid={`row-call-${call.call_id}`}
             >
@@ -654,6 +665,14 @@ export default function CallHistory() {
                 </p>
                 {call.source_type && (
                   <p className="text-[10px] text-muted-foreground/60 truncate">{call.source_type}</p>
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs truncate text-foreground" data-testid={`text-client-pathway-${call.call_id}`}>
+                  {call.client || "—"}
+                </p>
+                {call.pathway && (
+                  <p className="text-[10px] text-muted-foreground/60 truncate">{call.pathway}</p>
                 )}
               </div>
               <div className="min-w-0">
