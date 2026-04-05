@@ -749,7 +749,9 @@ async function ensureClientPathwayTable(): Promise<void> {
   clientPathwayTableInitialized = true;
 }
 
+let migrationDone = false;
 async function migrateConfigTablesForClientPathway(): Promise<void> {
+  if (migrationDone) return;
   const client = getBigQueryClient();
   const projectId = process.env.GCP_PROJECT_ID;
 
@@ -772,6 +774,33 @@ async function migrateConfigTablesForClientPathway(): Promise<void> {
       }
     }
   }
+
+  try {
+    const cpTable = `${projectId}.${DATASET_ID}.${CLIENT_PATHWAY_TABLE_ID}`;
+    const [cpRows] = await client.query({ query: `SELECT id FROM \`${cpTable}\` ORDER BY id ASC LIMIT 1` });
+    if (cpRows.length > 0) {
+      const firstCpId = cpRows[0].id;
+      for (const tbl of tables) {
+        const fullTable = `${projectId}.${DATASET_ID}.${tbl}`;
+        try {
+          const [nullRows] = await client.query({ query: `SELECT COUNT(*) as cnt FROM \`${fullTable}\` WHERE client_pathway_id IS NULL` });
+          if (nullRows[0]?.cnt > 0) {
+            await client.query({
+              query: `UPDATE \`${fullTable}\` SET client_pathway_id = @cpId WHERE client_pathway_id IS NULL`,
+              params: { cpId: firstCpId },
+            });
+            console.log(`Backfilled ${nullRows[0].cnt} orphaned rows in ${tbl} to client_pathway_id=${firstCpId}`);
+          }
+        } catch (err: any) {
+          console.error(`Backfill error for ${tbl}:`, err.message);
+        }
+      }
+    }
+  } catch (err: any) {
+    console.error("Backfill migration error:", err.message);
+  }
+
+  migrationDone = true;
 }
 
 export const storage = new BigQueryStorage();
