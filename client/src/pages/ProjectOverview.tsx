@@ -19,6 +19,44 @@ interface Epic {
 
 const EPICS: Epic[] = [
   {
+    id: "E0",
+    title: "Multi-Tenant Client & Pathway Architecture",
+    icon: <CircleDot className="h-5 w-5 text-primary" />,
+    description: "Top-level organizational scoping — each Client & Pathway has its own observations, context parameters, prompt settings, Call QA prompts, and barriers guidance. All configuration and analytics are tenant-scoped.",
+    stories: [
+      {
+        id: "E0-S1",
+        title: "Client & Pathway entity",
+        description: "Core entity with id, client (client name), pathway (pathway label), and description. Stored in BigQuery (call_information.client_pathway table) and referenced by all config/analytics data.",
+      },
+      {
+        id: "E0-S2",
+        title: "CRUD API for client-pathways",
+        description: "Full REST API (GET, POST, PUT, DELETE) for managing client/pathway definitions. GET returns all, POST creates, PUT updates, DELETE removes.",
+      },
+      {
+        id: "E0-S3",
+        title: "Sidebar ClientPathwayPicker",
+        description: "Prominent collapsible card at the top of the sidebar showing the currently selected client and pathway. Persisted to localStorage so the selection is remembered across sessions.",
+      },
+      {
+        id: "E0-S4",
+        title: "Tenant-scoped configuration endpoints",
+        description: "All config endpoints (observations, context params, settings, Call QA prompts) accept a clientPathwayId query/body param. The UI automatically includes the selected CP ID in all requests.",
+      },
+      {
+        id: "E0-S5",
+        title: "Tenant-scoped analytics",
+        description: "call_info table stores client and pathway as string fields. The Call Volume dashboard, Call History, and all analytics filter by client/pathway. The API analyze endpoint accepts client and pathway fields for tenant routing.",
+      },
+      {
+        id: "E0-S6",
+        title: "Setup nav scoping",
+        description: "The Setup section in the sidebar nav is labeled with the selected client name (e.g., 'Encompass Setup'). The 'Client & Pathway' page is accessible via the picker's 'Manage' link rather than a nav item.",
+      },
+    ],
+  },
+  {
     id: "E1",
     title: "Gemini AI Transcript Analysis",
     icon: <Cpu className="h-5 w-5 text-primary" />,
@@ -245,6 +283,95 @@ const EPICS: Epic[] = [
     ],
   },
   {
+    id: "E8a",
+    title: "Call Volume Analytics Dashboard",
+    icon: <BarChart3 className="h-5 w-5 text-primary" />,
+    description: "Full-featured analytics dashboard for call volume trends, success rates, and per-client/pathway performance breakdowns.",
+    stories: [
+      {
+        id: "E8a-S1",
+        title: "KPI summary cards",
+        description: "Four KPI cards at the top: Total Calls (with sparkline), Success Rate %, Avg Processing Time, and Cost (rounded, with token count footnote). Each card includes a trend sparkline.",
+      },
+      {
+        id: "E8a-S2",
+        title: "Stacked bar chart",
+        description: "Daily call volume bar chart with bars color-coded by client/pathway. Volume counts displayed above each bar. Proper height scaling and empty-state handling.",
+      },
+      {
+        id: "E8a-S3",
+        title: "Donut charts",
+        description: "Source type donut (phone_call, chat, note, etc.) and pathway breakdown donut showing distribution of calls across pathways. Empty state for no-data scenarios.",
+      },
+      {
+        id: "E8a-S4",
+        title: "Client/pathway performance cards",
+        description: "Per-client/pathway cards showing call count, success rate, avg time, and individual sparkline. Enables comparison across tenants.",
+      },
+      {
+        id: "E8a-S5",
+        title: "Date range filtering",
+        description: "Quick-filter pill buttons (Today / 7D / 30D / YTD / All) with 7D as default. Independent client and pathway dropdown filters with cascading pathway options.",
+      },
+      {
+        id: "E8a-S6",
+        title: "GET /api/call-stats endpoint",
+        description: "Backend endpoint (GET /api/calls/stats/daily) querying BigQuery with DATE(processed_at, 'America/New_York') grouping. Accepts days param. Returns flat array of rows grouped by (date, client, pathway, source_type) — frontend aggregates into KPIs, charts, and breakdowns.",
+      },
+    ],
+  },
+  {
+    id: "E8b",
+    title: "Barriers to Care Extraction",
+    icon: <Target className="h-5 w-5 text-primary" />,
+    description: "Identifies barriers to care from transcripts — transportation, financial, medication access, social support, and more — with severity scoring and observation linkage.",
+    stories: [
+      {
+        id: "E8b-S1",
+        title: "Barriers extraction in Gemini prompt",
+        description: "The prompt instructs Gemini to identify all barriers to care mentioned in the conversation. Each barrier includes: barrier (short desc), context (full details), category, severity (high/medium/low), evidence (transcript quote), and observation linkage.",
+      },
+      {
+        id: "E8b-S2",
+        title: "Barriers guidance setting",
+        description: "Per-tenant barriers_prompt_guidance setting that provides custom instructions for barrier identification. Managed via GET/PUT/DELETE /api/settings/barriers-guidance.",
+      },
+      {
+        id: "E8b-S3",
+        title: "BigQuery barriers table",
+        description: "call_information.barriers table stores one row per barrier per call: call_id, barrier, context, category, severity, observation_name, observation_display_name, evidence.",
+      },
+      {
+        id: "E8b-S4",
+        title: "Barriers display in Call History",
+        description: "Call detail panel shows barriers with severity badges and category labels. PDF export includes the barriers section.",
+      },
+    ],
+  },
+  {
+    id: "E8c",
+    title: "Call QA Evaluation",
+    icon: <Wrench className="h-5 w-5 text-primary" />,
+    description: "Configurable quality assessment prompts that evaluate overall call quality — empathy, completeness, protocol adherence, and custom criteria per client/pathway.",
+    stories: [
+      {
+        id: "E8c-S1",
+        title: "Call QA prompts CRUD",
+        description: "Full REST API and management UI for defining QA evaluation prompts. Each prompt has a name, display name, prompt text (instruction for Gemini), response type (enum/boolean/text), response options, active/inactive toggle, and display order.",
+      },
+      {
+        id: "E8c-S2",
+        title: "Call QA in Gemini prompt",
+        description: "Active Call QA prompts are injected into the Gemini prompt as a CALL QA section. Gemini evaluates each prompt and returns structured results with value, detail, and evidence.",
+      },
+      {
+        id: "E8c-S3",
+        title: "BigQuery call_qa_results table",
+        description: "call_information.call_qa_results table stores one row per QA assessment per call. Results visible in Call History detail panel and PDF export.",
+      },
+    ],
+  },
+  {
     id: "E8",
     title: "CI/CD & Cloud Run Deployment",
     icon: <Globe className="h-5 w-5 text-primary" />,
@@ -347,7 +474,7 @@ export default function ProjectOverview() {
             </div>
             <Separator className="my-4" />
             <p className="text-sm text-foreground leading-relaxed">
-              A full-stack API on GCP Cloud Run that accepts post-discharge call transcripts, processes them through Vertex AI Gemini, and returns structured clinical analysis. Features include dynamic BigQuery-driven observation definitions, configurable context parameters, per-observation prompt guidance, prompt versioning, a management UI, analytics logging, and CI/CD via GitHub and Cloud Build.
+              A full-stack, multi-tenant API on GCP Cloud Run that accepts post-discharge call transcripts, processes them through Vertex AI Gemini, and returns structured clinical analysis. Built on a Client & Pathway architecture where each tenant has its own observations, context parameters, prompt settings, Call QA prompts, and barriers guidance. Features include a Call Volume analytics dashboard, dynamic BigQuery-driven observation definitions, configurable context parameters, per-observation prompt guidance, barriers-to-care extraction, Call QA evaluation, prompt versioning, batch processing, a management UI, and CI/CD via GitHub and Cloud Build.
             </p>
             <div className="flex flex-wrap gap-2 mt-4">
               <Badge variant="secondary" className="text-xs">React + Vite</Badge>

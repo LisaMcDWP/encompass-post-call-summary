@@ -47,12 +47,12 @@ interface Theme {
 }
 
 const NORTH_STAR = {
-  metric: "100% of post-discharge call observations and care gaps are identified",
-  target: "Every observation extracted, every gap flagged — zero missed follow-ups",
-  description: "Every post-discharge patient call is fully analyzed so that all clinical observations are captured and all care gaps are surfaced. Care teams have complete visibility into what was discussed, what was missed, and where follow-up is needed — ensuring no patient falls through the cracks.",
+  metric: "100% of post-discharge call observations and care gaps are identified — across every client and pathway",
+  target: "Every observation extracted, every gap flagged — zero missed follow-ups, regardless of program",
+  description: "Every post-discharge patient call is fully analyzed so that all clinical observations are captured and all care gaps are surfaced. The multi-tenant architecture ensures each client and pathway has its own tailored observation definitions, context parameters, prompt guidance, and Call QA criteria — while all data flows into a unified analytics layer. Care teams have complete visibility into what was discussed, what was missed, and where follow-up is needed — ensuring no patient falls through the cracks.",
 };
 
-const VISION = "A unified AI-powered platform that transforms unstructured patient call transcripts into structured, evidence-based clinical observations — driving faster follow-up, better outcomes, and complete visibility into post-discharge care transitions.";
+const VISION = "A unified, multi-tenant AI-powered platform that transforms unstructured patient call transcripts into structured, evidence-based clinical observations — driving faster follow-up, better outcomes, and complete visibility into post-discharge care transitions across all clients and pathways.";
 
 const PERSONAS: { name: string; role: string; needs: string }[] = [
   { name: "Care Guide", role: "Frontline caller", needs: "Automated call summaries so they can focus on the next patient instead of writing notes" },
@@ -62,6 +62,39 @@ const PERSONAS: { name: string; role: string; needs: string }[] = [
 ];
 
 const THEMES: Theme[] = [
+  {
+    name: "Multi-Tenant Architecture",
+    icon: <Users className="h-5 w-5 text-primary" />,
+    description: "Client & Pathway scoping — each tenant has its own observations, context parameters, prompt settings, Call QA prompts, and analytics",
+    epics: [
+      {
+        name: "Client & Pathway Management",
+        description: "CRUD management of clients and pathways as the top-level organizational unit",
+        stories: [
+          { title: "Client & Pathway entity with client name, pathway label, and description", status: "done" },
+          { title: "CRUD API for client-pathways (GET, POST, PUT, DELETE)", status: "done" },
+          { title: "Sidebar ClientPathwayPicker with collapsible card showing current selection", status: "done" },
+          { title: "Persistent selection via localStorage — remembered across sessions", status: "done" },
+          { title: "All config data scoped to clientPathwayId (observations, context params, settings, Call QA prompts)", status: "done" },
+          { title: "API analyze endpoint accepts client and pathway fields for routing", status: "done" },
+          { title: "call_info table stores client and pathway strings for filtering", status: "done" },
+          { title: "Setup nav section labeled with selected client name (e.g. 'Encompass Setup')", status: "done" },
+        ],
+      },
+      {
+        name: "Tenant-Scoped Configuration",
+        description: "All setup endpoints cascade from the selected client/pathway",
+        stories: [
+          { title: "Observations CRUD scoped by clientPathwayId query/body param", status: "done" },
+          { title: "Context parameters CRUD scoped by clientPathwayId", status: "done" },
+          { title: "Settings (summary instruction, observations guidance, barriers guidance) scoped by clientPathwayId", status: "done" },
+          { title: "Call QA prompts scoped by clientPathwayId", status: "done" },
+          { title: "Prompt generation uses tenant-specific config at analysis time", status: "done" },
+          { title: "Default seed data created per new client/pathway", status: "backlog" },
+        ],
+      },
+    ],
+  },
   {
     name: "Core AI Extraction",
     icon: <Zap className="h-5 w-5 text-primary" />,
@@ -203,7 +236,15 @@ const THEMES: Theme[] = [
         description: "Visual analytics for call trends, observation patterns, and costs",
         stories: [
           { title: "Token usage and cost tracking per call", status: "done" },
-          { title: "Call volume dashboard (daily/weekly trends)", status: "backlog" },
+          { title: "Call Volume dashboard with KPI cards (total calls, success rate, avg time, cost w/ token footnote)", status: "done" },
+          { title: "Stacked bar chart of daily call volume colored by client/pathway", status: "done" },
+          { title: "Source type donut chart and pathway breakdown donut chart", status: "done" },
+          { title: "Client/pathway performance cards with individual sparklines", status: "done" },
+          { title: "Quick-filter date range pills (Today / 7D / 30D / YTD / All) with 7D default", status: "done" },
+          { title: "Independent client and pathway dropdown filters with cascading pathway options", status: "done" },
+          { title: "Daily breakdown table with volume counts above bars", status: "done" },
+          { title: "Eastern timezone (America/New_York) for all date grouping", status: "done" },
+          { title: "GET /api/calls/stats/daily endpoint with days param, returns flat grouped rows", status: "done" },
           { title: "Observation distribution charts (% Good vs Fair vs Poor)", status: "backlog" },
           { title: "Follow-up area frequency analysis", status: "backlog" },
           { title: "Cost forecasting based on volume trends", status: "backlog" },
@@ -785,8 +826,8 @@ export default function ProductReference() {
           <CardContent>
             <div className="space-y-4">
               <div>
-                <h4 className="text-sm font-semibold mb-1">Multi-Program Support</h4>
-                <p className="text-xs text-muted-foreground">Different observation sets per program (e.g., cardiac vs orthopedic). Each program would have its own observation configuration, context parameters, and prompt guidance.</p>
+                <h4 className="text-sm font-semibold mb-1">Multi-Program Support <Badge variant="outline" className="text-[10px] ml-1 border-green-300 text-green-700">Partially Done</Badge></h4>
+                <p className="text-xs text-muted-foreground">Multi-tenant Client & Pathway architecture is live — each tenant has its own observations, context params, settings, and Call QA prompts. Future: program-level grouping across pathways (e.g., cardiac vs orthopedic program templates).</p>
               </div>
               <div>
                 <h4 className="text-sm font-semibold mb-1">Patient Longitudinal View</h4>

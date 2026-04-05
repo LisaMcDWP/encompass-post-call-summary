@@ -138,6 +138,8 @@ export default function ApiReference() {
               <h3 className="text-foreground font-semibold mb-2">Fields</h3>
               <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-2">
                 <p className="text-foreground"><span className="text-primary font-semibold">source_text</span> <Badge variant="outline" className="text-[10px] ml-1 py-0">required</Badge> — The full patient call transcript or interaction text.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">client</span> <span className="text-muted-foreground text-xs">(string, optional)</span> — Client name for multi-tenant routing (e.g. "Encompass"). Used with <code className="text-primary">pathway</code> to resolve the client/pathway configuration.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">pathway</span> <span className="text-muted-foreground text-xs">(string, optional)</span> — Pathway label within the client (e.g. "Post-Discharge"). Together with <code className="text-primary">client</code>, determines which observations, context params, and prompt settings to use.</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">care_flow_id</span> <span className="text-muted-foreground text-xs">(string, optional)</span> — Identifier for the care flow or pathway.</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">processed_datetime</span> <span className="text-muted-foreground text-xs">(string, optional)</span> — ISO 8601 datetime. Defaults to current time.</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">source_type</span> <span className="text-muted-foreground text-xs">(string, optional)</span> — Type of source (e.g. phone_call, chat, note).</p>
@@ -150,6 +152,8 @@ export default function ApiReference() {
               <h3 className="text-foreground font-semibold mb-2">Example Request</h3>
               <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto" data-testid="text-api-request">
 {`{
+  "client": "Encompass",
+  "pathway": "Post-Discharge",
   "care_flow_id": "cf_abc123",
   "processed_datetime": "2026-03-06T10:30:00Z",
   "source_type": "phone_call",
@@ -161,6 +165,10 @@ export default function ApiReference() {
   }
 }`}
               </pre>
+              <div className="bg-primary/5 border border-primary/20 p-3 rounded-lg text-sm mt-3">
+                <p className="text-primary font-semibold text-xs mb-1">Multi-Tenant Routing</p>
+                <p className="text-muted-foreground text-xs">When <code className="text-primary">client</code> and <code className="text-primary">pathway</code> are provided, the API resolves the matching Client & Pathway configuration and uses its observations, context parameters, prompt settings, and Call QA prompts. If omitted, the default (first) client/pathway is used.</p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -350,6 +358,8 @@ export default function ApiReference() {
   -H "Content-Type: application/json" \\
   -H "X-API-Key: YOUR_API_KEY" \\
   -d '{
+    "client": "Encompass",
+    "pathway": "Post-Discharge",
     "care_flow_id": "cf_abc123",
     "source_type": "phone_call",
     "source_id": "call_987654321",

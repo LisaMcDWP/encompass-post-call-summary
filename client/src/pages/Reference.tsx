@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import { BookOpen, Code2, Webhook, Server, Key, Activity, Database, Settings, Phone, Download, Layers, MessageSquare, ClipboardCheck, FileText } from "lucide-react";
+import { BookOpen, Code2, Webhook, Server, Key, Activity, Database, Settings, Phone, Download, Layers, MessageSquare, ClipboardCheck, FileText, Users, BarChart3 } from "lucide-react";
 import { useRef } from "react";
 import { jsPDF } from "jspdf";
 
@@ -175,10 +175,23 @@ function exportReferencePdf() {
   para("POST /api/analyze and management routes do not require authentication.");
   para("POST /gwc_observation_summarization requires an X-API-Key header (GWC_OBSERVATION_SUMMARIZATION_API_KEY).");
 
+  heading("Multi-Tenant Architecture");
+  para("This API uses a Client & Pathway multi-tenant architecture. Each client/pathway has its own observations, context parameters, prompt settings, Call QA prompts, and barriers guidance.");
+  fieldDesc("clientPathwayId", "Required on all config endpoints (GET as query param, POST/PUT as body param).");
+  fieldDesc("client + pathway", "On analyze endpoints, pass client and pathway to route to the correct tenant config.");
+  divider();
+  subheading("Client & Pathway CRUD");
+  para("GET /api/client-pathways — Returns all client/pathway definitions.");
+  para("POST /api/client-pathways — Create a new client/pathway (name, client, pathway, description).");
+  para("PUT /api/client-pathways/:id — Update an existing client/pathway.");
+  para("DELETE /api/client-pathways/:id — Delete a client/pathway.");
+
   heading("POST /api/analyze");
   para("Accepts source text with contextual metadata, processes it through Gemini AI, and returns structured clinical analysis with HTML-formatted output.");
   divider();
   subheading("Request Body Fields");
+  fieldDesc("client", "(string, optional) Client name for multi-tenant routing (e.g. 'Encompass').");
+  fieldDesc("pathway", "(string, optional) Pathway label (e.g. 'Post-Discharge'). With client, resolves tenant config.");
   fieldDesc("care_flow_id", "(string, optional) Identifier for the care flow.");
   fieldDesc("processed_datetime", "(string, optional) ISO 8601 datetime.");
   fieldDesc("source_type", "(string, optional) Type of source (phone_call, chat, note).");
@@ -234,7 +247,11 @@ function exportReferencePdf() {
   heading("GET /api/prompt");
   para("Returns the dynamically generated prompt template, version hash, and version date.");
 
-  heading("Observations CRUD");
+  heading("Call Volume Analytics");
+  subheading("GET /api/calls/stats/daily");
+  para("Returns daily call counts grouped by client, pathway, and source_type. Query param: days (0=today, 6=7D, 29=30D, default 30). Dates grouped by America/New_York timezone. Returns flat array of rows.");
+
+  heading("Observations CRUD (scoped by clientPathwayId)");
   subheading("GET /api/observations");
   para("Returns all observations ordered by display_order.");
   divider();
@@ -264,7 +281,7 @@ function exportReferencePdf() {
   fieldDesc("isActive", "(boolean) Whether included in analysis.");
   fieldDesc("promptGuidance", "(string, optional) Custom instruction for Gemini.");
 
-  heading("Context Parameters CRUD");
+  heading("Context Parameters CRUD (scoped by clientPathwayId)");
   subheading("GET /api/context-parameters");
   para("Returns all context parameters ordered by display_order.");
   divider();
@@ -280,14 +297,17 @@ function exportReferencePdf() {
   subheading("DELETE /api/context-parameters/:id");
   para("Permanently deletes a context parameter by ID.");
 
-  heading("Prompt Settings");
+  heading("Prompt Settings (scoped by clientPathwayId)");
   subheading("Summary Instruction");
   para("GET/PUT/DELETE /api/settings/summary-instruction — Manage the summary instruction. Supports {{SUMMARY_TOPICS}} placeholder.");
   divider();
   subheading("Observations Guidance");
   para("GET/PUT/DELETE /api/settings/observations-guidance — Manage global observations guidance.");
+  divider();
+  subheading("Barriers Guidance");
+  para("GET/PUT/DELETE /api/settings/barriers-guidance — Manage barriers-to-care identification guidance.");
 
-  heading("Call QA Prompts CRUD");
+  heading("Call QA Prompts CRUD (scoped by clientPathwayId)");
   subheading("GET /api/call-qa-prompts");
   para("Returns all Call QA prompts ordered by display_order.");
   divider();
@@ -466,6 +486,81 @@ export default function Reference() {
           </CardContent>
         </Card>
 
+        <Card className="border-primary/20 bg-primary/5 shadow-sm mb-6">
+          <CardHeader>
+            <CardTitle className="text-foreground flex items-center gap-2">
+              <Users className="h-5 w-5 text-primary" />
+              Multi-Tenant Architecture
+              <Badge className="bg-primary/10 text-primary border-primary/20 ml-2">Core</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-muted-foreground">This API uses a <strong>Client & Pathway</strong> multi-tenant architecture. Each client/pathway has its own observations, context parameters, prompt settings, Call QA prompts, and barriers guidance. All configuration endpoints require a <code className="text-primary">clientPathwayId</code> parameter.</p>
+            <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-2">
+              <p className="text-foreground"><span className="text-primary font-semibold">clientPathwayId</span> — Required on all config endpoints (GET as query param, POST/PUT as body param). Identifies which tenant's config to read/write.</p>
+              <p className="text-foreground"><span className="text-primary font-semibold">client + pathway</span> — On the analyze endpoints, pass <code className="text-primary">client</code> (e.g. "Encompass") and <code className="text-primary">pathway</code> (e.g. "Post-Discharge") to route to the correct tenant config.</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/60 shadow-sm mb-6">
+          <CardHeader>
+            <CardTitle className="text-foreground flex items-center gap-2">
+              <Users className="h-5 w-5 text-primary" />
+              Client & Pathway CRUD
+              <Badge className="bg-primary/10 text-primary border-primary/20 ml-2">Management</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <p className="text-muted-foreground">Manage client/pathway definitions. These are the top-level organizational entities that scope all configuration data.</p>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">GET /api/client-pathways</h3>
+              <p className="text-muted-foreground text-sm mb-2">Returns all client/pathway definitions.</p>
+              <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`[
+  {
+    "id": 1,
+    "client": "Encompass",
+    "pathway": "Post-Discharge",
+    "description": "Post-discharge follow-up calls"
+  }
+]`}
+              </pre>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">POST /api/client-pathways</h3>
+              <p className="text-muted-foreground text-sm mb-2">Create a new client/pathway.</p>
+              <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`{
+  "client": "Encompass",
+  "pathway": "Post-Discharge",
+  "description": "Post-discharge follow-up calls"
+}`}
+              </pre>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">PUT /api/client-pathways/:id</h3>
+              <p className="text-muted-foreground text-sm">Update an existing client/pathway. Partial updates supported.</p>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">DELETE /api/client-pathways/:id</h3>
+              <p className="text-muted-foreground text-sm">Permanently deletes a client/pathway by ID.</p>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className="border-border/60 shadow-sm mb-6">
           <CardHeader>
             <CardTitle className="text-foreground flex items-center gap-2">
@@ -501,6 +596,8 @@ export default function Reference() {
               <h3 className="text-foreground font-semibold mb-2">Request Body</h3>
               <p className="text-muted-foreground text-sm mb-2">Content-Type: application/json</p>
               <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-2 mb-4">
+                <p className="text-foreground"><span className="text-primary font-semibold">client</span> <span className="text-muted-foreground">(string, optional)</span> — Client name for multi-tenant routing (e.g. "Encompass"). Used with <code className="text-primary">pathway</code> to resolve tenant config.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">pathway</span> <span className="text-muted-foreground">(string, optional)</span> — Pathway label within the client (e.g. "Post-Discharge"). Together with <code className="text-primary">client</code>, determines which observations, context params, and prompt settings to use.</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">care_flow_id</span> <span className="text-muted-foreground">(string, optional)</span> — Identifier for the care flow or pathway.</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">processed_datetime</span> <span className="text-muted-foreground">(string, optional)</span> — ISO 8601 datetime. Defaults to current time if omitted.</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">source_type</span> <span className="text-muted-foreground">(string, optional)</span> — Type of source (e.g. phone_call, chat, note).</p>
@@ -511,6 +608,8 @@ export default function Reference() {
               <h4 className="text-foreground font-semibold mb-2 text-sm">Example Request Body</h4>
               <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto" data-testid="text-request-body">
 {`{
+  "client": "Encompass",
+  "pathway": "Post-Discharge",
   "care_flow_id": "cf_abc123",
   "processed_datetime": "2026-03-06T10:30:00Z",
   "source_type": "phone_call",
@@ -834,6 +933,46 @@ export default function Reference() {
         <Card className="border-border/60 shadow-sm mb-6">
           <CardHeader>
             <CardTitle className="text-foreground flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-primary" />
+              Call Volume Analytics
+              <Badge className="bg-primary/10 text-primary border-primary/20 ml-2">Analytics</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <p className="text-muted-foreground">Aggregate call volume statistics for the Call Volume dashboard. Data is grouped by Eastern timezone (<code className="text-primary">America/New_York</code>).</p>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">GET /api/calls/stats/daily</h3>
+              <p className="text-muted-foreground text-sm mb-2">Returns daily call counts grouped by client, pathway, and source_type. The frontend aggregates this flat data into KPI cards, charts, and breakdowns.</p>
+              <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-2 mb-3">
+                <p className="text-foreground"><span className="text-primary font-semibold">days</span> <span className="text-muted-foreground">(query param, optional)</span> — Number of days to look back. 0 = today only, 6 = last 7 days (default 30).</p>
+              </div>
+              <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`[
+  {
+    "date": "2026-04-01",
+    "client": "Encompass",
+    "pathway": "Post-Discharge",
+    "source_type": "phone_call",
+    "call_count": 12,
+    "success_count": 11,
+    "error_count": 1,
+    "avg_processing_ms": 1250,
+    "total_tokens": 39600,
+    "total_cost": 0.0070
+  }
+]`}
+              </pre>
+              <p className="text-muted-foreground text-sm mt-2">Each row represents one (date, client, pathway, source_type) group. The frontend rolls up these rows into KPI totals, stacked bar charts by client/pathway, source type donuts, and pathway breakdown cards.</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/60 shadow-sm mb-6">
+          <CardHeader>
+            <CardTitle className="text-foreground flex items-center gap-2">
               <Activity className="h-5 w-5 text-primary" />
               GET /api/health
             </CardTitle>
@@ -882,7 +1021,7 @@ export default function Reference() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <p className="text-muted-foreground">Manage observation topics that drive the Gemini analysis prompt. Observations are stored in BigQuery (<code className="text-primary">call_information.observations</code>).</p>
+            <p className="text-muted-foreground">Manage observation topics that drive the Gemini analysis prompt. Observations are stored in BigQuery (<code className="text-primary">call_information.observations</code>). All endpoints require <code className="text-primary">clientPathwayId</code> (query param for GET/DELETE, body param for POST/PUT).</p>
 
             <Separator />
 
@@ -1010,7 +1149,7 @@ export default function Reference() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <p className="text-muted-foreground">Manage context parameters that API callers can pass alongside transcripts to give Gemini known context. Stored in BigQuery (<code className="text-primary">call_information.context_parameters</code>).</p>
+            <p className="text-muted-foreground">Manage context parameters that API callers can pass alongside transcripts to give Gemini known context. Stored in BigQuery (<code className="text-primary">call_information.context_parameters</code>). All endpoints require <code className="text-primary">clientPathwayId</code> (query param for GET/DELETE, body param for POST/PUT).</p>
 
             <Separator />
 
@@ -1074,7 +1213,7 @@ export default function Reference() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <p className="text-muted-foreground">Configure prompt instructions stored in BigQuery (<code className="text-primary">call_information.settings</code>).</p>
+            <p className="text-muted-foreground">Configure prompt instructions stored in BigQuery (<code className="text-primary">call_information.settings</code>). All endpoints are scoped by <code className="text-primary">clientPathwayId</code> (query param).</p>
 
             <Separator />
 
@@ -1115,6 +1254,26 @@ export default function Reference() {
                 </div>
               </div>
             </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">Barriers Guidance</h3>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-foreground text-sm font-medium">GET /api/settings/barriers-guidance</p>
+                  <p className="text-muted-foreground text-sm">Returns the barriers-to-care identification guidance for the current client/pathway.</p>
+                </div>
+                <div>
+                  <p className="text-foreground text-sm font-medium">PUT /api/settings/barriers-guidance</p>
+                  <p className="text-muted-foreground text-sm">Set or update custom barriers guidance for this client/pathway.</p>
+                </div>
+                <div>
+                  <p className="text-foreground text-sm font-medium">DELETE /api/settings/barriers-guidance</p>
+                  <p className="text-muted-foreground text-sm">Remove custom barriers guidance (reverts to default).</p>
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -1127,7 +1286,7 @@ export default function Reference() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <p className="text-muted-foreground">Manage Call QA evaluation prompts that assess overall call quality. Each prompt defines a question that Gemini answers about the call as a whole. Stored in BigQuery (<code className="text-primary">call_information.call_qa_prompts</code>). Results are stored in <code className="text-primary">call_information.call_qa_results</code>.</p>
+            <p className="text-muted-foreground">Manage Call QA evaluation prompts that assess overall call quality. Each prompt defines a question that Gemini answers about the call as a whole. Stored in BigQuery (<code className="text-primary">call_information.call_qa_prompts</code>). Results are stored in <code className="text-primary">call_information.call_qa_results</code>. All endpoints require <code className="text-primary">clientPathwayId</code> (query param for GET/DELETE, body param for POST/PUT).</p>
 
             <Separator />
 
