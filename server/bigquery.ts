@@ -186,6 +186,13 @@ async function migrateCallInfoColumns(): Promise<void> {
       });
       console.log("Added call_date column to call_info table.");
     }
+    if (!fieldNames.has("request_headers")) {
+      await client.query({
+        query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\` ADD COLUMN request_headers STRING`,
+        location: "US",
+      });
+      console.log("Added request_headers column to call_info table.");
+    }
   } catch (err: any) {
     console.error("Migration check for call_info columns:", err.message);
   }
@@ -222,6 +229,7 @@ export interface CallInfoEntry {
   followUpAreas?: string;
   transitionStatus?: string;
   requestBody?: string;
+  requestHeaders?: string;
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
@@ -275,6 +283,7 @@ export async function insertCallInfo(entry: CallInfoEntry): Promise<void> {
       status: entry.status,
       error_message: entry.errorMessage || null,
       request_body: entry.requestBody || null,
+      request_headers: entry.requestHeaders || null,
       client: entry.client || null,
       pathway: entry.pathway || null,
     };
@@ -1443,6 +1452,7 @@ export async function getCallDetail(callId: string): Promise<{ callInfo: any | n
       status: row.status,
       error_message: row.error_message,
       request_body: row.request_body ? JSON.parse(row.request_body) : null,
+      request_headers: row.request_headers ? JSON.parse(row.request_headers) : null,
       client: row.client || null,
       pathway: row.pathway || null,
     };

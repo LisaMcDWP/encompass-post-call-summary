@@ -56,6 +56,15 @@ export async function registerRoutes(
     const { source_text: _omit, ...requestMeta } = req.body;
     const requestBodyJson = JSON.stringify(requestMeta);
 
+    const relevantHeaders: Record<string, string> = {};
+    for (const [key, value] of Object.entries(req.headers)) {
+      const lk = key.toLowerCase();
+      if (lk.startsWith("x-awell-") || lk.startsWith("x-gwc-") || lk === "x-api-key" || lk === "x-forwarded-for" || lk === "user-agent") {
+        relevantHeaders[key] = String(value);
+      }
+    }
+    const requestHeadersJson = Object.keys(relevantHeaders).length > 0 ? JSON.stringify(relevantHeaders) : undefined;
+
     if (!source_text || typeof source_text !== "string" || source_text.trim().length === 0) {
       const processingTime = Date.now() - startTime;
       const logId = source_id || care_flow_id || `call_${randomUUID().slice(0, 12)}`;
@@ -152,6 +161,7 @@ export async function registerRoutes(
         estimatedCost: tokenUsage.estimatedCost,
         status: "success",
         requestBody: requestBodyJson,
+        requestHeaders: requestHeadersJson,
         client: resolvedClient,
         pathway: resolvedPathway,
       });
@@ -188,6 +198,7 @@ export async function registerRoutes(
         status: "error",
         errorMessage: error.message,
         requestBody: requestBodyJson,
+        requestHeaders: requestHeadersJson,
       });
 
       console.error("Transcript analysis failed:", error);

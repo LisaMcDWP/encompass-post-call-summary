@@ -28,6 +28,7 @@ interface CallInfo {
   status: string;
   error_message: string | null;
   request_body: Record<string, any> | null;
+  request_headers: Record<string, string> | null;
   client: string | null;
   pathway: string | null;
 }
@@ -261,6 +262,19 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
               )}
             </div>
           </div>
+
+          {info.request_headers && Object.keys(info.request_headers).length > 0 && (
+            <details className="group">
+              <summary className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 cursor-pointer hover:text-muted-foreground mb-1.5 list-none flex items-center gap-1">
+                <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
+                Request Headers
+              </summary>
+              <pre
+                className="bg-[#172938] text-gray-300 p-4 rounded-lg text-xs overflow-x-auto max-h-48 overflow-y-auto mt-1"
+                data-testid="detail-request-headers"
+              >{JSON.stringify(info.request_headers, null, 2)}</pre>
+            </details>
+          )}
 
           {info.request_body && (
             <details className="group">
