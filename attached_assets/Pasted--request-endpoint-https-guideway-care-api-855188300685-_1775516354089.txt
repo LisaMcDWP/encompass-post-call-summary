@@ -1,0 +1,61 @@
+{
+  "request": {
+    "endpoint": "https://guideway-care-api-855188300685.us-central1.run.app/gwc_observation_summarization",
+    "method": "POST",
+    "headers": {
+      "Content-Type": "application/json",
+      "X-API-Key": "AIzaSyBRCK2n6wvT9QwxcIQlRXNNpQTN573nXTg",
+      "x-awell-care-flow-definition-id": "PbtKbnHBbFoW",
+      "x-awell-care-flow-start-date": "2026-04-04T12:42:15.206Z",
+      "x-awell-patient-id": "76SoZX67NLGqwLwPlo2Nk",
+      "x-awell-tenant-id": "RbOSeu8XGLrw",
+      "x-awell-care-flow-id": "D0v8kv85RHu3"
+    },
+    "body": {
+      "source_text": "assistant: hi, this is hanna, calling from encompass health rehabilitation hospital. is this thomas? \n user: Hello?  \n user: Ajá. <Block interruptions enabled. This message was ignored> \n user: No, this is his wife. \n assistant: oh, hi. okay... is thomas available to come to the phone? \n user: Yes. I had some other people on the other line. Let me tell them. I'll call them back, and then I'll get back to you. Okay? \n assistant: okay, i'll hold. \n user: How do I do that? \n assistant: no problem at all. ta- \n user: How do I do that? I got that other lady on the line. Let me see if I can get her back. Hello? \n assistant: take your time. i'll be right here. \n user: No. \n user: No? Are you there? \n assistant: yes, i'm here. jus- \n user: Hello? \n assistant: yes, i'm here. just let me k- \n user: Come on speaker. Hello? \n assistant: hello? \n user: Hey. Oh. I guess I'll have to call another one back. Is this the lady that just called me from where'd you call me from? \n assistant: yes, i'm hannah from encompass health rehabilitation hospital. i'm looking- \n user: Okay. Go ahead and tell me what I have to do because I mixed up right now. \n assistant: oh, i'm sorry about t- \n user: Go ahead. \n assistant: oh, i'm sorry about the confusion. i was just hoping to speak with thomas. is he available? \n user: Oh, yeah. That's it. Oh, yeah. He's in the front room. Hang on. \n assistant: okay, take y- \n user: They turn that figure down. This lady needs to talk to you. \n assistant: okay, thank you. i'll wait. \n user: Is Encompass. Who? This is at rehabilitation, lady. Don't put \n user: that. \n assistant: i'll just wai- \n user: Hello? \n assistant: hello? \n user: Yeah. \n assistant: hi. is this thomas? \n user: Yes, ma'am. \n assistant: nice to meet you. i'm a virtual assistant with your care team from encompass. i just wanted to check in after your discharge. do you have a few minutes for a couple of questions? \n assistant: oh, wonderful. just so you know, this call will be recorded for training purposes, and i'll be sharing what we talk about with your care team. how have you been feeling since you got home? \n user: Yes. \n user: Just fine except my back is killing me. \n user: As long as I don't get up and walk, it don't hurt. \n assistant: oh, i'm sorry. i'll make sure to pass that along to your team. have you had to go back to an emergency room, hospital, or skilled nursing facility since you've been home? \n user: No. \n assistant: that's good to hear. i also wanted to check on the prescriptions prescribed at discharge from the rehab hospital, have you been able to pick those up yet? \n user: Yeah. I don't know if they're all four I don't know what they were or or why they did it, because I already had all that medicine. \n user: Except for that one, you don't know what it is? Yeah. I got one. I don't know what it is. \n assistant: okay. have you had any trouble taking them or any questions about how to take them? \n user: No. \n assistant: alright. have you been able to schedule your follow-up visit with your doctor yet? \n user: No. \n assistant: alright. has there been anything making it harder to get that follow-up visit on the calendar? \n user: No? I'm getting that now, but it's \n assistant: oh, okay. so you're working on getting that scheduled now? \n user: Yes, ma'am. \n assistant: that's good to hear. do you- \n assistant: oh, sorry. i was jus- \n user: Pardon? \n user: I what? \n assistant: oh, sorry. i was just going to ask... when is that appointment scheduled for? \n user: I haven't got one yet. I was getting it when they called. \n assistant: oh, i see. well, has there been anything making it harder to get that follow-up visit on the calendar? \n user: No. \n assistant: alright. i'll let the team know you're working on it. i also wanted to ask about the home care visit we arranged. has anyone from the home care team visited you yet? \n user: No. \n assistant: okay. do you have a home care appointment scheduled yet? \n user: No, to let I know of Oh, that's right. You were calling Elite. Right? \n user: Or I don't know. Well, I don't even think about this. Well I don't know. \n assistant: that's alright. has anyone reached out to you yet to set up that visit? \n user: Sí, \n assistant: oh, okay. so someone has been in touch? \n user: No. \n assistant: alright. i'll let the team know about that. do you have any ques- \n user: Ok. \n assistant: do you have any questions about the discharge paperwork and instructions? \n user: No, ma'am. \n assistant: alright. - \n user: Well, we did, but we don't now. \n assistant: oh, okay. is t- \n user: I don't like it. \n assistant: i'll let the team kn- \n user: What's in that? \n assistant: i'll let the team know about that. is there anything else you'd like to share with your care team? \n user: No. \n assistant: ...okay, thanks so much... you've been really helpful. i’ll make sure the care team sees this so they can follow up and keep supporting you as needed. You’ve also got your discharge instructions if questions come up. And if anything changes, you’ve got options — call your doctor, contact the Encompass Health case management team, stop by urgent care, go to the ER, or call 911 if it’s serious. \n user: Are you still there? \n agent-action: Ended call \n assistant: thank you for choosing encompass health rehabilitation hospital for your rehabilitation. take care — bye for now. \n user: Sí. Aló.",
+      "source_id": "58cd07d4-7f07-4018-9f47-76384fedad1a",
+      "home_health_ordered": "true",
+      "dme_or_supplies_ordered": ""
+    }
+  },
+  "responses": [
+    {
+      "date": "2026-04-06T16:27:50.318Z",
+      "status": 408,
+      "body": {
+        "error": "network timeout at: https://guideway-care-api-855188300685.us-central1.run.app/gwc_observation_summarization"
+      }
+    },
+    {
+      "date": "2026-04-06T16:28:19.841Z",
+      "status": 408,
+      "body": {
+        "error": "network timeout at: https://guideway-care-api-855188300685.us-central1.run.app/gwc_observation_summarization"
+      }
+    },
+    {
+      "date": "2026-04-06T16:28:53.001Z",
+      "status": 408,
+      "body": {
+        "error": "network timeout at: https://guideway-care-api-855188300685.us-central1.run.app/gwc_observation_summarization"
+      }
+    },
+    {
+      "date": "2026-04-06T16:29:34.649Z",
+      "status": 408,
+      "body": {
+        "error": "network timeout at: https://guideway-care-api-855188300685.us-central1.run.app/gwc_observation_summarization"
+      }
+    },
+    {
+      "date": "2026-04-06T16:30:31.980Z",
+      "status": 408,
+      "body": {
+        "error": "network timeout at: https://guideway-care-api-855188300685.us-central1.run.app/gwc_observation_summarization"
+      }
+    }
+  ],
+  "id": "Qz5brbA2L04n",
+  "status": "Failed",
+  "title": "Get extracted summary & observations "
+}
