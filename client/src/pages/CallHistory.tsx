@@ -82,6 +82,7 @@ interface CallDetail {
   qaPairs: QAPair[];
   barriers: CallBarrier[];
   callQA: CallQAResultItem[];
+  transcript: string | null;
 }
 
 function formatDate(dateStr: string | null): string {
@@ -132,6 +133,7 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
   const qaPairs = data.qaPairs || [];
   const barriers = data.barriers || [];
   const callQA = data.callQA || [];
+  const transcript = data.transcript || null;
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center" onClick={onClose}>
@@ -270,6 +272,41 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
                 className="bg-[#172938] text-gray-300 p-4 rounded-lg text-xs overflow-x-auto max-h-48 overflow-y-auto mt-1"
                 data-testid="detail-request-body"
               >{JSON.stringify(info.request_body, null, 2)}</pre>
+            </details>
+          )}
+
+          {transcript && (
+            <details className="group">
+              <summary className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 cursor-pointer hover:text-muted-foreground mb-1.5 list-none flex items-center gap-1">
+                <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
+                Transcript
+                <span className="text-[9px] font-normal ml-1">({transcript.length.toLocaleString()} chars)</span>
+              </summary>
+              <div className="bg-muted/20 rounded-lg border border-border/40 p-4 mt-1 max-h-96 overflow-y-auto" data-testid="detail-transcript">
+                <div className="space-y-3 text-sm">
+                  {transcript.split("\n").filter(line => line.trim()).map((line, idx) => {
+                    const match = line.match(/^(user|assistant|agent|care guide|patient|AI):\s*/i);
+                    if (match) {
+                      const speaker = match[1];
+                      const text = line.slice(match[0].length);
+                      const isAgent = /^(assistant|agent|care guide|ai)$/i.test(speaker);
+                      return (
+                        <div key={idx} className={`flex gap-3 ${isAgent ? "" : "flex-row-reverse"}`}>
+                          <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${isAgent ? "bg-primary/10 text-primary" : "bg-green-100 text-green-700"}`}>
+                            {isAgent ? "CG" : "PT"}
+                          </div>
+                          <div className={`max-w-[80%] rounded-lg px-3 py-2 text-xs leading-relaxed ${isAgent ? "bg-primary/5 border border-primary/10" : "bg-green-50 border border-green-200/40"}`}>
+                            {text}
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div key={idx} className="text-xs text-muted-foreground px-2">{line}</div>
+                    );
+                  })}
+                </div>
+              </div>
             </details>
           )}
 

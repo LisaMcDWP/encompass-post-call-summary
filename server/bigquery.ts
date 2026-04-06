@@ -1486,5 +1486,34 @@ export async function getCallDetail(callId: string): Promise<{ callInfo: any | n
     console.warn("Call QA results table not found or query failed:", err.message);
   }
 
-  return { callInfo, observations: obsRows as CallObservationRow[], qaPairs: qaRows, barriers: barrierRows, callQA: callQARows };
+  let transcript: string | null = null;
+  try {
+    const blandCallId = callId.startsWith("batch_") ? callId.replace("batch_", "") : callId;
+    const batchTranscriptQuery = `
+      SELECT transcript
+      FROM \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
+      WHERE bland_call_id = @blandCallId
+      LIMIT 1
+    `;
+    const [btRows] = await client.query({ query: batchTranscriptQuery, params: { blandCallId }, location: "US" });
+    if ((btRows as any[]).length > 0 && (btRows as any[])[0].transcript) {
+      transcript = (btRows as any[])[0].transcript;
+    }
+    if (!transcript) {
+      const blandTranscriptQuery = `
+        SELECT concatenated_transcript
+        FROM \`${client.projectId}.Bland.calls\`
+        WHERE call_id = @blandCallId
+        LIMIT 1
+      `;
+      const [blRows] = await client.query({ query: blandTranscriptQuery, params: { blandCallId }, location: "US" });
+      if ((blRows as any[]).length > 0 && (blRows as any[])[0].concatenated_transcript) {
+        transcript = (blRows as any[])[0].concatenated_transcript;
+      }
+    }
+  } catch (err: any) {
+    console.warn("Transcript fetch failed:", err.message);
+  }
+
+  return { callInfo, observations: obsRows as CallObservationRow[], qaPairs: qaRows, barriers: barrierRows, callQA: callQARows, transcript };
 }
