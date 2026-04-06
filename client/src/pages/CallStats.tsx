@@ -74,13 +74,13 @@ function StackedBarChart({ dates, series, maxVal }: {
   const labelEvery = dates.length <= 31 ? 1 : Math.ceil(dates.length / 15);
 
   return (
-    <div className="flex items-end gap-[2px] h-[180px] overflow-x-auto pb-6 pt-5 relative">
+    <div className="flex items-end gap-[2px] h-[200px] overflow-x-auto pb-6 pt-6 relative">
       {dates.map((date, i) => {
         const dayTotal = series.reduce((sum, s) => sum + (s.values[date] || 0), 0);
         const showLabel = showAllLabels || (i % labelEvery === 0);
         return (
           <div key={i} className="flex flex-col items-center group relative h-full" style={{ minWidth: barWidth }}>
-            <div className={`absolute -top-1 left-1/2 -translate-x-1/2 text-[9px] font-semibold whitespace-nowrap transition-opacity ${dayTotal > 0 ? "text-foreground/70" : "text-transparent"} ${showAllLabels ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+            <div className={`absolute -top-1 left-1/2 -translate-x-1/2 text-xs font-bold whitespace-nowrap transition-opacity ${dayTotal > 0 ? "text-foreground" : "text-transparent"} ${showAllLabels ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
               {dayTotal}
             </div>
             <div className="flex-1 w-full flex flex-col items-stretch justify-end">
@@ -101,7 +101,7 @@ function StackedBarChart({ dates, series, maxVal }: {
               )}
             </div>
             {showLabel && (
-              <span className="text-[8px] text-muted-foreground/60 mt-1 absolute -bottom-5 whitespace-nowrap">
+              <span className="text-[10px] text-muted-foreground/70 mt-1 absolute -bottom-5 whitespace-nowrap">
                 {formatDate(date)}
               </span>
             )}
