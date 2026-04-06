@@ -93,7 +93,7 @@ export default function BatchProcessing() {
   const [selectedCalls, setSelectedCalls] = useState<Set<string>>(new Set());
   const [showSearch, setShowSearch] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("");
-  const [processLimit, setProcessLimit] = useState("5");
+  const [processLimit, setProcessLimit] = useState("100");
   const [answeredBy, setAnsweredBy] = useState("human");
   const [minDuration, setMinDuration] = useState("0.01");
   const [maxDuration, setMaxDuration] = useState("");
