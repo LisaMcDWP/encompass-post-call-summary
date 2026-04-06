@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useClientPathway } from "@/contexts/ClientPathwayContext";
 import {
   Loader2, Package, Play, RotateCcw, CheckCircle2, XCircle, Clock, Search,
-  ChevronDown, ChevronRight, AlertCircle, Zap, RefreshCw
+  ChevronDown, ChevronRight, AlertCircle, Zap, RefreshCw, Cloud
 } from "lucide-react";
 
 interface BlandCall {
@@ -215,6 +215,32 @@ export default function BatchProcessing() {
     },
   });
 
+  const triggerJobMutation = useMutation({
+    mutationFn: async () => {
+      const body: Record<string, any> = { batchSize: parseInt(processLimit, 10) || 50 };
+      if (selectedCPId) body.clientPathwayId = selectedCPId;
+      const res = await fetch("/api/batch/trigger-job", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Failed to trigger batch job");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Batch job triggered on GCP",
+        description: data.message,
+      });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to trigger job", description: err.message, variant: "destructive" });
+    },
+  });
+
   const recreateMutation = useMutation({
     mutationFn: async (batchId: string) => {
       const res = await fetch("/api/batch/recreate", {
@@ -337,11 +363,20 @@ export default function BatchProcessing() {
         <Button
           onClick={() => processMutation.mutate()}
           disabled={processMutation.isPending || (summary?.pending ?? 0) === 0}
-          className="bg-[#0098db] hover:bg-[#0098db]/90"
+          variant="outline"
           data-testid="button-process-batch"
         >
           {processMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Play className="h-4 w-4 mr-1" />}
-          Process Batch
+          Process Here
+        </Button>
+        <Button
+          onClick={() => triggerJobMutation.mutate()}
+          disabled={triggerJobMutation.isPending || (summary?.pending ?? 0) === 0}
+          className="bg-[#0098db] hover:bg-[#0098db]/90"
+          data-testid="button-trigger-gcp-job"
+        >
+          {triggerJobMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Cloud className="h-4 w-4 mr-1" />}
+          Run on GCP
         </Button>
         <Button
           onClick={() => resetMutation.mutate()}

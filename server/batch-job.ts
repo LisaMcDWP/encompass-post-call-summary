@@ -45,7 +45,8 @@ async function processBatch() {
     console.log("No client/pathway configurations found. Job complete.");
     return;
   }
-  const batchCP = allCPs[0];
+  const requestedCpId = process.env.CLIENT_PATHWAY_ID ? parseInt(process.env.CLIENT_PATHWAY_ID, 10) : null;
+  const batchCP = requestedCpId ? allCPs.find(cp => cp.id === requestedCpId) || allCPs[0] : allCPs[0];
   const cpId = batchCP.id;
 
   const pendingItems = await getPendingBatchItems(BATCH_SIZE);

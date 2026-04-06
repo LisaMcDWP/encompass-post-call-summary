@@ -912,6 +912,159 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/batch/trigger-job", async (req, res) => {
+    try {
+      const projectId = process.env.GCP_PROJECT_ID;
+      if (!projectId) {
+        return res.status(500).json({ message: "GCP_PROJECT_ID not configured" });
+      }
+
+      const region = "us-central1";
+      const jobName = "guideway-batch-job";
+      const batchSize = req.body.batchSize || 50;
+      const clientPathwayId = req.body.clientPathwayId || null;
+
+      const saKeyRaw = process.env.GCP_SERVICE_ACCOUNT_KEY;
+      if (!saKeyRaw) {
+        return res.status(500).json({ message: "GCP service account key not configured" });
+      }
+      const saKey = JSON.parse(saKeyRaw);
+
+      const { GoogleAuth } = await import("google-auth-library");
+      const auth = new GoogleAuth({
+        credentials: saKey,
+        scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+      });
+      const authClient = await auth.getClient();
+      const tokenResponse = await authClient.getAccessToken();
+      const accessToken = typeof tokenResponse === "string" ? tokenResponse : tokenResponse?.token;
+
+      const envOverrides = [
+        { name: "BATCH_SIZE", value: String(batchSize) },
+      ];
+      if (clientPathwayId) {
+        envOverrides.push({ name: "CLIENT_PATHWAY_ID", value: String(clientPathwayId) });
+      }
+
+      const overrides: Record<string, any> = {
+        containerOverrides: [{ env: envOverrides }],
+      };
+
+      const url = `https://run.googleapis.com/v2/projects/${projectId}/locations/${region}/jobs/${jobName}:run`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ overrides }),
+      });
+
+      if (!response.ok) {
+        const errBody = await response.text();
+        console.error("Cloud Run Jobs API error:", response.status, errBody);
+        return res.status(response.status).json({
+          message: `Failed to trigger batch job: ${response.statusText}`,
+          detail: errBody,
+        });
+      }
+
+      const result = await response.json();
+      const executionName = result.metadata?.name || result.name || "unknown";
+
+      res.json({
+        triggered: true,
+        executionName,
+        batchSize,
+        message: `Batch job triggered on GCP. It will process up to ${batchSize} pending items independently.`,
+      });
+    } catch (error: any) {
+      console.error("Failed to trigger batch job:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/batch/job-status", async (req, res) => {
+    try {
+      const projectId = process.env.GCP_PROJECT_ID;
+      if (!projectId) {
+        return res.status(500).json({ message: "GCP_PROJECT_ID not configured" });
+      }
+
+      const region = "us-central1";
+      const jobName = "guideway-batch-job";
+      const executionName = req.query.executionName as string | undefined;
+
+      const saKeyRaw = process.env.GCP_SERVICE_ACCOUNT_KEY;
+      if (!saKeyRaw) {
+        return res.status(500).json({ message: "GCP service account key not configured" });
+      }
+      const saKey = JSON.parse(saKeyRaw);
+
+      const { GoogleAuth } = await import("google-auth-library");
+      const auth = new GoogleAuth({
+        credentials: saKey,
+        scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+      });
+      const authClient = await auth.getClient();
+      const tokenResponse = await authClient.getAccessToken();
+      const accessToken = typeof tokenResponse === "string" ? tokenResponse : tokenResponse?.token;
+
+      let url: string;
+      if (executionName) {
+        url = `https://run.googleapis.com/v2/${executionName}`;
+      } else {
+        url = `https://run.googleapis.com/v2/projects/${projectId}/locations/${region}/jobs/${jobName}/executions?pageSize=5`;
+      }
+
+      const response = await fetch(url, {
+        headers: { "Authorization": `Bearer ${accessToken}` },
+      });
+
+      if (!response.ok) {
+        const errBody = await response.text();
+        return res.status(response.status).json({ message: errBody });
+      }
+
+      const data = await response.json();
+
+      function parseExecutionState(exec: any): string {
+        const conditions = exec.conditions || [];
+        for (const c of conditions) {
+          if (c.type === "Completed" && c.state === "CONDITION_SUCCEEDED") return "SUCCEEDED";
+          if (c.type === "Completed" && c.state === "CONDITION_FAILED") return "FAILED";
+          if (c.state === "CONDITION_RECONCILING") return "RUNNING";
+        }
+        if (exec.completionTime) return "SUCCEEDED";
+        if (exec.startTime && !exec.completionTime) return "RUNNING";
+        return "PENDING";
+      }
+
+      if (executionName) {
+        res.json({
+          name: data.name,
+          state: parseExecutionState(data),
+          createTime: data.createTime,
+          completionTime: data.completionTime || null,
+          failedCount: data.failedCount || 0,
+          succeededCount: data.succeededCount || 0,
+        });
+      } else {
+        const executions = (data.executions || []).map((e: any) => ({
+          name: e.name,
+          state: parseExecutionState(e),
+          createTime: e.createTime,
+          completionTime: e.completionTime || null,
+          failedCount: e.failedCount || 0,
+          succeededCount: e.succeededCount || 0,
+        }));
+        res.json({ executions });
+      }
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.get("/api/health", (_req, res) => {
     res.json({
       status: "ok",
