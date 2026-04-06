@@ -1,0 +1,149 @@
+TIMESTAMP: 2026-04-06T03:52:14.068799Z
+TEXT_PAYLOAD: Container called exit(1).
+
+TIMESTAMP: 2026-04-06T03:52:13.979620Z
+TEXT_PAYLOAD:     at processBatch (/app/server/batch-job.ts:43:32)
+
+TIMESTAMP: 2026-04-06T03:52:13.979613Z
+TEXT_PAYLOAD:     at ensureClientPathwayTable (/app/server/storage.ts:721:18)
+
+TIMESTAMP: 2026-04-06T03:52:13.979608Z
+TEXT_PAYLOAD:     at getBigQueryClient (/app/server/storage.ts:20:27)
+
+TIMESTAMP: 2026-04-06T03:52:13.973316Z
+TEXT_PAYLOAD: Failed to initialize call tables: GCP_PROJECT_ID is not set
+
+TIMESTAMP: 2026-04-06T03:52:13.972941Z
+TEXT_PAYLOAD: Failed to ensure call_qa_results table: GCP_PROJECT_ID is not set
+
+TIMESTAMP: 2026-04-06T03:52:13.972857Z
+TEXT_PAYLOAD: Failed to initialize batch_processing table: GCP_PROJECT_ID is not set
+
+TIMESTAMP: 2026-04-06T03:51:16.924624Z
+TEXT_PAYLOAD: Container called exit(1).
+
+TIMESTAMP: 2026-04-06T03:51:16.827247Z
+TEXT_PAYLOAD:     at processBatch (/app/server/batch-job.ts:43:32)
+
+TIMESTAMP: 2026-04-06T03:51:16.827244Z
+TEXT_PAYLOAD:     at BigQueryStorage.getClientPathways (/app/server/storage.ts:309:11)
+
+TIMESTAMP: 2026-04-06T03:51:16.827239Z
+TEXT_PAYLOAD:     at ensureClientPathwayTable (/app/server/storage.ts:721:18)
+
+TIMESTAMP: 2026-04-06T03:51:16.827234Z
+TEXT_PAYLOAD:     at getBigQueryClient (/app/server/storage.ts:20:27)
+
+TIMESTAMP: 2026-04-06T03:51:16.827226Z
+TEXT_PAYLOAD: Batch job failed: Error: GCP_PROJECT_ID is not set
+
+TIMESTAMP: 2026-04-06T03:51:16.810652Z
+TEXT_PAYLOAD: Failed to initialize call tables: GCP_PROJECT_ID is not set
+
+TIMESTAMP: 2026-04-06T03:51:16.810586Z
+TEXT_PAYLOAD: Failed to ensure call_qa_results table: GCP_PROJECT_ID is not set
+
+TIMESTAMP: 2026-04-06T03:51:16.810567Z
+TEXT_PAYLOAD: Failed to initialize batch_processing table: GCP_PROJECT_ID is not set
+
+TIMESTAMP: 2026-04-06T03:51:16.810546Z
+TEXT_PAYLOAD: Batch job starting. Batch size: 100, Delay: 1000ms
+
+TIMESTAMP: 2026-04-06T03:50:35.352488Z
+TEXT_PAYLOAD: 
+
+TIMESTAMP: 2026-04-06T03:50:26.993728Z
+TEXT_PAYLOAD: Container called exit(1).
+
+TIMESTAMP: 2026-04-06T03:50:26.880796Z
+TEXT_PAYLOAD:     at processBatch (/app/server/batch-job.ts:43:32)
+
+TIMESTAMP: 2026-04-06T03:50:26.880793Z
+TEXT_PAYLOAD:     at BigQueryStorage.getClientPathways (/app/server/storage.ts:309:11)
+
+TIMESTAMP: 2026-04-06T03:50:26.880789Z
+TEXT_PAYLOAD:     at ensureClientPathwayTable (/app/server/storage.ts:721:18)
+
+TIMESTAMP: 2026-04-06T03:50:26.880786Z
+TEXT_PAYLOAD:     at getBigQueryClient (/app/server/storage.ts:20:27)
+
+TIMESTAMP: 2026-04-06T03:50:26.880779Z
+TEXT_PAYLOAD: Batch job failed: Error: GCP_PROJECT_ID is not set
+
+TIMESTAMP: 2026-04-06T03:50:26.875271Z
+TEXT_PAYLOAD: Failed to initialize call tables: GCP_PROJECT_ID is not set
+
+TIMESTAMP: 2026-04-06T03:50:26.867524Z
+TEXT_PAYLOAD: Failed to ensure call_qa_results table: GCP_PROJECT_ID is not set
+
+TIMESTAMP: 2026-04-06T03:50:26.867462Z
+TEXT_PAYLOAD: Failed to initialize batch_processing table: GCP_PROJECT_ID is not set
+
+TIMESTAMP: 2026-04-06T03:50:26.867436Z
+TEXT_PAYLOAD: Batch job starting. Batch size: 100, Delay: 1000ms
+
+TIMESTAMP: 2026-04-06T03:49:32.156450Z
+TEXT_PAYLOAD: Container called exit(1).
+
+TIMESTAMP: 2026-04-06T03:49:32.074563Z
+TEXT_PAYLOAD:     at processBatch (/app/server/batch-job.ts:43:32)
+
+TIMESTAMP: 2026-04-06T03:49:32.074559Z
+TEXT_PAYLOAD:     at BigQueryStorage.getClientPathways (/app/server/storage.ts:309:11)
+
+TIMESTAMP: 2026-04-06T03:49:32.074554Z
+TEXT_PAYLOAD:     at ensureClientPathwayTable (/app/server/storage.ts:721:18)
+
+TIMESTAMP: 2026-04-06T03:49:32.074550Z
+TEXT_PAYLOAD:     at getBigQueryClient (/app/server/storage.ts:20:27)
+
+TIMESTAMP: 2026-04-06T03:49:32.074541Z
+TEXT_PAYLOAD: Batch job failed: Error: GCP_PROJECT_ID is not set
+
+TIMESTAMP: 2026-04-06T03:49:32.066709Z
+TEXT_PAYLOAD: Failed to initialize call tables: GCP_PROJECT_ID is not set
+
+TIMESTAMP: 2026-04-06T03:49:32.066499Z
+TEXT_PAYLOAD: Failed to ensure call_qa_results table: GCP_PROJECT_ID is not set
+
+TIMESTAMP: 2026-04-06T03:49:32.066483Z
+TEXT_PAYLOAD: Failed to initialize batch_processing table: GCP_PROJECT_ID is not set
+
+TIMESTAMP: 2026-04-06T03:49:32.066456Z
+TEXT_PAYLOAD: Batch job starting. Batch size: 100, Delay: 1000ms
+
+TIMESTAMP: 2026-04-06T03:46:45.595979Z
+TEXT_PAYLOAD: 
+
+TIMESTAMP: 2026-04-06T03:46:45.337444Z
+TEXT_PAYLOAD: 
+
+TIMESTAMP: 2026-04-06T03:42:41.852798Z
+TEXT_PAYLOAD: 
+
+TIMESTAMP: 2026-04-06T03:42:38.276391Z
+TEXT_PAYLOAD: Container called exit(1).
+
+TIMESTAMP: 2026-04-06T03:42:38.219944Z
+TEXT_PAYLOAD: }
+
+TIMESTAMP: 2026-04-06T03:42:38.219941Z
+TEXT_PAYLOAD:   }
+
+TIMESTAMP: 2026-04-06T03:42:38.219938Z
+TEXT_PAYLOAD:     [Symbol(kError)]: null
+
+TIMESTAMP: 2026-04-06T03:42:38.219934Z
+TEXT_PAYLOAD:     [Symbol(kCallback)]: null,
+
+TIMESTAMP: 2026-04-06T03:42:38.219931Z
+TEXT_PAYLOAD:     [Symbol(kCapture)]: false,
+
+TIMESTAMP: 2026-04-06T03:42:38.219928Z
+TEXT_PAYLOAD:     [Symbol(shapeMode)]: true,
+
+TIMESTAMP: 2026-04-06T03:42:38.219925Z
+TEXT_PAYLOAD:     toJSON: [Function: toJSON],
+
+TIMESTAMP: 2026-04-06T03:42:38.219922Z
+TEXT_PAYLOAD:     },
