@@ -77,7 +77,8 @@ export function exportCallDetailPdf(
   observations: CallObservation[],
   qaPairs: QAPair[],
   barriers: CallBarrier[],
-  callQA: CallQAResultItem[]
+  callQA: CallQAResultItem[],
+  transcript?: string | null
 ) {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -341,6 +342,52 @@ export function exportCallDetailPdf(
         y += 4;
       }
       y += 3;
+    }
+  }
+
+  if (transcript) {
+    sectionHeader("Transcript");
+    const lines = transcript.split("\n").filter(l => l.trim());
+    const GREEN = [90, 138, 0] as [number, number, number];
+    const AGENT_BG = [240, 248, 255] as [number, number, number];
+    const PATIENT_BG = [245, 255, 245] as [number, number, number];
+
+    for (const line of lines) {
+      const match = line.match(/^(user|assistant|agent|care guide|patient|AI):\s*/i);
+      if (match) {
+        const speaker = match[1];
+        const text = line.slice(match[0].length);
+        const isAgent = /^(assistant|agent|care guide|ai)$/i.test(speaker);
+        const label = isAgent ? "Care Guide" : "Patient";
+        const textLines = doc.splitTextToSize(text, contentWidth - 18);
+        const blockH = textLines.length * 3.8 + 8;
+        checkPageBreak(blockH);
+
+        doc.setFillColor(...(isAgent ? AGENT_BG : PATIENT_BG));
+        doc.roundedRect(marginLeft + (isAgent ? 0 : 8), y - 1, contentWidth - 8, blockH, 2, 2, "F");
+
+        doc.setFontSize(7);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(...(isAgent ? PRIMARY : GREEN));
+        doc.text(label, marginLeft + (isAgent ? 3 : 11), y + 3);
+        y += 6;
+
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(...NAVY);
+        for (const tl of textLines) {
+          doc.text(tl, marginLeft + (isAgent ? 5 : 13), y);
+          y += 3.8;
+        }
+        y += 3;
+      } else {
+        checkPageBreak(6);
+        doc.setFontSize(7);
+        doc.setFont("helvetica", "italic");
+        doc.setTextColor(...GRAY);
+        doc.text(line, marginLeft + 5, y);
+        y += 4;
+      }
     }
   }
 

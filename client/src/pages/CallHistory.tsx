@@ -154,7 +154,7 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
             <Button
               variant="outline"
               size="sm"
-              onClick={() => exportCallDetailPdf(info, obs, qaPairs, barriers, callQA)}
+              onClick={() => exportCallDetailPdf(info, obs, qaPairs, barriers, callQA, transcript)}
               data-testid="button-export-pdf"
             >
               <Download className="h-3.5 w-3.5 mr-1.5" />
@@ -282,8 +282,8 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
                 Transcript
                 <span className="text-[9px] font-normal ml-1">({transcript.length.toLocaleString()} chars)</span>
               </summary>
-              <div className="bg-muted/20 rounded-lg border border-border/40 p-4 mt-1 max-h-96 overflow-y-auto" data-testid="detail-transcript">
-                <div className="space-y-3 text-sm">
+              <div className="bg-[#f8f9fb] rounded-lg border border-border/40 p-4 mt-1 max-h-[500px] overflow-y-auto" data-testid="detail-transcript">
+                <div className="space-y-4">
                   {transcript.split("\n").filter(line => line.trim()).map((line, idx) => {
                     const match = line.match(/^(user|assistant|agent|care guide|patient|AI):\s*/i);
                     if (match) {
@@ -292,17 +292,22 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
                       const isAgent = /^(assistant|agent|care guide|ai)$/i.test(speaker);
                       return (
                         <div key={idx} className={`flex gap-3 ${isAgent ? "" : "flex-row-reverse"}`}>
-                          <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${isAgent ? "bg-primary/10 text-primary" : "bg-green-100 text-green-700"}`}>
+                          <div className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-bold shadow-sm ${isAgent ? "bg-[#0098db] text-white" : "bg-[#96d410] text-white"}`}>
                             {isAgent ? "CG" : "PT"}
                           </div>
-                          <div className={`max-w-[80%] rounded-lg px-3 py-2 text-xs leading-relaxed ${isAgent ? "bg-primary/5 border border-primary/10" : "bg-green-50 border border-green-200/40"}`}>
-                            {text}
+                          <div className="max-w-[78%]">
+                            <div className={`text-[10px] font-semibold mb-1 ${isAgent ? "text-[#0098db]" : "text-right text-[#5a8a00]"}`}>
+                              {isAgent ? "Care Guide" : "Patient"}
+                            </div>
+                            <div className={`rounded-2xl px-4 py-2.5 text-xs leading-relaxed shadow-sm ${isAgent ? "bg-white border border-border/60 rounded-tl-sm text-[#172938]" : "bg-[#e8f7ff] border border-[#0098db]/15 rounded-tr-sm text-[#172938]"}`}>
+                              {text}
+                            </div>
                           </div>
                         </div>
                       );
                     }
                     return (
-                      <div key={idx} className="text-xs text-muted-foreground px-2">{line}</div>
+                      <div key={idx} className="text-[11px] text-muted-foreground text-center py-1 italic">{line}</div>
                     );
                   })}
                 </div>
