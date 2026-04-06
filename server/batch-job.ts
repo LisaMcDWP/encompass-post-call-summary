@@ -59,23 +59,25 @@ async function processBatch() {
 
   let successCount = 0;
   let failCount = 0;
+  const CONCURRENCY = parseInt(process.env.BATCH_CONCURRENCY || "5", 10);
 
-  for (const item of pendingItems) {
+  const activeObs = await storage.getActiveObservations(cpId);
+  const summaryInstruction = await storage.getSetting(cpId, "summary_instruction");
+  const observationsGuidance = await storage.getSetting(cpId, "observations_prompt_guidance");
+  const barriersGuidance = await storage.getSetting(cpId, "barriers_prompt_guidance");
+  const contextParams = await storage.getActiveContextParameters(cpId);
+  const { promptVersion, promptVersionDate } = await getPromptWithVersion(cpId);
+  const batchCallQAPrompts = await storage.getActiveCallQAPrompts(cpId);
+
+  async function processItem(item: any) {
     console.log(`Processing: ${item.bland_call_id}`);
     const claimed = await updateBatchItemStatus(item.bland_call_id, "processing");
     if (claimed === 0) {
       console.log(`Skipped (already claimed): ${item.bland_call_id}`);
-      continue;
+      return;
     }
 
     try {
-      const activeObs = await storage.getActiveObservations(cpId);
-      const summaryInstruction = await storage.getSetting(cpId, "summary_instruction");
-      const observationsGuidance = await storage.getSetting(cpId, "observations_prompt_guidance");
-      const barriersGuidance = await storage.getSetting(cpId, "barriers_prompt_guidance");
-      const contextParams = await storage.getActiveContextParameters(cpId);
-      const { promptVersion, promptVersionDate } = await getPromptWithVersion(cpId);
-
       const sourceId = `batch_${item.bland_call_id}`;
       const startTime = Date.now();
 
@@ -84,7 +86,6 @@ async function processBatch() {
         try { batchContext = JSON.parse(item.context_values); } catch {}
       }
 
-      const batchCallQAPrompts = await storage.getActiveCallQAPrompts(cpId);
       const { analysis, tokenUsage } = await analyzeTranscript(
         sourceId,
         item.transcript.trim(),
@@ -139,8 +140,13 @@ async function processBatch() {
       console.error(`Failed: ${item.bland_call_id} - ${err.message}`);
       await updateBatchItemStatus(item.bland_call_id, "failed", undefined, err.message);
     }
+  }
 
-    if (DELAY_MS > 0) {
+  console.log(`Processing ${pendingItems.length} items with concurrency=${CONCURRENCY}`);
+  for (let i = 0; i < pendingItems.length; i += CONCURRENCY) {
+    const chunk = pendingItems.slice(i, i + CONCURRENCY);
+    await Promise.all(chunk.map(processItem));
+    if (DELAY_MS > 0 && i + CONCURRENCY < pendingItems.length) {
       await new Promise(resolve => setTimeout(resolve, DELAY_MS));
     }
   }

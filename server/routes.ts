@@ -809,22 +809,24 @@ export async function registerRoutes(
       }
       const batchCPRecord = await storage.getClientPathway(resolvedBatchCpId);
 
-      for (const item of pendingItems) {
+      const activeObs = await storage.getActiveObservations(resolvedBatchCpId);
+      const summaryInstruction = await storage.getSetting(resolvedBatchCpId, "summary_instruction");
+      const observationsGuidance = await storage.getSetting(resolvedBatchCpId, "observations_prompt_guidance");
+      const barriersGuidance = await storage.getSetting(resolvedBatchCpId, "barriers_prompt_guidance");
+      const contextParams = await storage.getActiveContextParameters(resolvedBatchCpId);
+      const callQAPromptsForBatch = await storage.getActiveCallQAPrompts(resolvedBatchCpId);
+      const { prompt: _p, promptVersion, promptVersionDate } = await getPromptWithVersion(resolvedBatchCpId);
+
+      const CONCURRENCY = 5;
+
+      async function processOneItem(item: any) {
         const claimed = await updateBatchItemStatus(item.bland_call_id, "processing");
         if (claimed === 0) {
           results.push({ callId: item.bland_call_id, status: "skipped" });
-          continue;
+          return;
         }
 
         try {
-          const activeObs = await storage.getActiveObservations(resolvedBatchCpId);
-          const summaryInstruction = await storage.getSetting(resolvedBatchCpId, "summary_instruction");
-          const observationsGuidance = await storage.getSetting(resolvedBatchCpId, "observations_prompt_guidance");
-          const barriersGuidance = await storage.getSetting(resolvedBatchCpId, "barriers_prompt_guidance");
-          const contextParams = await storage.getActiveContextParameters(resolvedBatchCpId);
-          const callQAPromptsForBatch = await storage.getActiveCallQAPrompts(resolvedBatchCpId);
-          const { prompt: _p, promptVersion, promptVersionDate } = await getPromptWithVersion(resolvedBatchCpId);
-
           const callId = item.bland_call_id;
           const startTime = Date.now();
           let batchContext: Record<string, string> = {};
@@ -883,6 +885,11 @@ export async function registerRoutes(
           await updateBatchItemStatus(item.bland_call_id, "failed", undefined, err.message);
           results.push({ callId: item.bland_call_id, status: "failed", error: err.message });
         }
+      }
+
+      for (let i = 0; i < pendingItems.length; i += CONCURRENCY) {
+        const chunk = pendingItems.slice(i, i + CONCURRENCY);
+        await Promise.all(chunk.map(processOneItem));
       }
 
       res.json({ processed: results.length, results });
