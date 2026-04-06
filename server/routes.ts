@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, aiObservationAssistant } from "./gemini";
-import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBarriers, insertCallQAResults, ensureCallBarriersTable, ensureCallQATable, getCallBarriers, getCallInfoList, getCallDetail, getCallStatsByDay, queryBlandCalls, loadBlandCallsToBatch, fetchAwellContextForCareFlows, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, resetFailedBatchItems, recreateBatch, getDistinctTags } from "./bigquery";
+import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBarriers, insertCallQAResults, ensureCallBarriersTable, ensureCallQATable, getCallBarriers, getCallInfoList, getCallDetail, getCallStatsByDay, queryBlandCalls, loadBlandCallsToBatch, fetchAwellContextForCareFlows, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, resetFailedBatchItems, deletePendingBatchItems, recreateBatch, getDistinctTags } from "./bigquery";
 import { randomUUID, createHash } from "crypto";
 import { storage } from "./storage";
 import { insertObservationSchema, enumValueSchema, insertContextParameterSchema, insertCallQAPromptSchema } from "@shared/schema";
@@ -896,6 +896,15 @@ export async function registerRoutes(
       const { batchId } = req.body;
       const count = await resetFailedBatchItems(batchId);
       res.json({ reset: count });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/batch/delete-pending", async (req, res) => {
+    try {
+      const count = await deletePendingBatchItems();
+      res.json({ deleted: count });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

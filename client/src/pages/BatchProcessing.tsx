@@ -241,6 +241,22 @@ export default function BatchProcessing() {
     },
   });
 
+  const deletePendingMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/batch/delete-pending", { method: "POST" });
+      if (!res.ok) throw new Error("Failed to delete pending items");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Pending items deleted", description: `${data.deleted} items removed` });
+      queryClient.invalidateQueries({ queryKey: ["/api/batch/summary"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/batch/items"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Delete failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const recreateMutation = useMutation({
     mutationFn: async (batchId: string) => {
       const res = await fetch("/api/batch/recreate", {
@@ -389,6 +405,20 @@ export default function BatchProcessing() {
         >
           <RefreshCw className={`h-4 w-4 mr-1 ${summaryQuery.isFetching || batchItemsQuery.isFetching ? "animate-spin" : ""}`} />
           Refresh
+        </Button>
+        <Button
+          onClick={() => {
+            if (confirm(`Delete all ${summary?.pending ?? 0} pending batch items? This cannot be undone.`)) {
+              deletePendingMutation.mutate();
+            }
+          }}
+          disabled={deletePendingMutation.isPending || (summary?.pending ?? 0) === 0}
+          variant="outline"
+          className="text-red-600 border-red-200 hover:bg-red-50"
+          data-testid="button-delete-pending"
+        >
+          {deletePendingMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <XCircle className="h-4 w-4 mr-1" />}
+          Delete Pending
         </Button>
         <Button
           onClick={() => resetMutation.mutate()}

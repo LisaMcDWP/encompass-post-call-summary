@@ -1351,6 +1351,17 @@ export async function recreateBatch(oldBatchId: string): Promise<{ newBatchId: s
   return { newBatchId, count: items.length };
 }
 
+export async function deletePendingBatchItems(): Promise<number> {
+  const client = getBigQueryClient();
+  const query = `
+    DELETE FROM \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
+    WHERE status = 'pending'
+  `;
+  const result = await client.query({ query, location: "US" });
+  const meta = (result as any)[2] || {};
+  return Number(meta?.dmlStats?.deletedRowCount || meta?.numDmlAffectedRows || 0);
+}
+
 export async function resetFailedBatchItems(batchId?: string): Promise<number> {
   const client = getBigQueryClient();
   const condition = batchId ? `AND batch_id = @batchId` : "";
