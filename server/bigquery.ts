@@ -1368,7 +1368,7 @@ export async function resetFailedBatchItems(batchId?: string): Promise<number> {
   const query = `
     UPDATE \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
     SET status = 'pending', error_message = NULL, processed_at = NULL, result_call_id = NULL
-    WHERE status = 'failed' ${condition}
+    WHERE status IN ('failed', 'processing') ${condition}
   `;
   const params: Record<string, any> = {};
   if (batchId) params.batchId = batchId;

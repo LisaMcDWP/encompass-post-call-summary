@@ -422,12 +422,12 @@ export default function BatchProcessing() {
         </Button>
         <Button
           onClick={() => resetMutation.mutate()}
-          disabled={resetMutation.isPending || (summary?.failed ?? 0) === 0}
+          disabled={resetMutation.isPending || ((summary?.failed ?? 0) === 0 && (summary?.processing ?? 0) === 0)}
           variant="outline"
           data-testid="button-reset-failed"
         >
           {resetMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RotateCcw className="h-4 w-4 mr-1" />}
-          Reset Failed
+          Reset Stuck
         </Button>
         {summary?.batches && summary.batches.length > 0 && (
           <Button
