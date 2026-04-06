@@ -379,6 +379,18 @@ export default function BatchProcessing() {
           Run on GCP
         </Button>
         <Button
+          onClick={() => {
+            queryClient.invalidateQueries({ queryKey: ["/api/batch/summary"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/batch/items"] });
+            toast({ title: "Refreshed", description: "Batch status updated" });
+          }}
+          variant="outline"
+          data-testid="button-refresh-batch"
+        >
+          <RefreshCw className={`h-4 w-4 mr-1 ${summaryQuery.isFetching || batchItemsQuery.isFetching ? "animate-spin" : ""}`} />
+          Refresh
+        </Button>
+        <Button
           onClick={() => resetMutation.mutate()}
           disabled={resetMutation.isPending || (summary?.failed ?? 0) === 0}
           variant="outline"
