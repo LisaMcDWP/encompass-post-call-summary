@@ -1391,9 +1391,11 @@ export async function getCallDetail(callId: string): Promise<{ callInfo: any | n
   const row = (infoRows as CallInfoRow[])[0] || null;
 
   const obsQuery = `
-    SELECT *
-    FROM \`${client.projectId}.${DATASET_ID}.${OBSERVATIONS_TABLE_ID}\`
-    WHERE call_id = @callId
+    SELECT * EXCEPT(rn) FROM (
+      SELECT *, ROW_NUMBER() OVER (PARTITION BY call_id, observation_name ORDER BY observation_name) AS rn
+      FROM \`${client.projectId}.${DATASET_ID}.${OBSERVATIONS_TABLE_ID}\`
+      WHERE call_id = @callId
+    ) WHERE rn = 1
   `;
   const [obsRows] = await client.query({ query: obsQuery, params: { callId }, location: "US" });
 
@@ -1447,9 +1449,11 @@ export async function getCallDetail(callId: string): Promise<{ callInfo: any | n
   })() : null;
 
   const qaQuery = `
-    SELECT *
-    FROM \`${client.projectId}.${DATASET_ID}.${QA_PAIRS_TABLE_ID}\`
-    WHERE call_id = @callId
+    SELECT * EXCEPT(rn) FROM (
+      SELECT *, ROW_NUMBER() OVER (PARTITION BY call_id, sequence_number ORDER BY sequence_number) AS rn
+      FROM \`${client.projectId}.${DATASET_ID}.${QA_PAIRS_TABLE_ID}\`
+      WHERE call_id = @callId
+    ) WHERE rn = 1
     ORDER BY sequence_number ASC
   `;
   let qaRows: any[] = [];
@@ -1463,7 +1467,7 @@ export async function getCallDetail(callId: string): Promise<{ callInfo: any | n
   let barrierRows: any[] = [];
   try {
     const barriersQuery = `
-      SELECT *
+      SELECT DISTINCT *
       FROM \`${client.projectId}.${DATASET_ID}.${BARRIERS_TABLE_ID}\`
       WHERE call_id = @callId
     `;
@@ -1476,9 +1480,11 @@ export async function getCallDetail(callId: string): Promise<{ callInfo: any | n
   let callQARows: any[] = [];
   try {
     const callQAQuery = `
-      SELECT *
-      FROM \`${client.projectId}.${DATASET_ID}.${CALL_QA_TABLE_ID}\`
-      WHERE call_id = @callId
+      SELECT * EXCEPT(rn) FROM (
+        SELECT *, ROW_NUMBER() OVER (PARTITION BY call_id, name ORDER BY name) AS rn
+        FROM \`${client.projectId}.${DATASET_ID}.${CALL_QA_TABLE_ID}\`
+        WHERE call_id = @callId
+      ) WHERE rn = 1
     `;
     const [cqRows] = await client.query({ query: callQAQuery, params: { callId }, location: "US" });
     callQARows = cqRows;
