@@ -99,10 +99,13 @@ async function processBatch() {
 
       const processingTimeMs = Date.now() - startTime;
       const processedAt = new Date().toISOString();
+      const blandTs = (item as any).bland_created_at?.value || (item as any).bland_created_at || null;
+      const callDate = blandTs ? new Date(blandTs).toISOString() : null;
 
       await insertCallInfo({
         callId: sourceId,
         careFlowId: item.care_flow_id || null,
+        callDate,
         sourceType: item.source_type || "bland_call",
         sourceId: item.bland_call_id,
         processedAt,

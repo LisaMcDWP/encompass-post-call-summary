@@ -846,9 +846,12 @@ export async function registerRoutes(
           const processingTimeMs = Date.now() - startTime;
 
           const processedAt = new Date().toISOString();
+          const blandTs = item.bland_created_at?.value || item.bland_created_at || null;
+          const callDate = blandTs ? new Date(blandTs).toISOString() : null;
           await insertCallInfo({
             callId: callId,
             careFlowId: item.care_flow_id || null,
+            callDate,
             sourceType: item.source_type || "bland_call",
             sourceId: callId,
             processedAt,

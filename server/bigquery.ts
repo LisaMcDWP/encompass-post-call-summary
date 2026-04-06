@@ -14,6 +14,7 @@ export interface CallInfoRow {
   call_id: string;
   care_flow_id: string | null;
   processed_datetime: { value: string } | string | null;
+  call_date: { value: string } | string | null;
   source_type: string | null;
   source_id: string | null;
   processed_at: { value: string } | string;
@@ -178,6 +179,13 @@ async function migrateCallInfoColumns(): Promise<void> {
       });
       console.log("Added pathway column to call_info table.");
     }
+    if (!fieldNames.has("call_date")) {
+      await client.query({
+        query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\` ADD COLUMN call_date TIMESTAMP`,
+        location: "US",
+      });
+      console.log("Added call_date column to call_info table.");
+    }
   } catch (err: any) {
     console.error("Migration check for call_info columns:", err.message);
   }
@@ -201,6 +209,7 @@ export interface CallInfoEntry {
   callId: string;
   careFlowId?: string | null;
   processedDatetime?: string | null;
+  callDate?: string | null;
   sourceType?: string | null;
   sourceId?: string | null;
   processedAt: string;
@@ -243,10 +252,11 @@ export async function insertCallInfo(entry: CallInfoEntry): Promise<void> {
     await deleteExistingCallData(entry.callId, CALL_INFO_TABLE_ID);
 
     const client = getBigQueryClient();
-    const row = {
+    const row: Record<string, any> = {
       call_id: entry.callId,
       care_flow_id: entry.careFlowId || null,
       processed_datetime: entry.processedDatetime || null,
+      call_date: entry.callDate || null,
       source_type: entry.sourceType || null,
       source_id: entry.sourceId || null,
       processed_at: entry.processedAt,
@@ -682,6 +692,7 @@ export async function getCallInfoList(limit = 100): Promise<any[]> {
       call_id: row.call_id,
       care_flow_id: row.care_flow_id,
       processed_datetime: extractTimestamp(row.processed_datetime),
+      call_date: extractTimestamp(row.call_date),
       source_type: row.source_type,
       source_id: row.source_id,
       processed_at: extractTimestamp(row.processed_at),
@@ -752,6 +763,7 @@ export interface BatchProcessingRow {
   processed_at: string | null;
   batch_label: string | null;
   care_flow_id: string | null;
+  bland_created_at: string | null;
 }
 
 let batchTableInitialized = false;
@@ -809,6 +821,14 @@ async function migrateBatchProcessingColumns(): Promise<void> {
         location: "US",
       });
       console.log("Added context_values column to batch_processing table.");
+    }
+    const hasBlandCreatedAt = fields.some((f: any) => f.name === "bland_created_at");
+    if (!hasBlandCreatedAt) {
+      await client.query({
+        query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\` ADD COLUMN bland_created_at TIMESTAMP`,
+        location: "US",
+      });
+      console.log("Added bland_created_at column to batch_processing table.");
     }
   } catch (err: any) {
     console.error("Migration check for batch_processing columns:", err.message);
@@ -1057,7 +1077,8 @@ export async function loadBlandCallsToBatch(
 
   const transcriptQuery = `
     SELECT c.call_id, c.concatenated_transcript, c.status,
-           v.variable_value as care_flow_id
+           v.variable_value as care_flow_id,
+           c.created_at as bland_created_at
     FROM \`${client.projectId}.Bland.calls\` c
     INNER JOIN \`${client.projectId}.Bland.variables\` v
       ON c.call_id = v.call_id AND v.variable_name = 'awell_care_flow_id'
@@ -1075,7 +1096,7 @@ export async function loadBlandCallsToBatch(
   const now = new Date().toISOString();
 
   const valuesClauses = validRows.map((_, i) =>
-    `(@batchId, @callId_${i}, @transcript_${i}, 'bland_call', @now, 'pending', CAST(NULL AS STRING), CAST(NULL AS STRING), CAST(NULL AS TIMESTAMP), @batchLabel, @careFlowId_${i}, @contextValues_${i})`
+    `(@batchId, @callId_${i}, @transcript_${i}, 'bland_call', @now, 'pending', CAST(NULL AS STRING), CAST(NULL AS STRING), CAST(NULL AS TIMESTAMP), @batchLabel, @careFlowId_${i}, @contextValues_${i}, @blandCreatedAt_${i})`
   ).join(",\n    ");
 
   const params: Record<string, any> = {
@@ -1096,15 +1117,18 @@ export async function loadBlandCallsToBatch(
     const cfId = row.care_flow_id;
     const ctx = cfId && contextByCareFow && contextByCareFow[cfId] ? contextByCareFow[cfId] : null;
     params[`contextValues_${i}`] = ctx ? JSON.stringify(ctx) : null;
+    const blandTs = row.bland_created_at?.value || row.bland_created_at || null;
+    params[`blandCreatedAt_${i}`] = blandTs ? new Date(blandTs).toISOString() : null;
     types[`callId_${i}`] = "STRING";
     types[`transcript_${i}`] = "STRING";
     types[`careFlowId_${i}`] = "STRING";
     types[`contextValues_${i}`] = "STRING";
+    types[`blandCreatedAt_${i}`] = "STRING";
   });
 
   const insertQuery = `
     INSERT INTO \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
-    (batch_id, bland_call_id, transcript, source_type, created_at, status, error_message, result_call_id, processed_at, batch_label, care_flow_id, context_values)
+    (batch_id, bland_call_id, transcript, source_type, created_at, status, error_message, result_call_id, processed_at, batch_label, care_flow_id, context_values, bland_created_at)
     VALUES ${valuesClauses}
   `;
 
@@ -1213,7 +1237,7 @@ export async function getPendingBatchItems(limit = 10, batchId?: string): Promis
   const client = getBigQueryClient();
   const batchFilter = batchId ? "AND batch_id = @batchId" : "";
   const query = `
-    SELECT batch_id, bland_call_id, transcript, source_type, batch_label, care_flow_id, context_values
+    SELECT batch_id, bland_call_id, transcript, source_type, batch_label, care_flow_id, context_values, bland_created_at
     FROM \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
     WHERE status = 'pending' ${batchFilter}
     ORDER BY created_at DESC
@@ -1272,7 +1296,7 @@ export async function updateBatchItemStatus(
 export async function recreateBatch(oldBatchId: string): Promise<{ newBatchId: string; count: number }> {
   const client = getBigQueryClient();
   const readQuery = `
-    SELECT bland_call_id, transcript, source_type, batch_label, care_flow_id
+    SELECT bland_call_id, transcript, source_type, batch_label, care_flow_id, bland_created_at
     FROM \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
     WHERE batch_id = @oldBatchId
   `;
@@ -1287,7 +1311,7 @@ export async function recreateBatch(oldBatchId: string): Promise<{ newBatchId: s
   const now = new Date().toISOString();
 
   const valuesClauses = items.map((_, i) =>
-    `(@newBatchId, @callId_${i}, @transcript_${i}, 'bland_call', @now, 'pending', CAST(NULL AS STRING), CAST(NULL AS STRING), CAST(NULL AS TIMESTAMP), @batchLabel_${i}, @careFlowId_${i})`
+    `(@newBatchId, @callId_${i}, @transcript_${i}, 'bland_call', @now, 'pending', CAST(NULL AS STRING), CAST(NULL AS STRING), CAST(NULL AS TIMESTAMP), @batchLabel_${i}, @careFlowId_${i}, @blandCreatedAt_${i})`
   ).join(",\n    ");
 
   const params: Record<string, any> = { newBatchId, now };
@@ -1298,15 +1322,18 @@ export async function recreateBatch(oldBatchId: string): Promise<{ newBatchId: s
     params[`transcript_${i}`] = item.transcript;
     params[`batchLabel_${i}`] = item.batch_label || null;
     params[`careFlowId_${i}`] = item.care_flow_id || null;
+    const blandTs = item.bland_created_at?.value || item.bland_created_at || null;
+    params[`blandCreatedAt_${i}`] = blandTs ? new Date(blandTs).toISOString() : null;
     types[`callId_${i}`] = "STRING";
     types[`transcript_${i}`] = "STRING";
     types[`batchLabel_${i}`] = "STRING";
     types[`careFlowId_${i}`] = "STRING";
+    types[`blandCreatedAt_${i}`] = "STRING";
   });
 
   const insertQuery = `
     INSERT INTO \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
-    (batch_id, bland_call_id, transcript, source_type, created_at, status, error_message, result_call_id, processed_at, batch_label, care_flow_id)
+    (batch_id, bland_call_id, transcript, source_type, created_at, status, error_message, result_call_id, processed_at, batch_label, care_flow_id, bland_created_at)
     VALUES ${valuesClauses}
   `;
 
@@ -1384,6 +1411,7 @@ export async function getCallDetail(callId: string): Promise<{ callInfo: any | n
       call_id: row.call_id,
       care_flow_id: row.care_flow_id,
       processed_datetime: extractTimestamp(row.processed_datetime),
+      call_date: extractTimestamp(row.call_date),
       source_type: row.source_type,
       source_id: row.source_id,
       processed_at: extractTimestamp(row.processed_at),
