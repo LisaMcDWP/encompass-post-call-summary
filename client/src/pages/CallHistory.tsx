@@ -10,6 +10,7 @@ interface CallInfo {
   call_id: string;
   care_flow_id: string | null;
   processed_datetime: string | null;
+  call_date: string | null;
   source_type: string | null;
   source_id: string | null;
   processed_at: string;
@@ -164,7 +165,11 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
         </div>
 
         <div className="p-6 space-y-6">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs" data-testid="detail-metadata">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs" data-testid="detail-metadata">
+            <div className="bg-muted/30 rounded-lg p-3 border border-border/40">
+              <span className="text-muted-foreground block mb-1">Call Date</span>
+              <span className="font-medium text-foreground" data-testid="detail-call-date">{formatDate(info.call_date)}</span>
+            </div>
             <div className="bg-muted/30 rounded-lg p-3 border border-border/40">
               <span className="text-muted-foreground block mb-1">Status</span>
               <Badge variant={info.status === "success" ? "default" : "destructive"} className="text-xs" data-testid="detail-status">
@@ -225,6 +230,10 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
               <div className="grid grid-cols-[140px_1fr] text-xs">
                 <span className="text-muted-foreground px-3 py-2 font-medium">Pathway</span>
                 <span className="px-3 py-2" data-testid="detail-pathway">{info.pathway || <span className="text-muted-foreground/50 italic">not set</span>}</span>
+              </div>
+              <div className="grid grid-cols-[140px_1fr] text-xs">
+                <span className="text-muted-foreground px-3 py-2 font-medium">Call Date</span>
+                <span className="px-3 py-2" data-testid="detail-call-date-field">{formatDate(info.call_date)}</span>
               </div>
               <div className="grid grid-cols-[140px_1fr] text-xs">
                 <span className="text-muted-foreground px-3 py-2 font-medium">Processed Datetime</span>
@@ -636,11 +645,12 @@ export default function CallHistory() {
 
       {calls && calls.length > 0 && (
         <div className="space-y-2" data-testid="list-calls">
-          <div className="grid grid-cols-[1fr_1fr_1fr_1fr_120px_100px_90px_80px_32px] gap-3 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+          <div className="grid grid-cols-[1fr_1fr_1fr_1fr_120px_120px_100px_90px_80px_32px] gap-3 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
             <span>Call ID</span>
             <span>Source ID</span>
             <span>Client / Pathway</span>
             <span>Care Flow</span>
+            <span>Call Date</span>
             <span>Processed</span>
             <span>Status</span>
             <span>Tokens</span>
@@ -650,7 +660,7 @@ export default function CallHistory() {
           {calls.map((call) => (
             <div
               key={call.call_id}
-              className="grid grid-cols-[1fr_1fr_1fr_1fr_120px_100px_90px_80px_32px] gap-3 items-center px-4 py-3 rounded-lg border border-border/50 bg-card hover:bg-muted/30 cursor-pointer transition-colors shadow-sm"
+              className="grid grid-cols-[1fr_1fr_1fr_1fr_120px_120px_100px_90px_80px_32px] gap-3 items-center px-4 py-3 rounded-lg border border-border/50 bg-card hover:bg-muted/30 cursor-pointer transition-colors shadow-sm"
               onClick={() => setSelectedCallId(call.call_id)}
               data-testid={`row-call-${call.call_id}`}
             >
@@ -679,6 +689,9 @@ export default function CallHistory() {
                 <p className="text-xs font-mono truncate text-muted-foreground" data-testid={`text-care-flow-${call.call_id}`}>
                   {call.care_flow_id || "—"}
                 </p>
+              </div>
+              <div className="text-xs text-muted-foreground" data-testid={`text-call-date-${call.call_id}`}>
+                {formatDate(call.call_date)}
               </div>
               <div className="text-xs text-muted-foreground" data-testid={`text-processed-${call.call_id}`}>
                 {formatDate(call.processed_at)}
