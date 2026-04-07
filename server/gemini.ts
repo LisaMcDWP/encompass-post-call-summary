@@ -357,6 +357,32 @@ function deduplicateByName(items: any[]): any[] {
   });
 }
 
+function deduplicateTransitionStatus(html: string): string {
+  if (!html || typeof html !== "string") return html;
+
+  const topicBlocks = html.split(/<br\s*\/?>\s*<br\s*\/?>/i);
+  const seen = new Set<string>();
+  const unique: string[] = [];
+
+  for (const block of topicBlocks) {
+    const trimmed = block.trim();
+    if (!trimmed) continue;
+
+    const topicMatch = trimmed.match(/<b>([^<]+):?\s*<\/b>/i);
+    const topicName = topicMatch ? topicMatch[1].trim().toLowerCase() : null;
+
+    if (topicName && seen.has(topicName)) {
+      console.warn(`[DEDUP] Removed duplicate transition_status topic: "${topicMatch![1].trim()}"`);
+      continue;
+    }
+
+    if (topicName) seen.add(topicName);
+    unique.push(trimmed);
+  }
+
+  return unique.join("<br><br>") + (unique.length > 0 ? "<br><br>" : "");
+}
+
 function buildGeminiModel() {
   const vertex = getVertexAI();
   return vertex.getGenerativeModel({
@@ -434,6 +460,9 @@ export async function analyzeTranscript(
 
   parsed.observations = deduplicateByName(parsed.observations);
   parsed.call_qa = deduplicateByName(parsed.call_qa);
+  if (parsed.transition_status) {
+    parsed.transition_status = deduplicateTransitionStatus(parsed.transition_status);
+  }
 
   return { analysis: parsed as TranscriptAnalysis, promptUsed: prompt, tokenUsage };
 }
@@ -587,6 +616,9 @@ export async function analyzeTranscriptFast(
   if (!Array.isArray(parsed.observations)) parsed.observations = [];
 
   parsed.observations = deduplicateByName(parsed.observations);
+  if (parsed.transition_status) {
+    parsed.transition_status = deduplicateTransitionStatus(parsed.transition_status);
+  }
 
   return { analysis: parsed, tokenUsage };
 }
