@@ -1400,10 +1400,11 @@ export async function getCallDetail(callId: string): Promise<{ callInfo: any | n
   const client = getBigQueryClient();
 
   const infoQuery = `
-    SELECT *
-    FROM \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\`
-    WHERE call_id = @callId
-    LIMIT 1
+    SELECT * EXCEPT(rn) FROM (
+      SELECT *, ROW_NUMBER() OVER (PARTITION BY call_id ORDER BY processed_at DESC) AS rn
+      FROM \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\`
+      WHERE call_id = @callId
+    ) WHERE rn = 1
   `;
   const [infoRows] = await client.query({ query: infoQuery, params: { callId }, location: "US" });
   const row = (infoRows as CallInfoRow[])[0] || null;
