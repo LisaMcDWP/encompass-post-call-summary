@@ -113,15 +113,15 @@ function buildSummaryTopics(obs: Observation[]): string {
     .join("; ");
 }
 
-function buildObservationsSchema(obs: Observation[], contextParams?: ContextParameter[], contextValues?: Record<string, string>): string {
-  const entries = obs.map((o, idx) => {
+function buildObservationsReferenceTable(obs: Observation[], contextParams?: ContextParameter[], contextValues?: Record<string, string>): string {
+  const rows = obs.map((o, idx) => {
     const valuesNote = o.valueType === "enum" && Array.isArray(o.value) && o.value.length > 0
-      ? `One of: ${(o.value as EnumValue[]).map(v => `"${v.label}"`).join(", ")}, or null if not discussed`
+      ? `Allowed values: ${(o.value as EnumValue[]).map(v => `"${v.label}"`).join(", ")}, or null if not discussed`
       : o.valueType === "boolean"
-        ? `true, false, or null if not discussed`
+        ? `Allowed values: true, false, or null if not discussed`
         : o.valueType === "number"
-          ? `Numeric value, or null if not discussed`
-          : `Free text string, or null if not discussed`;
+          ? `Value: numeric, or null if not discussed`
+          : `Value: free text string, or null if not discussed`;
     let guidanceText = o.promptGuidance || "";
     if (guidanceText && contextParams && contextValues) {
       for (const param of contextParams) {
@@ -137,17 +137,28 @@ function buildObservationsSchema(obs: Observation[], contextParams?: ContextPara
         .map(p => `${p.name}="${contextValues[p.name] || "N/A"}"`)
         .filter(s => !s.endsWith('"N/A"'));
       if (relevantContext.length > 0) {
-        contextHint = ` [ACTIVE CONTEXT: ${relevantContext.join(", ")}]`;
+        contextHint = ` | Context: ${relevantContext.join(", ")}`;
       }
     }
-    const guidanceComment = guidanceText
-      ? ` /* EVALUATION GUIDANCE (do NOT copy this into the detail field — use it to decide the value): ${guidanceText}${contextHint} */`
-      : contextHint
-        ? ` /* ${contextHint} */`
-        : "";
-    return `    /* OBSERVATION ${idx + 1} of ${obs.length} — "${o.name}" */ { "name": "${o.name}", "display_name": "${o.displayName}", "domain": "${o.domain}", "value_type": "${o.valueType}", "value": "${valuesNote}", "detail": "Write a brief 1-2 sentence explanation of what was observed in the transcript for this topic. Do NOT repeat the evaluation guidance — describe what actually happened.", "evidence": "Direct quote or specific reference from the transcript that supports this observation value. Use null if the topic was not discussed.", "confidence": "One of: high, medium, low — how confident the analysis is based on the clarity and directness of the transcript evidence" }${guidanceComment}`;
+    const guidancePart = guidanceText
+      ? ` | Evaluation guidance: ${guidanceText}${contextHint}`
+      : contextHint || "";
+    return `  ${idx + 1}. name="${o.name}" | display_name="${o.displayName}" | domain="${o.domain}" | value_type="${o.valueType}" | ${valuesNote}${guidancePart}`;
   });
-  return `    /* OUTPUT EXACTLY ${obs.length} observation objects below — one per topic, indices 1 through ${obs.length}. Each name MUST appear exactly once. NEVER repeat a name. */\n` + entries.join(",\n");
+  return rows.join("\n");
+}
+
+function buildObservationsSchema(obs: Observation[]): string {
+  return `    {
+      "name": "COPY from reference table",
+      "display_name": "COPY from reference table",
+      "domain": "COPY from reference table",
+      "value_type": "COPY from reference table",
+      "value": "The extracted value (use allowed values from reference table, or null if not discussed)",
+      "detail": "Brief 1-2 sentence explanation of what was observed. Do NOT copy evaluation guidance.",
+      "evidence": "Direct quote from transcript, or null if not discussed",
+      "confidence": "high | medium | low | null"
+    }`;
 }
 
 export const DEFAULT_SUMMARY_INSTRUCTION = "A brief overall summary of the call based on the questions asked of the patient and their responses. If the patient answered the call, include the following topics at a minimum (only comment on what the patient actually responded to): {{SUMMARY_TOPICS}}.";
@@ -254,7 +265,8 @@ SOURCE TEXT:
   const statusMappings = buildStatusMappings(activeObservations);
   const summaryTopics = buildSummaryTopics(activeObservations);
   const colorStyles = buildColorStylesBlock();
-  const observationsSchema = buildObservationsSchema(activeObservations, contextParams, contextValues);
+  const observationsSchema = buildObservationsSchema(activeObservations);
+  const observationsRefTable = buildObservationsReferenceTable(activeObservations, contextParams, contextValues);
   const resolvedSummaryInstruction = instruction.replace("{{SUMMARY_TOPICS}}", summaryTopics);
 
   return `You are an expert healthcare call analyst for Guideway Care. Analyze the following patient interaction transcript and produce a structured JSON output.
@@ -268,10 +280,13 @@ ${contextBlock}
    - Report exactly what was stated without interpretation
    - Maintain factual tone without emotional language
 
+###OBSERVATION REFERENCE TABLE (${topicCount} topics — output exactly one JSON object per row, no more, no less)
+${observationsRefTable}
+
 Your response MUST be valid JSON with exactly this structure:
 {
   "summary": "${resolvedSummaryInstruction}",
-  "observations": [
+  "observations": [ <-- EXACTLY ${topicCount} objects, one per row in the reference table above. Iterate rows 1 through ${topicCount} in order. Each name appears ONCE.
 ${observationsSchema}
   ],
   "transition_status": "A single HTML string covering ALL ${topicCount} observation topics. This value MUST be a valid JSON string. Do NOT start with a quote character. Use inline styles for color-coded status badges. For enum topics, format as: <b>Topic:</b> <span style='INLINE_STYLE'>ENUM_VALUE</span><br>Detail sentence.<br><br> — where ENUM_VALUE is the actual observation value (e.g. 'Fair', 'No Readmission', 'Picked Up', 'Not Discussed') and INLINE_STYLE is the corresponding color style from the mappings below. NEVER use the color name (GREEN, YELLOW, etc.) as the badge text — always use the enum value. For non-enum topics (text, boolean, number), format as: <b>Topic:</b><br>Detail sentence.<br><br> (no status badge needed). Use these exact inline styles for each status type: ${colorStyles} — Status-to-color mappings (use the inline style that corresponds to the enum value): ${statusMappings}. ALWAYS include all ${topicCount} topics. IMPORTANT: Order the topics so that all discussed topics appear first, and any topics with a 'Not Discussed' status are grouped together at the bottom.",
@@ -314,8 +329,8 @@ Guidelines:
 - Present information objectively. Report exactly what was stated without interpretation. Maintain a factual tone without emotional language.
 - DO NOT HALLUCINATE OR INFER: Only extract information that was explicitly discussed in the transcript. If a specific topic was not directly asked about or answered in the conversation, you MUST mark it as "Not Discussed" — do NOT infer, assume, or guess a value. A greeting, identity confirmation, or unrelated small talk is NOT evidence for any observation topic. The evidence field must contain a direct quote where the topic was specifically addressed. If you cannot find a direct quote about that specific topic, the topic was "Not Discussed".
 - summary: Provide a brief overall summary based on questions asked and the patient's responses. Only comment on what the patient actually responded to. Do not include information the patient did not discuss. Do not summarize topics that were not explicitly asked about.
-- observations: Return an array with EXACTLY ${topicCount} objects — one per observation topic listed above. Do NOT duplicate any observation. Each observation name must appear exactly once. Each object must have: name (the key), display_name, domain, value_type, value (the extracted value from the transcript — use the exact label for enum types, or null if not discussed), detail (a brief 1-2 sentence explanation of what was actually observed in the transcript — this MUST be your own original summary of what happened, NOT a copy of the evaluation guidance comments), evidence (a direct quote or specific reference from the transcript that supports the value — use null if the topic was not discussed), and confidence (one of "high", "medium", or "low" based on how clear and direct the transcript evidence is — use "high" when the patient explicitly stated something, "medium" when it was implied, "low" when inferred from limited information, or null if not discussed). Preserve the name, display_name, domain, and value_type exactly as specified above. IMPORTANT: If a topic was not discussed in the transcript (and no evaluation guidance specifies a different detail), set the value to "Not Discussed", set the detail to "Not discussed.", set evidence to null, and set confidence to null. The /* EVALUATION GUIDANCE */ comments in the schema above are instructions for how to EVALUATE and choose the correct value — they must NOT appear in your output. The "detail" field must contain your own brief description of what was observed, not the guidance text.${observationsGuidance ? `\n- GENERAL OBSERVATIONS GUIDANCE: ${observationsGuidance}` : ""}
-- transition_status: Return a single HTML string as a valid JSON string value. The detail text after each status badge MUST be a brief original sentence about what was observed — NEVER repeat or paraphrase the evaluation guidance instructions. Do NOT start the string with a quote or any character before the first <b> tag. Use inline style attributes with single quotes for color-coded status badges (e.g. style='display:inline-block;padding:1px 8px;...'). Use <b> for topic labels, <span style='...'> for colored status badges, and <br> for line breaks. The text inside each <span> badge MUST be the actual enum value chosen for that observation (e.g. "Fair", "Picked Up", "Not Discussed") — NEVER use the color name (GREEN, YELLOW, RED, etc.) as badge text. Include all ${topicCount} topics. The entire value must be a properly quoted JSON string. The first character of the string content must be the opening < of the first <b> tag. IMPORTANT: List all discussed topics first, then group any "Not Discussed" topics together at the bottom of the output.
+- observations: EXACTLY ${topicCount} objects — one per row in the OBSERVATION REFERENCE TABLE above. Iterate rows 1 through ${topicCount} in order. Copy name, display_name, domain, value_type exactly from the table. For value: use the extracted value from the transcript (exact enum label for enum types, or null if not discussed). For detail: write your own 1-2 sentence summary of what was observed — do NOT copy evaluation guidance. For evidence: direct quote, or null if not discussed. For confidence: high/medium/low/null. If a topic was not discussed, set value="Not Discussed", detail="Not discussed.", evidence=null, confidence=null. NEVER output the same observation name twice.${observationsGuidance ? `\n- GENERAL OBSERVATIONS GUIDANCE: ${observationsGuidance}` : ""}
+- transition_status: A single HTML string with EXACTLY ${topicCount} topics — each appears ONCE, no duplicates. Detail text must be original. Use inline style attributes with single quotes for badges (e.g. style='display:inline-block;padding:1px 8px;...'). Badge text = actual enum value, NEVER the color name. Discussed topics first, "Not Discussed" grouped at bottom.
 - follow_up_areas: Return a single HTML string as a valid JSON string value. Use <ul>/<li> with <b> for topic names. Use single quotes for any HTML attributes. Only include items with issues. If none, return "<p>No follow-up areas identified.</p>".
 - qa_pairs: Extract EVERY question and answer exchange from the transcript, in chronological order. Include ALL exchanges — greetings, identity verification, clinical questions, scheduling, and any other conversation. Each entry should capture the question asked, the answer given, who asked it, and who answered it. Try to match each Q&A to the closest configured observation topic if applicable, setting observation_name and observation_display_name. If a Q&A does not match any configured observation, set those fields to null and still include it. Assign a descriptive category to every Q&A pair. Do not skip any exchanges.
 - barriers: ${barriersGuidance || "Extract ANY barriers to care, recovery, or well-being that the patient or caregiver mentions or that can be identified from the conversation. A barrier is anything that may prevent or hinder the patient from following their care plan, recovering properly, or accessing needed services — such as transportation issues, financial hardship, lack of social support, difficulty understanding instructions, medication access problems, housing instability, caregiver burden, emotional/mental health challenges, physical limitations, or insurance/coverage gaps. Include barriers that are explicitly stated AND those clearly implied from the conversation. Try to link each barrier to the most relevant configured observation if applicable. If no barriers are identified, return an empty array []. Assign a severity (high/medium/low) based on the potential impact on the patient's care outcomes."}${(callQAPrompts || []).length > 0 ? `
@@ -430,7 +445,8 @@ export function buildFastPromptTemplate(activeObservations: Observation[], summa
   const statusMappings = buildStatusMappings(activeObservations);
   const summaryTopics = buildSummaryTopics(activeObservations);
   const colorStyles = buildColorStylesBlock();
-  const observationsSchema = buildObservationsSchema(activeObservations, contextParams, contextValues);
+  const observationsSchema = buildObservationsSchema(activeObservations);
+  const observationsRefTable = buildObservationsReferenceTable(activeObservations, contextParams, contextValues);
   const resolvedSummaryInstruction = instruction.replace("{{SUMMARY_TOPICS}}", summaryTopics || "general topics discussed");
 
   if (activeObservations.length === 0) {
@@ -463,13 +479,19 @@ ${contextBlock}
    - Report exactly what was stated without interpretation
    - Maintain factual tone without emotional language
 
+###OBSERVATION REFERENCE TABLE (${topicCount} topics — output exactly one JSON object per row, no more, no less)
+${observationsRefTable}
+
+###CRITICAL RULE — NO DUPLICATES
+The observations array MUST contain EXACTLY ${topicCount} objects. Iterate through the reference table rows 1 to ${topicCount} in order. Output ONE object per row. If you have already output an observation name, do NOT output it again. Each name appears exactly once.
+
 Your response MUST be valid JSON with exactly this structure:
 {
   "summary": "${resolvedSummaryInstruction}",
-  "observations": [
+  "observations": [ <-- EXACTLY ${topicCount} objects, one per row in the reference table. Each name appears ONCE.
 ${observationsSchema}
   ],
-  "transition_status": "A single HTML string covering ALL ${topicCount} observation topics. This value MUST be a valid JSON string. Do NOT start with a quote character. Use inline styles for color-coded status badges. For enum topics, format as: <b>Topic:</b> <span style='INLINE_STYLE'>ENUM_VALUE</span><br>Detail sentence.<br><br> — where ENUM_VALUE is the actual observation value and INLINE_STYLE is the corresponding color style. NEVER use the color name as the badge text. Use these exact inline styles: ${colorStyles} — Mappings: ${statusMappings}. ALWAYS include all ${topicCount} topics. IMPORTANT: Order discussed topics first, 'Not Discussed' topics at the bottom.",
+  "transition_status": "A single HTML string covering ALL ${topicCount} observation topics — each topic appears ONCE, no duplicates. Use inline styles for color-coded status badges. For enum topics: <b>Topic:</b> <span style='INLINE_STYLE'>ENUM_VALUE</span><br>Detail.<br><br>. Use these styles: ${colorStyles} — Mappings: ${statusMappings}. Order discussed topics first, 'Not Discussed' at the bottom.",
   "follow_up_areas": "A single HTML string listing follow-up areas. Use <ul>/<li> with <b> for topic names. Only include items with issues. If none, use '<p>No follow-up areas identified.</p>'."
 }
 
@@ -477,8 +499,8 @@ Guidelines:
 - All output must use third person perspective.
 - DO NOT HALLUCINATE OR INFER: Only extract information explicitly discussed. Mark undiscussed topics as "Not Discussed".
 - summary: Brief overall summary based on questions asked and patient's responses.
-- observations: Return an array with EXACTLY ${topicCount} objects — one per observation topic listed above. Do NOT duplicate any observation. Each observation name must appear exactly once. Preserve the name, display_name, domain, and value_type exactly as specified. The /* EVALUATION GUIDANCE */ comments are instructions for choosing values — do NOT copy them into the detail field.${observationsGuidance ? `\n- GENERAL OBSERVATIONS GUIDANCE: ${observationsGuidance}` : ""}
-- transition_status: Return a single HTML string with EXACTLY ${topicCount} topics — one per observation, no duplicates. Detail text MUST be original, not copied from guidance.
+- observations: EXACTLY ${topicCount} objects — one per row in the reference table. Copy name, display_name, domain, value_type from the table. Use evaluation guidance to choose value — do NOT copy guidance text into detail.${observationsGuidance ? `\n- GENERAL OBSERVATIONS GUIDANCE: ${observationsGuidance}` : ""}
+- transition_status: EXACTLY ${topicCount} topics in the HTML — one per observation, no duplicates. Detail text MUST be original.
 - follow_up_areas: Return a single HTML string.
 Source ID: {{SOURCE_ID}}
 
