@@ -1,0 +1,21 @@
+ --region=us-central1 --limit=20
+2026-04-07 01:02:45 BigQuery table call_information.context_parameters ready.
+2026-04-07 01:02:46 BigQuery table call_information.call_qa_prompts ready.
+2026-04-07 01:02:50 The VertexAI class and all its dependencies are deprecated as of June 24, 2025 and will be removed on June 24, 2026. Please use the Google Gen AI SDK (https://www.npmjs.com/package/@google/genai) to access Gemini features. For details, see https://cloud.google.com/vertex-ai/generative-ai/docs/deprecations/genai-vertexai-sdk.
+2026-04-07 01:02:50 [FAST] Starting Gemini call for 8c39b831-2b1e-4d90-851e-9daede876d81
+2026-04-07 01:03:10 [FAST] Gemini completed for 8c39b831-2b1e-4d90-851e-9daede876d81 in 9853 tokens
+2026-04-07 01:03:10 [AWELL] Fast Gemini completed for 8c39b831-2b1e-4d90-851e-9daede876d81 in 31466ms — responding to Awell now
+2026-04-07 01:03:10 [BACKGROUND] Starting Gemini call for 8c39b831-2b1e-4d90-851e-9daede876d81
+2026-04-07 01:03:28 [BACKGROUND] Gemini completed for 8c39b831-2b1e-4d90-851e-9daede876d81 in 4850 tokens
+2026-04-07 01:03:28 [AWELL-BG] Background Gemini completed for 8c39b831-2b1e-4d90-851e-9daede876d81 in 18012ms (32 qa_pairs, 1 call_qa)
+2026-04-07 01:03:38 Could not delete existing rows from call_qa_results for call 8c39b831-2b1e-4d90-851e-9daede876d81: UPDATE or DELETE statement over table encompass-476415.call_information.call_qa_results would affect rows in the streaming buffer, which is not supported
+2026-04-07 01:03:39 Could not delete existing rows from call_info for call 8c39b831-2b1e-4d90-851e-9daede876d81: UPDATE or DELETE statement over table encompass-476415.call_information.call_info would affect rows in the streaming buffer, which is not supported
+2026-04-07 01:03:42 Could not delete existing rows from call_observations for call 8c39b831-2b1e-4d90-851e-9daede876d81: UPDATE or DELETE statement over table encompass-476415.call_information.call_observations would affect rows in the streaming buffer, which is not supported
+2026-04-07 01:03:45 Could not delete existing rows from barriers for call 8c39b831-2b1e-4d90-851e-9daede876d81: UPDATE or DELETE statement over table encompass-476415.call_information.barriers would affect rows in the streaming buffer, which is not supported
+2026-04-07 01:03:47 BigQuery call_qa_results inserted: 1 rows for call 8c39b831-2b1e-4d90-851e-9daede876d81
+2026-04-07 01:03:48 BigQuery call_observations inserted: 16 rows for call 8c39b831-2b1e-4d90-851e-9daede876d81
+2026-04-07 01:03:49 BigQuery barriers inserted: 2 rows for call 8c39b831-2b1e-4d90-851e-9daede876d81
+2026-04-07 01:03:49 BigQuery call_info inserted for call: 8c39b831-2b1e-4d90-851e-9daede876d81
+2026-04-07 01:03:51 Could not delete existing rows from call_qa_pairs for call 8c39b831-2b1e-4d90-851e-9daede876d81: UPDATE or DELETE statement over table encompass-476415.call_information.call_qa_pairs would affect rows in the streaming buffer, which is not supported
+2026-04-07 01:03:54 BigQuery call_qa_pairs inserted: 32 rows for call 8c39b831-2b1e-4d90-851e-9daede876d81
+2026-04-07 01:03:54 [AWELL-BG] All BigQuery writes completed for 8c39b831-2b1e-4d90-851e-9daede876d81
