@@ -314,7 +314,7 @@ Guidelines:
 - Present information objectively. Report exactly what was stated without interpretation. Maintain a factual tone without emotional language.
 - DO NOT HALLUCINATE OR INFER: Only extract information that was explicitly discussed in the transcript. If a specific topic was not directly asked about or answered in the conversation, you MUST mark it as "Not Discussed" — do NOT infer, assume, or guess a value. A greeting, identity confirmation, or unrelated small talk is NOT evidence for any observation topic. The evidence field must contain a direct quote where the topic was specifically addressed. If you cannot find a direct quote about that specific topic, the topic was "Not Discussed".
 - summary: Provide a brief overall summary based on questions asked and the patient's responses. Only comment on what the patient actually responded to. Do not include information the patient did not discuss. Do not summarize topics that were not explicitly asked about.
-- observations: Return an array with exactly ${topicCount} objects, one for each observation topic. Each object must have: name (the key), display_name, domain, value_type, value (the extracted value from the transcript — use the exact label for enum types, or null if not discussed), detail (a brief 1-2 sentence explanation of what was actually observed in the transcript — this MUST be your own original summary of what happened, NOT a copy of the evaluation guidance comments), evidence (a direct quote or specific reference from the transcript that supports the value — use null if the topic was not discussed), and confidence (one of "high", "medium", or "low" based on how clear and direct the transcript evidence is — use "high" when the patient explicitly stated something, "medium" when it was implied, "low" when inferred from limited information, or null if not discussed). Preserve the name, display_name, domain, and value_type exactly as specified above. IMPORTANT: If a topic was not discussed in the transcript (and no evaluation guidance specifies a different detail), set the value to "Not Discussed", set the detail to "Not discussed.", set evidence to null, and set confidence to null. The /* EVALUATION GUIDANCE */ comments in the schema above are instructions for how to EVALUATE and choose the correct value — they must NOT appear in your output. The "detail" field must contain your own brief description of what was observed, not the guidance text.${observationsGuidance ? `\n- GENERAL OBSERVATIONS GUIDANCE: ${observationsGuidance}` : ""}
+- observations: Return an array with EXACTLY ${topicCount} objects — one per observation topic listed above. Do NOT duplicate any observation. Each observation name must appear exactly once. Each object must have: name (the key), display_name, domain, value_type, value (the extracted value from the transcript — use the exact label for enum types, or null if not discussed), detail (a brief 1-2 sentence explanation of what was actually observed in the transcript — this MUST be your own original summary of what happened, NOT a copy of the evaluation guidance comments), evidence (a direct quote or specific reference from the transcript that supports the value — use null if the topic was not discussed), and confidence (one of "high", "medium", or "low" based on how clear and direct the transcript evidence is — use "high" when the patient explicitly stated something, "medium" when it was implied, "low" when inferred from limited information, or null if not discussed). Preserve the name, display_name, domain, and value_type exactly as specified above. IMPORTANT: If a topic was not discussed in the transcript (and no evaluation guidance specifies a different detail), set the value to "Not Discussed", set the detail to "Not discussed.", set evidence to null, and set confidence to null. The /* EVALUATION GUIDANCE */ comments in the schema above are instructions for how to EVALUATE and choose the correct value — they must NOT appear in your output. The "detail" field must contain your own brief description of what was observed, not the guidance text.${observationsGuidance ? `\n- GENERAL OBSERVATIONS GUIDANCE: ${observationsGuidance}` : ""}
 - transition_status: Return a single HTML string as a valid JSON string value. The detail text after each status badge MUST be a brief original sentence about what was observed — NEVER repeat or paraphrase the evaluation guidance instructions. Do NOT start the string with a quote or any character before the first <b> tag. Use inline style attributes with single quotes for color-coded status badges (e.g. style='display:inline-block;padding:1px 8px;...'). Use <b> for topic labels, <span style='...'> for colored status badges, and <br> for line breaks. The text inside each <span> badge MUST be the actual enum value chosen for that observation (e.g. "Fair", "Picked Up", "Not Discussed") — NEVER use the color name (GREEN, YELLOW, RED, etc.) as badge text. Include all ${topicCount} topics. The entire value must be a properly quoted JSON string. The first character of the string content must be the opening < of the first <b> tag. IMPORTANT: List all discussed topics first, then group any "Not Discussed" topics together at the bottom of the output.
 - follow_up_areas: Return a single HTML string as a valid JSON string value. Use <ul>/<li> with <b> for topic names. Use single quotes for any HTML attributes. Only include items with issues. If none, return "<p>No follow-up areas identified.</p>".
 - qa_pairs: Extract EVERY question and answer exchange from the transcript, in chronological order. Include ALL exchanges — greetings, identity verification, clinical questions, scheduling, and any other conversation. Each entry should capture the question asked, the answer given, who asked it, and who answered it. Try to match each Q&A to the closest configured observation topic if applicable, setting observation_name and observation_display_name. If a Q&A does not match any configured observation, set those fields to null and still include it. Assign a descriptive category to every Q&A pair. Do not skip any exchanges.
@@ -327,6 +327,19 @@ Source ID: {{SOURCE_ID}}
 
 SOURCE TEXT:
 {{SOURCE_TEXT}}`;
+}
+
+function deduplicateByName(items: any[]): any[] {
+  const seen = new Set<string>();
+  return items.filter(item => {
+    const key = item.name;
+    if (seen.has(key)) {
+      console.warn(`[DEDUP] Removed duplicate item: "${key}"`);
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 }
 
 function buildGeminiModel() {
@@ -404,6 +417,9 @@ export async function analyzeTranscript(
   if (!Array.isArray(parsed.barriers)) parsed.barriers = [];
   if (!Array.isArray(parsed.call_qa)) parsed.call_qa = [];
 
+  parsed.observations = deduplicateByName(parsed.observations);
+  parsed.call_qa = deduplicateByName(parsed.call_qa);
+
   return { analysis: parsed as TranscriptAnalysis, promptUsed: prompt, tokenUsage };
 }
 
@@ -461,8 +477,8 @@ Guidelines:
 - All output must use third person perspective.
 - DO NOT HALLUCINATE OR INFER: Only extract information explicitly discussed. Mark undiscussed topics as "Not Discussed".
 - summary: Brief overall summary based on questions asked and patient's responses.
-- observations: Return exactly ${topicCount} objects. IMPORTANT: The /* EVALUATION GUIDANCE */ comments are instructions for choosing values — do NOT copy them into the detail field.${observationsGuidance ? `\n- GENERAL OBSERVATIONS GUIDANCE: ${observationsGuidance}` : ""}
-- transition_status: Return a single HTML string. Detail text MUST be original, not copied from guidance.
+- observations: Return an array with EXACTLY ${topicCount} objects — one per observation topic listed above. Do NOT duplicate any observation. Each observation name must appear exactly once. Preserve the name, display_name, domain, and value_type exactly as specified. The /* EVALUATION GUIDANCE */ comments are instructions for choosing values — do NOT copy them into the detail field.${observationsGuidance ? `\n- GENERAL OBSERVATIONS GUIDANCE: ${observationsGuidance}` : ""}
+- transition_status: Return a single HTML string with EXACTLY ${topicCount} topics — one per observation, no duplicates. Detail text MUST be original, not copied from guidance.
 - follow_up_areas: Return a single HTML string.
 Source ID: {{SOURCE_ID}}
 
@@ -548,6 +564,8 @@ export async function analyzeTranscriptFast(
   }
   if (!Array.isArray(parsed.observations)) parsed.observations = [];
 
+  parsed.observations = deduplicateByName(parsed.observations);
+
   return { analysis: parsed, tokenUsage };
 }
 
@@ -572,6 +590,8 @@ export async function analyzeTranscriptBackground(
   if (!Array.isArray(parsed.qa_pairs)) parsed.qa_pairs = [];
   if (!Array.isArray(parsed.barriers)) parsed.barriers = [];
   if (!Array.isArray(parsed.call_qa)) parsed.call_qa = [];
+
+  parsed.call_qa = deduplicateByName(parsed.call_qa);
 
   return { qa_pairs: parsed.qa_pairs, barriers: parsed.barriers, call_qa: parsed.call_qa, tokenUsage };
 }
