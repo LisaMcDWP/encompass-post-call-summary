@@ -834,7 +834,8 @@ export async function registerRoutes(
 
   app.get("/api/calls/:callId", async (req, res) => {
     try {
-      const result = await getCallDetail(req.params.callId);
+      const runIndex = req.query.run !== undefined ? Number(req.query.run) - 1 : undefined;
+      const result = await getCallDetail(req.params.callId, runIndex);
       if (!result.callInfo) {
         return res.status(404).json({ message: "Call not found" });
       }

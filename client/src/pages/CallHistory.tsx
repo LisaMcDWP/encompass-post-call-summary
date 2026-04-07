@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Phone, Clock, Coins, ChevronRight, X, FileText, Activity, ListChecks, ClipboardList, AlertCircle, MessageSquare, ShieldAlert, ClipboardCheck, RefreshCw, Download } from "lucide-react";
+import { Loader2, Phone, Clock, Coins, ChevronRight, ChevronLeft, X, FileText, Activity, ListChecks, ClipboardList, AlertCircle, MessageSquare, ShieldAlert, ClipboardCheck, RefreshCw, Download, History } from "lucide-react";
 import { exportCallDetailPdf } from "@/lib/exportPdf";
 
 interface CallInfo {
@@ -84,6 +84,8 @@ interface CallDetail {
   barriers: CallBarrier[];
   callQA: CallQAResultItem[];
   transcript: string | null;
+  totalRuns: number;
+  currentRun: number;
 }
 
 function formatDate(dateStr: string | null): string {
@@ -96,10 +98,13 @@ function formatDate(dateStr: string | null): string {
 }
 
 function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => void }) {
+  const [selectedRun, setSelectedRun] = useState<number | undefined>(undefined);
+
   const { data, isLoading, isError } = useQuery<CallDetail>({
-    queryKey: ["/api/calls", callId],
+    queryKey: ["/api/calls", callId, selectedRun],
     queryFn: async () => {
-      const res = await fetch(`/api/calls/${callId}`);
+      const url = selectedRun !== undefined ? `/api/calls/${callId}?run=${selectedRun}` : `/api/calls/${callId}`;
+      const res = await fetch(url);
       if (!res.ok) throw new Error("Failed to load call detail");
       return res.json();
     },
@@ -135,6 +140,8 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
   const barriers = data.barriers || [];
   const callQA = data.callQA || [];
   const transcript = data.transcript || null;
+  const totalRuns = data.totalRuns || 1;
+  const currentRun = data.currentRun || 1;
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center" onClick={onClose}>
@@ -151,7 +158,46 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
             </h2>
             <p className="text-xs text-muted-foreground font-mono mt-0.5" data-testid="text-call-id">{info.call_id}</p>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
+            {totalRuns > 1 && (
+              <div className="flex items-center gap-1 bg-muted/40 rounded-lg px-2 py-1 border border-border/50" data-testid="run-selector">
+                <History className="h-3.5 w-3.5 text-muted-foreground" />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  disabled={currentRun <= 1}
+                  onClick={() => setSelectedRun(currentRun - 1)}
+                  data-testid="button-prev-run"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </Button>
+                <span className="text-xs font-medium min-w-[60px] text-center" data-testid="text-run-indicator">
+                  Run {currentRun} of {totalRuns}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  disabled={currentRun >= totalRuns}
+                  onClick={() => setSelectedRun(currentRun + 1)}
+                  data-testid="button-next-run"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+                {currentRun !== totalRuns && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-xs px-2"
+                    onClick={() => setSelectedRun(undefined)}
+                    data-testid="button-latest-run"
+                  >
+                    Latest
+                  </Button>
+                )}
+              </div>
+            )}
             <Button
               variant="outline"
               size="sm"

@@ -1396,18 +1396,44 @@ export async function resetFailedBatchItems(batchId?: string): Promise<number> {
   return Number(retryMeta?.dmlStats?.updatedRowCount || retryMeta?.numDmlAffectedRows || 0);
 }
 
-export async function getCallDetail(callId: string): Promise<{ callInfo: any | null; observations: CallObservationRow[]; qaPairs: any[]; barriers: any[]; callQA: any[] }> {
+export async function getCallProcessingRuns(callId: string): Promise<{ run_number: number; processed_at: string; status: string; processing_time_ms: number; total_tokens: number; estimated_cost: number; prompt_version: string | null }[]> {
+  const client = getBigQueryClient();
+  const query = `
+    SELECT
+      ROW_NUMBER() OVER (ORDER BY processed_at ASC) AS run_number,
+      processed_at, status, processing_time_ms, total_tokens, estimated_cost, prompt_version
+    FROM \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\`
+    WHERE call_id = @callId
+    ORDER BY processed_at ASC
+  `;
+  const [rows] = await client.query({ query, params: { callId }, location: "US" });
+  return (rows as any[]).map(r => ({
+    run_number: Number(r.run_number),
+    processed_at: extractTimestamp(r.processed_at),
+    status: r.status,
+    processing_time_ms: r.processing_time_ms,
+    total_tokens: r.total_tokens,
+    estimated_cost: r.estimated_cost,
+    prompt_version: r.prompt_version || null,
+  }));
+}
+
+export async function getCallDetail(callId: string, runIndex?: number): Promise<{ callInfo: any | null; observations: CallObservationRow[]; qaPairs: any[]; barriers: any[]; callQA: any[]; totalRuns: number; currentRun: number }> {
   const client = getBigQueryClient();
 
-  const infoQuery = `
-    SELECT * EXCEPT(rn) FROM (
-      SELECT *, ROW_NUMBER() OVER (PARTITION BY call_id ORDER BY processed_at DESC) AS rn
-      FROM \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\`
-      WHERE call_id = @callId
-    ) WHERE rn = 1
+  const allRunsQuery = `
+    SELECT *, ROW_NUMBER() OVER (ORDER BY processed_at ASC) AS run_number
+    FROM \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\`
+    WHERE call_id = @callId
+    ORDER BY processed_at ASC
   `;
-  const [infoRows] = await client.query({ query: infoQuery, params: { callId }, location: "US" });
-  const row = (infoRows as CallInfoRow[])[0] || null;
+  const [allRunRows] = await client.query({ query: allRunsQuery, params: { callId }, location: "US" });
+  const allRuns = allRunRows as any[];
+  const totalRuns = allRuns.length;
+
+  const targetRun = runIndex !== undefined && runIndex >= 0 && runIndex < totalRuns ? runIndex : totalRuns - 1;
+  const row = totalRuns > 0 ? allRuns[targetRun] as CallInfoRow : null;
+  const currentRun = targetRun + 1;
 
   const obsQuery = `
     SELECT * EXCEPT(rn) FROM (
@@ -1541,5 +1567,5 @@ export async function getCallDetail(callId: string): Promise<{ callInfo: any | n
     console.warn("Transcript fetch failed:", err.message);
   }
 
-  return { callInfo, observations: obsRows as CallObservationRow[], qaPairs: qaRows, barriers: barrierRows, callQA: callQARows, transcript };
+  return { callInfo, observations: obsRows as CallObservationRow[], qaPairs: qaRows, barriers: barrierRows, callQA: callQARows, transcript, totalRuns, currentRun };
 }
