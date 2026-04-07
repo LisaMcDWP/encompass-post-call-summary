@@ -1,0 +1,343 @@
+ame=guideway-batch-job" --project=encompass-476415 --limit=20 --freshness=1h
+---
+insertId: 69d4671c000a407787e829ae
+labels:
+  container_name: worker
+  instanceId: 008c15ff0866c53273848ed21a256d9c180140d2d8b12d616e70c64ae65376c958a8050d75a1e6f32f76d0c0fed7d2f3c67109bb42832b038196911ed79acb68f7922a8cc169fad2c601b0bf60053d53dda4194bb7440d4f3f33
+  run.googleapis.com/execution_name: guideway-batch-job-7fckc
+  run.googleapis.com/task_attempt: '0'
+  run.googleapis.com/task_index: '0'
+logName: projects/encompass-476415/logs/run.googleapis.com%2Fvarlog%2Fsystem
+receiveTimestamp: '2026-04-07T02:08:28.680008906Z'
+resource:
+  labels:
+    job_name: guideway-batch-job
+    location: us-central1
+    project_id: encompass-476415
+  type: cloud_run_job
+severity: WARNING
+textPayload: Container called exit(1).
+timestamp: '2026-04-07T02:08:28.671733Z'
+---
+insertId: 69d4671c00097c3f82d4a89a
+labels:
+  instanceId: 008c15ff0866c53273848ed21a256d9c180140d2d8b12d616e70c64ae65376c958a8050d75a1e6f32f76d0c0fed7d2f3c67109bb42832b038196911ed79acb68f7922a8cc169fad2c601b0bf60053d53dda4194bb7440d4f3f33
+  run.googleapis.com/execution_name: guideway-batch-job-7fckc
+  run.googleapis.com/task_attempt: '0'
+  run.googleapis.com/task_index: '0'
+logName: projects/encompass-476415/logs/run.googleapis.com%2Fstderr
+receiveTimestamp: '2026-04-07T02:08:28.965314968Z'
+resource:
+  labels:
+    job_name: guideway-batch-job
+    location: us-central1
+    project_id: encompass-476415
+  type: cloud_run_job
+textPayload: '}'
+timestamp: '2026-04-07T02:08:28.621631Z'
+---
+insertId: 69d4671c00097c3d83841609
+labels:
+  instanceId: 008c15ff0866c53273848ed21a256d9c180140d2d8b12d616e70c64ae65376c958a8050d75a1e6f32f76d0c0fed7d2f3c67109bb42832b038196911ed79acb68f7922a8cc169fad2c601b0bf60053d53dda4194bb7440d4f3f33
+  run.googleapis.com/execution_name: guideway-batch-job-7fckc
+  run.googleapis.com/task_attempt: '0'
+  run.googleapis.com/task_index: '0'
+logName: projects/encompass-476415/logs/run.googleapis.com%2Fstderr
+receiveTimestamp: '2026-04-07T02:08:28.965314968Z'
+resource:
+  labels:
+    job_name: guideway-batch-job
+    location: us-central1
+    project_id: encompass-476415
+  type: cloud_run_job
+textPayload: '  }'
+timestamp: '2026-04-07T02:08:28.621629Z'
+---
+insertId: 69d4671c00097c3919374135
+labels:
+  instanceId: 008c15ff0866c53273848ed21a256d9c180140d2d8b12d616e70c64ae65376c958a8050d75a1e6f32f76d0c0fed7d2f3c67109bb42832b038196911ed79acb68f7922a8cc169fad2c601b0bf60053d53dda4194bb7440d4f3f33
+  run.googleapis.com/execution_name: guideway-batch-job-7fckc
+  run.googleapis.com/task_attempt: '0'
+  run.googleapis.com/task_index: '0'
+logName: projects/encompass-476415/logs/run.googleapis.com%2Fstderr
+receiveTimestamp: '2026-04-07T02:08:28.965314968Z'
+resource:
+  labels:
+    job_name: guideway-batch-job
+    location: us-central1
+    project_id: encompass-476415
+  type: cloud_run_job
+textPayload: '    [Symbol(kError)]: null'
+timestamp: '2026-04-07T02:08:28.621625Z'
+---
+insertId: 69d4671c00097c33226fa540
+labels:
+  instanceId: 008c15ff0866c53273848ed21a256d9c180140d2d8b12d616e70c64ae65376c958a8050d75a1e6f32f76d0c0fed7d2f3c67109bb42832b038196911ed79acb68f7922a8cc169fad2c601b0bf60053d53dda4194bb7440d4f3f33
+  run.googleapis.com/execution_name: guideway-batch-job-7fckc
+  run.googleapis.com/task_attempt: '0'
+  run.googleapis.com/task_index: '0'
+logName: projects/encompass-476415/logs/run.googleapis.com%2Fstderr
+receiveTimestamp: '2026-04-07T02:08:28.965314968Z'
+resource:
+  labels:
+    job_name: guideway-batch-job
+    location: us-central1
+    project_id: encompass-476415
+  type: cloud_run_job
+textPayload: '    [Symbol(kCallback)]: null,'
+timestamp: '2026-04-07T02:08:28.621619Z'
+---
+insertId: 69d4671c00097c3001840d0f
+labels:
+  instanceId: 008c15ff0866c53273848ed21a256d9c180140d2d8b12d616e70c64ae65376c958a8050d75a1e6f32f76d0c0fed7d2f3c67109bb42832b038196911ed79acb68f7922a8cc169fad2c601b0bf60053d53dda4194bb7440d4f3f33
+  run.googleapis.com/execution_name: guideway-batch-job-7fckc
+  run.googleapis.com/task_attempt: '0'
+  run.googleapis.com/task_index: '0'
+logName: projects/encompass-476415/logs/run.googleapis.com%2Fstderr
+receiveTimestamp: '2026-04-07T02:08:28.965314968Z'
+resource:
+  labels:
+    job_name: guideway-batch-job
+    location: us-central1
+    project_id: encompass-476415
+  type: cloud_run_job
+textPayload: '    [Symbol(kCapture)]: false,'
+timestamp: '2026-04-07T02:08:28.621616Z'
+---
+insertId: 69d4671c00097c2e3d9cb6a1
+labels:
+  instanceId: 008c15ff0866c53273848ed21a256d9c180140d2d8b12d616e70c64ae65376c958a8050d75a1e6f32f76d0c0fed7d2f3c67109bb42832b038196911ed79acb68f7922a8cc169fad2c601b0bf60053d53dda4194bb7440d4f3f33
+  run.googleapis.com/execution_name: guideway-batch-job-7fckc
+  run.googleapis.com/task_attempt: '0'
+  run.googleapis.com/task_index: '0'
+logName: projects/encompass-476415/logs/run.googleapis.com%2Fstderr
+receiveTimestamp: '2026-04-07T02:08:28.965314968Z'
+resource:
+  labels:
+    job_name: guideway-batch-job
+    location: us-central1
+    project_id: encompass-476415
+  type: cloud_run_job
+textPayload: '    [Symbol(shapeMode)]: true,'
+timestamp: '2026-04-07T02:08:28.621614Z'
+---
+insertId: 69d4671c00097c2b6c80321c
+labels:
+  instanceId: 008c15ff0866c53273848ed21a256d9c180140d2d8b12d616e70c64ae65376c958a8050d75a1e6f32f76d0c0fed7d2f3c67109bb42832b038196911ed79acb68f7922a8cc169fad2c601b0bf60053d53dda4194bb7440d4f3f33
+  run.googleapis.com/execution_name: guideway-batch-job-7fckc
+  run.googleapis.com/task_attempt: '0'
+  run.googleapis.com/task_index: '0'
+logName: projects/encompass-476415/logs/run.googleapis.com%2Fstderr
+receiveTimestamp: '2026-04-07T02:08:28.965314968Z'
+resource:
+  labels:
+    job_name: guideway-batch-job
+    location: us-central1
+    project_id: encompass-476415
+  type: cloud_run_job
+textPayload: '    toJSON: [Function: toJSON],'
+timestamp: '2026-04-07T02:08:28.621611Z'
+---
+insertId: 69d4671c00097c28cdcbe933
+labels:
+  instanceId: 008c15ff0866c53273848ed21a256d9c180140d2d8b12d616e70c64ae65376c958a8050d75a1e6f32f76d0c0fed7d2f3c67109bb42832b038196911ed79acb68f7922a8cc169fad2c601b0bf60053d53dda4194bb7440d4f3f33
+  run.googleapis.com/execution_name: guideway-batch-job-7fckc
+  run.googleapis.com/task_attempt: '0'
+  run.googleapis.com/task_index: '0'
+logName: projects/encompass-476415/logs/run.googleapis.com%2Fstderr
+receiveTimestamp: '2026-04-07T02:08:28.965314968Z'
+resource:
+  labels:
+    job_name: guideway-batch-job
+    location: us-central1
+    project_id: encompass-476415
+  type: cloud_run_job
+textPayload: '    },'
+timestamp: '2026-04-07T02:08:28.621608Z'
+---
+insertId: 69d4671c00097c260253dd7f
+labels:
+  instanceId: 008c15ff0866c53273848ed21a256d9c180140d2d8b12d616e70c64ae65376c958a8050d75a1e6f32f76d0c0fed7d2f3c67109bb42832b038196911ed79acb68f7922a8cc169fad2c601b0bf60053d53dda4194bb7440d4f3f33
+  run.googleapis.com/execution_name: guideway-batch-job-7fckc
+  run.googleapis.com/task_attempt: '0'
+  run.googleapis.com/task_index: '0'
+logName: projects/encompass-476415/logs/run.googleapis.com%2Fstderr
+receiveTimestamp: '2026-04-07T02:08:28.965314968Z'
+resource:
+  labels:
+    job_name: guideway-batch-job
+    location: us-central1
+    project_id: encompass-476415
+  type: cloud_run_job
+textPayload: "      'x-xss-protection': '0'"
+timestamp: '2026-04-07T02:08:28.621606Z'
+---
+insertId: 69d4671c00097c236f65cda4
+labels:
+  instanceId: 008c15ff0866c53273848ed21a256d9c180140d2d8b12d616e70c64ae65376c958a8050d75a1e6f32f76d0c0fed7d2f3c67109bb42832b038196911ed79acb68f7922a8cc169fad2c601b0bf60053d53dda4194bb7440d4f3f33
+  run.googleapis.com/execution_name: guideway-batch-job-7fckc
+  run.googleapis.com/task_attempt: '0'
+  run.googleapis.com/task_index: '0'
+logName: projects/encompass-476415/logs/run.googleapis.com%2Fstderr
+receiveTimestamp: '2026-04-07T02:08:28.965314968Z'
+resource:
+  labels:
+    job_name: guideway-batch-job
+    location: us-central1
+    project_id: encompass-476415
+  type: cloud_run_job
+textPayload: "      'x-frame-options': 'SAMEORIGIN',"
+timestamp: '2026-04-07T02:08:28.621603Z'
+---
+insertId: 69d4671c00097c21fb485fd8
+labels:
+  instanceId: 008c15ff0866c53273848ed21a256d9c180140d2d8b12d616e70c64ae65376c958a8050d75a1e6f32f76d0c0fed7d2f3c67109bb42832b038196911ed79acb68f7922a8cc169fad2c601b0bf60053d53dda4194bb7440d4f3f33
+  run.googleapis.com/execution_name: guideway-batch-job-7fckc
+  run.googleapis.com/task_attempt: '0'
+  run.googleapis.com/task_index: '0'
+logName: projects/encompass-476415/logs/run.googleapis.com%2Fstderr
+receiveTimestamp: '2026-04-07T02:08:28.965314968Z'
+resource:
+  labels:
+    job_name: guideway-batch-job
+    location: us-central1
+    project_id: encompass-476415
+  type: cloud_run_job
+textPayload: "      'x-content-type-options': 'nosniff',"
+timestamp: '2026-04-07T02:08:28.621601Z'
+---
+insertId: 69d4671c00097c1e8f8a0f0c
+labels:
+  instanceId: 008c15ff0866c53273848ed21a256d9c180140d2d8b12d616e70c64ae65376c958a8050d75a1e6f32f76d0c0fed7d2f3c67109bb42832b038196911ed79acb68f7922a8cc169fad2c601b0bf60053d53dda4194bb7440d4f3f33
+  run.googleapis.com/execution_name: guideway-batch-job-7fckc
+  run.googleapis.com/task_attempt: '0'
+  run.googleapis.com/task_index: '0'
+logName: projects/encompass-476415/logs/run.googleapis.com%2Fstderr
+receiveTimestamp: '2026-04-07T02:08:28.965314968Z'
+resource:
+  labels:
+    job_name: guideway-batch-job
+    location: us-central1
+    project_id: encompass-476415
+  type: cloud_run_job
+textPayload: "      vary: 'Origin, X-Origin, Referer',"
+timestamp: '2026-04-07T02:08:28.621598Z'
+---
+insertId: 69d4671c00097c1b73e20070
+labels:
+  instanceId: 008c15ff0866c53273848ed21a256d9c180140d2d8b12d616e70c64ae65376c958a8050d75a1e6f32f76d0c0fed7d2f3c67109bb42832b038196911ed79acb68f7922a8cc169fad2c601b0bf60053d53dda4194bb7440d4f3f33
+  run.googleapis.com/execution_name: guideway-batch-job-7fckc
+  run.googleapis.com/task_attempt: '0'
+  run.googleapis.com/task_index: '0'
+logName: projects/encompass-476415/logs/run.googleapis.com%2Fstderr
+receiveTimestamp: '2026-04-07T02:08:28.965314968Z'
+resource:
+  labels:
+    job_name: guideway-batch-job
+    location: us-central1
+    project_id: encompass-476415
+  type: cloud_run_job
+textPayload: "      'transfer-encoding': 'chunked',"
+timestamp: '2026-04-07T02:08:28.621595Z'
+---
+insertId: 69d4671c00097c1914d5b834
+labels:
+  instanceId: 008c15ff0866c53273848ed21a256d9c180140d2d8b12d616e70c64ae65376c958a8050d75a1e6f32f76d0c0fed7d2f3c67109bb42832b038196911ed79acb68f7922a8cc169fad2c601b0bf60053d53dda4194bb7440d4f3f33
+  run.googleapis.com/execution_name: guideway-batch-job-7fckc
+  run.googleapis.com/task_attempt: '0'
+  run.googleapis.com/task_index: '0'
+logName: projects/encompass-476415/logs/run.googleapis.com%2Fstderr
+receiveTimestamp: '2026-04-07T02:08:28.965314968Z'
+resource:
+  labels:
+    job_name: guideway-batch-job
+    location: us-central1
+    project_id: encompass-476415
+  type: cloud_run_job
+textPayload: "      server: 'ESF',"
+timestamp: '2026-04-07T02:08:28.621593Z'
+---
+insertId: 69d4671c00097c16f0f39655
+labels:
+  instanceId: 008c15ff0866c53273848ed21a256d9c180140d2d8b12d616e70c64ae65376c958a8050d75a1e6f32f76d0c0fed7d2f3c67109bb42832b038196911ed79acb68f7922a8cc169fad2c601b0bf60053d53dda4194bb7440d4f3f33
+  run.googleapis.com/execution_name: guideway-batch-job-7fckc
+  run.googleapis.com/task_attempt: '0'
+  run.googleapis.com/task_index: '0'
+logName: projects/encompass-476415/logs/run.googleapis.com%2Fstderr
+receiveTimestamp: '2026-04-07T02:08:28.965314968Z'
+resource:
+  labels:
+    job_name: guideway-batch-job
+    location: us-central1
+    project_id: encompass-476415
+  type: cloud_run_job
+textPayload: "      date: 'Tue, 07 Apr 2026 02:08:28 GMT',"
+timestamp: '2026-04-07T02:08:28.621590Z'
+---
+insertId: 69d4671c00097c130fdcd435
+labels:
+  instanceId: 008c15ff0866c53273848ed21a256d9c180140d2d8b12d616e70c64ae65376c958a8050d75a1e6f32f76d0c0fed7d2f3c67109bb42832b038196911ed79acb68f7922a8cc169fad2c601b0bf60053d53dda4194bb7440d4f3f33
+  run.googleapis.com/execution_name: guideway-batch-job-7fckc
+  run.googleapis.com/task_attempt: '0'
+  run.googleapis.com/task_index: '0'
+logName: projects/encompass-476415/logs/run.googleapis.com%2Fstderr
+receiveTimestamp: '2026-04-07T02:08:28.965314968Z'
+resource:
+  labels:
+    job_name: guideway-batch-job
+    location: us-central1
+    project_id: encompass-476415
+  type: cloud_run_job
+textPayload: "      'content-type': 'application/json; charset=UTF-8',"
+timestamp: '2026-04-07T02:08:28.621587Z'
+---
+insertId: 69d4671c00097c1133a5ea7d
+labels:
+  instanceId: 008c15ff0866c53273848ed21a256d9c180140d2d8b12d616e70c64ae65376c958a8050d75a1e6f32f76d0c0fed7d2f3c67109bb42832b038196911ed79acb68f7922a8cc169fad2c601b0bf60053d53dda4194bb7440d4f3f33
+  run.googleapis.com/execution_name: guideway-batch-job-7fckc
+  run.googleapis.com/task_attempt: '0'
+  run.googleapis.com/task_index: '0'
+logName: projects/encompass-476415/logs/run.googleapis.com%2Fstderr
+receiveTimestamp: '2026-04-07T02:08:28.965314968Z'
+resource:
+  labels:
+    job_name: guideway-batch-job
+    location: us-central1
+    project_id: encompass-476415
+  type: cloud_run_job
+textPayload: "      'content-encoding': 'gzip',"
+timestamp: '2026-04-07T02:08:28.621585Z'
+---
+insertId: 69d4671c00097c0ea132af60
+labels:
+  instanceId: 008c15ff0866c53273848ed21a256d9c180140d2d8b12d616e70c64ae65376c958a8050d75a1e6f32f76d0c0fed7d2f3c67109bb42832b038196911ed79acb68f7922a8cc169fad2c601b0bf60053d53dda4194bb7440d4f3f33
+  run.googleapis.com/execution_name: guideway-batch-job-7fckc
+  run.googleapis.com/task_attempt: '0'
+  run.googleapis.com/task_index: '0'
+logName: projects/encompass-476415/logs/run.googleapis.com%2Fstderr
+receiveTimestamp: '2026-04-07T02:08:28.965314968Z'
+resource:
+  labels:
+    job_name: guideway-batch-job
+    location: us-central1
+    project_id: encompass-476415
+  type: cloud_run_job
+textPayload: "      'alt-svc': 'h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000',"
+timestamp: '2026-04-07T02:08:28.621582Z'
+---
+insertId: 69d4671c00097c0bcd99b910
+labels:
+  instanceId: 008c15ff0866c53273848ed21a256d9c180140d2d8b12d616e70c64ae65376c958a8050d75a1e6f32f76d0c0fed7d2f3c67109bb42832b038196911ed79acb68f7922a8cc169fad2c601b0bf60053d53dda4194bb7440d4f3f33
+  run.googleapis.com/execution_name: guideway-batch-job-7fckc
+  run.googleapis.com/task_attempt: '0'
+  run.googleapis.com/task_index: '0'
+logName: projects/encompass-476415/logs/run.googleapis.com%2Fstderr
+receiveTimestamp: '2026-04-07T02:08:28.965314968Z'
+resource:
+  labels:
+    job_name: guideway-batch-job
+    location: us-central1
+    project_id: encompass-476415
+  type: cloud_run_job
+textPayload: '    headers: {'
+timestamp: '2026-04-07T02:08:28.621579Z'
