@@ -249,7 +249,7 @@ Your response MUST be valid JSON with exactly this structure:
 
 Guidelines:
 - qa_pairs: Extract EVERY question and answer exchange from the transcript, in chronological order. Include ALL exchanges — greetings, identity verification, clinical questions, scheduling, and any other conversation. Set observation_name and observation_display_name to null (no observations configured). Assign a descriptive category to every Q&A pair.
-- barriers: ${barriersGuidance || "Extract ANY barriers to care, recovery, or well-being that the patient or caregiver mentions or that can be identified from the conversation. A barrier is anything that may prevent or hinder the patient from following their care plan, recovering properly, or accessing needed services. Include barriers that are explicitly stated AND those clearly implied. If no barriers are identified, return an empty array. Common barrier categories include: Transportation, Financial, Medication Access, Social Support, Health Literacy, Language, Housing, Caregiver Burden, Emotional/Mental Health, Physical Limitation, Insurance/Coverage. Assign a severity based on potential impact on patient outcomes."}${(callQAPrompts || []).length > 0 ? `
+- barriers: ${barriersGuidance || "Extract ANY barriers to care, recovery, or well-being that the patient or caregiver mentions or that can be identified from the conversation. A barrier is anything that may prevent or hinder the patient from following their care plan, recovering properly, or accessing needed services. Include barriers that are explicitly stated AND those clearly implied. If no barriers are identified, return an empty array. Common barrier categories include: Transportation, Financial, Medication Access, Social Support, Health Literacy, Language, Housing, Caregiver Burden, Emotional/Mental Health, Physical Limitation, Insurance/Coverage. Assign a severity based on potential impact on patient outcomes."} IMPORTANT: Each unique barrier should appear ONLY ONCE. Do NOT list the same barrier multiple times even if it relates to multiple observations. Consolidate related issues into a single barrier entry.${(callQAPrompts || []).length > 0 ? `
 - call_qa: For each of the following call experience evaluation prompts, assess the overall call and provide a response:
 ${buildCallQABlock(callQAPrompts || [])}
   Return one object per prompt with the name, display_name, value (your assessment), detail (brief explanation), and evidence (supporting quote or null).` : `
@@ -333,7 +333,7 @@ Guidelines:
 - transition_status: A single HTML string with EXACTLY ${topicCount} topics — each appears ONCE, no duplicates. Detail text must be original. Use inline style attributes with single quotes for badges (e.g. style='display:inline-block;padding:1px 8px;...'). Badge text = actual enum value, NEVER the color name. Discussed topics first, "Not Discussed" grouped at bottom.
 - follow_up_areas: Return a single HTML string as a valid JSON string value. Use <ul>/<li> with <b> for topic names. Use single quotes for any HTML attributes. Only include items with issues. If none, return "<p>No follow-up areas identified.</p>".
 - qa_pairs: Extract EVERY question and answer exchange from the transcript, in chronological order. Include ALL exchanges — greetings, identity verification, clinical questions, scheduling, and any other conversation. Each entry should capture the question asked, the answer given, who asked it, and who answered it. Try to match each Q&A to the closest configured observation topic if applicable, setting observation_name and observation_display_name. If a Q&A does not match any configured observation, set those fields to null and still include it. Assign a descriptive category to every Q&A pair. Do not skip any exchanges.
-- barriers: ${barriersGuidance || "Extract ANY barriers to care, recovery, or well-being that the patient or caregiver mentions or that can be identified from the conversation. A barrier is anything that may prevent or hinder the patient from following their care plan, recovering properly, or accessing needed services — such as transportation issues, financial hardship, lack of social support, difficulty understanding instructions, medication access problems, housing instability, caregiver burden, emotional/mental health challenges, physical limitations, or insurance/coverage gaps. Include barriers that are explicitly stated AND those clearly implied from the conversation. Try to link each barrier to the most relevant configured observation if applicable. If no barriers are identified, return an empty array []. Assign a severity (high/medium/low) based on the potential impact on the patient's care outcomes."}${(callQAPrompts || []).length > 0 ? `
+- barriers: ${barriersGuidance || "Extract ANY barriers to care, recovery, or well-being that the patient or caregiver mentions or that can be identified from the conversation. A barrier is anything that may prevent or hinder the patient from following their care plan, recovering properly, or accessing needed services — such as transportation issues, financial hardship, lack of social support, difficulty understanding instructions, medication access problems, housing instability, caregiver burden, emotional/mental health challenges, physical limitations, or insurance/coverage gaps. Include barriers that are explicitly stated AND those clearly implied from the conversation. Try to link each barrier to the most relevant configured observation if applicable. If no barriers are identified, return an empty array []. Assign a severity (high/medium/low) based on the potential impact on the patient's care outcomes."} IMPORTANT: Each unique barrier should appear ONLY ONCE. Do NOT list the same barrier multiple times even if it relates to multiple observations. Consolidate related issues into a single barrier entry.${(callQAPrompts || []).length > 0 ? `
 - call_qa: For each of the following call experience evaluation prompts, assess the overall call and provide a response:
 ${buildCallQABlock(callQAPrompts || [])}
   Return one object per prompt with the name, display_name, value (your assessment), detail (brief explanation), and evidence (supporting quote or null).` : `
@@ -342,6 +342,20 @@ Source ID: {{SOURCE_ID}}
 
 SOURCE TEXT:
 {{SOURCE_TEXT}}`;
+}
+
+function deduplicateBarriers(barriers: any[]): any[] {
+  const seen = new Set<string>();
+  return barriers.filter(item => {
+    const key = (item.barrier || "").trim().toLowerCase();
+    if (!key) return true;
+    if (seen.has(key)) {
+      console.warn(`[DEDUP] Removed duplicate barrier: "${item.barrier}"`);
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 }
 
 function deduplicateByName(items: any[]): any[] {
@@ -460,6 +474,7 @@ export async function analyzeTranscript(
 
   parsed.observations = deduplicateByName(parsed.observations);
   parsed.call_qa = deduplicateByName(parsed.call_qa);
+  parsed.barriers = deduplicateBarriers(parsed.barriers);
   if (parsed.transition_status) {
     parsed.transition_status = deduplicateTransitionStatus(parsed.transition_status);
   }
@@ -579,7 +594,7 @@ Your response MUST be valid JSON with exactly this structure:
 
 Guidelines:
 - qa_pairs: Extract EVERY question and answer exchange from the transcript, in chronological order. Include ALL exchanges. Try to match each Q&A to configured observations: ${obsNames || "none configured"}. Set observation_name/display_name to null if no match. Assign a descriptive category.
-- barriers: ${barriersGuidance || "Extract ANY barriers to care, recovery, or well-being that the patient or caregiver mentions or that can be identified from the conversation. Include barriers that are explicitly stated AND those clearly implied. If no barriers are identified, return an empty array []. Assign a severity (high/medium/low) based on potential impact on patient outcomes."}${(callQAPrompts || []).length > 0 ? `
+- barriers: ${barriersGuidance || "Extract ANY barriers to care, recovery, or well-being that the patient or caregiver mentions or that can be identified from the conversation. Include barriers that are explicitly stated AND those clearly implied. If no barriers are identified, return an empty array []. Assign a severity (high/medium/low) based on potential impact on patient outcomes."} IMPORTANT: Each unique barrier should appear ONLY ONCE. Do NOT list the same barrier multiple times. Consolidate related issues into a single barrier entry.${(callQAPrompts || []).length > 0 ? `
 - call_qa: For each prompt, assess the overall call:
 ${buildCallQABlock(callQAPrompts || [])}
   Return one object per prompt.` : `
@@ -646,6 +661,7 @@ export async function analyzeTranscriptBackground(
   if (!Array.isArray(parsed.call_qa)) parsed.call_qa = [];
 
   parsed.call_qa = deduplicateByName(parsed.call_qa);
+  parsed.barriers = deduplicateBarriers(parsed.barriers);
 
   return { qa_pairs: parsed.qa_pairs, barriers: parsed.barriers, call_qa: parsed.call_qa, tokenUsage };
 }
