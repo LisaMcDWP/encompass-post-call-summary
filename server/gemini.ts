@@ -332,7 +332,7 @@ SOURCE TEXT:
 function buildGeminiModel() {
   const vertex = getVertexAI();
   return vertex.getGenerativeModel({
-    model: "gemini-2.0-flash-001",
+    model: "gemini-2.5-flash",
     generationConfig: {
       responseMimeType: "application/json",
       temperature: 0.2,
@@ -359,7 +359,7 @@ function extractTokenUsage(response: any) {
   const promptTokens = usageMetadata?.promptTokenCount || 0;
   const completionTokens = usageMetadata?.candidatesTokenCount || 0;
   const totalTokens = usageMetadata?.totalTokenCount || 0;
-  const estimatedCost = (promptTokens * 0.10 / 1_000_000) + (completionTokens * 0.40 / 1_000_000);
+  const estimatedCost = (promptTokens * 0.15 / 1_000_000) + (completionTokens * 0.60 / 1_000_000);
   return { promptTokens, completionTokens, totalTokens, estimatedCost };
 }
 
@@ -582,7 +582,7 @@ export async function aiObservationAssistant(
   conversationHistory: { role: string; text: string }[] = []
 ): Promise<string> {
   const ai = getVertexAI();
-  const model = ai.getGenerativeModel({ model: "gemini-2.0-flash-001" });
+  const model = ai.getGenerativeModel({ model: "gemini-2.5-flash" });
 
   const obsSnapshot = currentObservations.map(o => ({
     name: o.name,
