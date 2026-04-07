@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, aiObservationAssistant } from "./gemini";
+import { analyzeTranscript, analyzeTranscriptFast, analyzeTranscriptBackground, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, aiObservationAssistant } from "./gemini";
 import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBarriers, insertCallQAResults, ensureCallBarriersTable, ensureCallQATable, getCallBarriers, getCallInfoList, getCallDetail, getCallStatsByDay, queryBlandCalls, loadBlandCallsToBatch, fetchAwellContextForCareFlows, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, resetFailedBatchItems, deletePendingBatchItems, recreateBatch, getDistinctTags } from "./bigquery";
 import { randomUUID, createHash } from "crypto";
 import { storage } from "./storage";
@@ -276,14 +276,14 @@ export async function registerRoutes(
       }
       const callQAPrompts = await storage.getActiveCallQAPrompts(cpId);
 
-      const { analysis, tokenUsage } = await analyzeTranscript(
-        resolvedSourceId, source_text.trim(), activeObs, undefined,
+      const { analysis: fastAnalysis, tokenUsage: fastTokenUsage } = await analyzeTranscriptFast(
+        resolvedSourceId, source_text.trim(), activeObs,
         summaryInstruction || undefined, contextParams, contextValues,
-        observationsGuidance || undefined, barriersGuidance || undefined, callQAPrompts
+        observationsGuidance || undefined, barriersGuidance || undefined,
       );
       const processingTime = Date.now() - startTime;
+      console.log(`[AWELL] Fast Gemini completed for ${resolvedSourceId} in ${processingTime}ms — responding to Awell now`);
 
-      const { transition_status, follow_up_areas, ...restAnalysis } = analysis;
       const responseBody = {
         status: "success",
         data: {
@@ -297,36 +297,82 @@ export async function registerRoutes(
           prompt_version: promptVersion,
           prompt_version_date: promptVersionDate,
           analysis: {
-            ...restAnalysis,
-            observations_summary_formatted: transition_status,
-            followup_formatted: follow_up_areas,
+            summary: fastAnalysis.summary,
+            observations: fastAnalysis.observations,
+            barriers: fastAnalysis.barriers,
+            observations_summary_formatted: fastAnalysis.transition_status,
+            followup_formatted: fastAnalysis.follow_up_areas,
           },
-          tokenUsage,
+          tokenUsage: fastTokenUsage,
         },
       };
 
       res.json(responseBody);
 
       const processedAt = new Date().toISOString();
-      Promise.all([
-        insertCallInfo({
-          callId: resolvedSourceId, careFlowId: care_flow_id || null,
-          processedDatetime: processed_datetime || processedAt, sourceType: source_type || null,
-          sourceId: resolvedSourceId, processedAt, processingTimeMs: processingTime,
-          promptVersion, promptVersionDate, contextValues,
-          transcriptLength: source_text.length, summary: analysis.summary,
-          followUpAreas: analysis.follow_up_areas, transitionStatus: analysis.transition_status,
-          promptTokens: tokenUsage.promptTokens, completionTokens: tokenUsage.completionTokens,
-          totalTokens: tokenUsage.totalTokens, estimatedCost: tokenUsage.estimatedCost,
-          status: "success", requestBody: requestBodyJson, requestHeaders: requestHeadersJson,
-          responseJson: JSON.stringify(analysis),
-          client: resolvedClient, pathway: resolvedPathway,
-        }),
-        insertCallObservations(resolvedSourceId, analysis.observations),
-        insertCallQAPairs(resolvedSourceId, analysis.qa_pairs),
-        insertCallBarriers(resolvedSourceId, analysis.barriers),
-        insertCallQAResults(resolvedSourceId, analysis.call_qa || []),
-      ]).catch(err => console.error(`Background BigQuery writes failed for ${resolvedSourceId}:`, err.message));
+      const bgStart = Date.now();
+      (async () => {
+        try {
+          const bgResult = await analyzeTranscriptBackground(
+            resolvedSourceId, source_text.trim(), activeObs, callQAPrompts
+          );
+          const bgTime = Date.now() - bgStart;
+          console.log(`[AWELL-BG] Background Gemini completed for ${resolvedSourceId} in ${bgTime}ms (${bgResult.qa_pairs.length} qa_pairs, ${bgResult.call_qa.length} call_qa)`);
+
+          const fullAnalysis = {
+            ...fastAnalysis,
+            qa_pairs: bgResult.qa_pairs,
+            call_qa: bgResult.call_qa,
+          };
+
+          const combinedTokenUsage = {
+            promptTokens: fastTokenUsage.promptTokens + bgResult.tokenUsage.promptTokens,
+            completionTokens: fastTokenUsage.completionTokens + bgResult.tokenUsage.completionTokens,
+            totalTokens: fastTokenUsage.totalTokens + bgResult.tokenUsage.totalTokens,
+            estimatedCost: fastTokenUsage.estimatedCost + bgResult.tokenUsage.estimatedCost,
+          };
+
+          await Promise.all([
+            insertCallInfo({
+              callId: resolvedSourceId, careFlowId: care_flow_id || null,
+              processedDatetime: processed_datetime || processedAt, sourceType: source_type || null,
+              sourceId: resolvedSourceId, processedAt, processingTimeMs: processingTime,
+              promptVersion, promptVersionDate, contextValues,
+              transcriptLength: source_text.length, summary: fullAnalysis.summary || "",
+              followUpAreas: fullAnalysis.follow_up_areas || "", transitionStatus: fullAnalysis.transition_status || "",
+              promptTokens: combinedTokenUsage.promptTokens, completionTokens: combinedTokenUsage.completionTokens,
+              totalTokens: combinedTokenUsage.totalTokens, estimatedCost: combinedTokenUsage.estimatedCost,
+              status: "success", requestBody: requestBodyJson, requestHeaders: requestHeadersJson,
+              responseJson: JSON.stringify(fullAnalysis),
+              client: resolvedClient, pathway: resolvedPathway,
+            }),
+            insertCallObservations(resolvedSourceId, fullAnalysis.observations || []),
+            insertCallQAPairs(resolvedSourceId, bgResult.qa_pairs),
+            insertCallBarriers(resolvedSourceId, fullAnalysis.barriers || []),
+            insertCallQAResults(resolvedSourceId, bgResult.call_qa),
+          ]);
+          console.log(`[AWELL-BG] All BigQuery writes completed for ${resolvedSourceId}`);
+        } catch (bgErr: any) {
+          console.error(`[AWELL-BG] Background processing FAILED for ${resolvedSourceId}:`, bgErr.message);
+          insertCallInfo({
+            callId: resolvedSourceId, careFlowId: care_flow_id || null,
+            processedDatetime: processed_datetime || processedAt, sourceType: source_type || null,
+            sourceId: resolvedSourceId, processedAt, processingTimeMs: processingTime,
+            promptVersion, promptVersionDate, contextValues,
+            transcriptLength: source_text.length, summary: fastAnalysis.summary || "",
+            followUpAreas: fastAnalysis.follow_up_areas || "", transitionStatus: fastAnalysis.transition_status || "",
+            promptTokens: fastTokenUsage.promptTokens, completionTokens: fastTokenUsage.completionTokens,
+            totalTokens: fastTokenUsage.totalTokens, estimatedCost: fastTokenUsage.estimatedCost,
+            status: "success_partial", requestBody: requestBodyJson, requestHeaders: requestHeadersJson,
+            responseJson: JSON.stringify(fastAnalysis),
+            client: resolvedClient, pathway: resolvedPathway,
+            errorMessage: `Background processing failed: ${bgErr.message}`,
+          }),
+          insertCallObservations(resolvedSourceId, fastAnalysis.observations || []).catch(() => {}),
+          insertCallBarriers(resolvedSourceId, fastAnalysis.barriers || []).catch(() => {}),
+          console.error(`[AWELL-BG] Saved partial results (fast-only) for ${resolvedSourceId}`);
+        }
+      })();
 
     } catch (error: any) {
       const processingTime = Date.now() - startTime;

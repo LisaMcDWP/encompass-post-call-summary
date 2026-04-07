@@ -329,6 +329,51 @@ SOURCE TEXT:
 {{SOURCE_TEXT}}`;
 }
 
+function buildGeminiModel() {
+  const vertex = getVertexAI();
+  return vertex.getGenerativeModel({
+    model: "gemini-2.0-flash-001",
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.2,
+    },
+  });
+}
+
+function resolvePrompt(template: string, sourceId: string, sourceText: string, contextParams?: ContextParameter[], contextValues?: Record<string, string>): string {
+  let prompt = template
+    .replace("{{SOURCE_ID}}", sourceId)
+    .replace("{{SOURCE_TEXT}}", sourceText);
+  if (contextParams && contextValues) {
+    for (const param of contextParams) {
+      const placeholder = `{{CONTEXT_${param.name.toUpperCase()}}}`;
+      const val = contextValues[param.name] || "N/A";
+      prompt = prompt.replace(placeholder, val);
+    }
+  }
+  return prompt;
+}
+
+function extractTokenUsage(response: any) {
+  const usageMetadata = response.usageMetadata;
+  const promptTokens = usageMetadata?.promptTokenCount || 0;
+  const completionTokens = usageMetadata?.candidatesTokenCount || 0;
+  const totalTokens = usageMetadata?.totalTokenCount || 0;
+  const estimatedCost = (promptTokens * 0.10 / 1_000_000) + (completionTokens * 0.40 / 1_000_000);
+  return { promptTokens, completionTokens, totalTokens, estimatedCost };
+}
+
+function parseGeminiResponse(response: any): any {
+  const text = response.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("No response from Gemini model");
+  try {
+    return JSON.parse(text);
+  } catch (parseError) {
+    console.error("Gemini returned invalid JSON:", text.substring(0, 500));
+    throw new Error("Gemini model returned invalid JSON. Please try again.");
+  }
+}
+
 export async function analyzeTranscript(
   sourceId: string,
   sourceText: string,
@@ -341,83 +386,195 @@ export async function analyzeTranscript(
   barriersGuidance?: string,
   callQAPrompts?: CallQAPrompt[]
 ): Promise<{ analysis: TranscriptAnalysis; promptUsed: string; tokenUsage: { promptTokens: number; completionTokens: number; totalTokens: number; estimatedCost: number } }> {
-  const vertex = getVertexAI();
-
-  const model = vertex.getGenerativeModel({
-    model: "gemini-2.0-flash-001",
-    generationConfig: {
-      responseMimeType: "application/json",
-      temperature: 0.2,
-    },
-  });
-
+  const model = buildGeminiModel();
   const template = customPrompt || buildPromptTemplate(activeObservations, summaryInstruction, contextParams, observationsGuidance, barriersGuidance, callQAPrompts, contextValues);
-  let prompt = template
-    .replace("{{SOURCE_ID}}", sourceId)
-    .replace("{{SOURCE_TEXT}}", sourceText);
-
-  if (contextParams && contextValues) {
-    for (const param of contextParams) {
-      const placeholder = `{{CONTEXT_${param.name.toUpperCase()}}}`;
-      const val = contextValues[param.name] || "N/A";
-      prompt = prompt.replace(placeholder, val);
-    }
-  }
+  const prompt = resolvePrompt(template, sourceId, sourceText, contextParams, contextValues);
 
   const result = await model.generateContent(prompt);
   const response = result.response;
+  const tokenUsage = extractTokenUsage(response);
+  const parsed = parseGeminiResponse(response);
 
-  const usageMetadata = response.usageMetadata;
-  const promptTokens = usageMetadata?.promptTokenCount || 0;
-  const completionTokens = usageMetadata?.candidatesTokenCount || 0;
-  const totalTokens = usageMetadata?.totalTokenCount || 0;
-  const estimatedCost = (promptTokens * 0.10 / 1_000_000) + (completionTokens * 0.40 / 1_000_000);
-
-  const text =
-    response.candidates?.[0]?.content?.parts?.[0]?.text;
-
-  if (!text) {
-    throw new Error("No response from Gemini model");
-  }
-
-  let parsed: any;
-  try {
-    parsed = JSON.parse(text);
-  } catch (parseError) {
-    console.error("Gemini returned invalid JSON:", text.substring(0, 500));
-    throw new Error("Gemini model returned invalid JSON. Please try again.");
-  }
-
-  if (
-    !parsed.summary ||
-    !parsed.transition_status ||
-    !parsed.follow_up_areas
-  ) {
+  if (!parsed.summary || !parsed.transition_status || !parsed.follow_up_areas) {
     console.error("Gemini returned unexpected structure:", JSON.stringify(parsed).substring(0, 500));
     throw new Error("Gemini response missing required fields. Please try again.");
   }
+  if (!Array.isArray(parsed.observations)) parsed.observations = [];
+  if (!Array.isArray(parsed.qa_pairs)) parsed.qa_pairs = [];
+  if (!Array.isArray(parsed.barriers)) parsed.barriers = [];
+  if (!Array.isArray(parsed.call_qa)) parsed.call_qa = [];
 
-  if (!Array.isArray(parsed.observations)) {
-    parsed.observations = [];
+  return { analysis: parsed as TranscriptAnalysis, promptUsed: prompt, tokenUsage };
+}
+
+export function buildFastPromptTemplate(activeObservations: Observation[], summaryInstruction?: string, contextParams?: ContextParameter[], observationsGuidance?: string, barriersGuidance?: string, contextValues?: Record<string, string>): string {
+  const instruction = summaryInstruction || DEFAULT_SUMMARY_INSTRUCTION;
+  const contextBlock = buildContextBlock(contextParams || []);
+  const topicCount = activeObservations.length;
+  const statusMappings = buildStatusMappings(activeObservations);
+  const summaryTopics = buildSummaryTopics(activeObservations);
+  const colorStyles = buildColorStylesBlock();
+  const observationsSchema = buildObservationsSchema(activeObservations, contextParams, contextValues);
+  const resolvedSummaryInstruction = instruction.replace("{{SUMMARY_TOPICS}}", summaryTopics || "general topics discussed");
+
+  if (activeObservations.length === 0) {
+    return `You are an expert healthcare call analyst for Guideway Care. Analyze the following patient interaction transcript and produce a structured JSON output.
+${contextBlock}
+Your response MUST be valid JSON with exactly this structure:
+{
+  "summary": "${resolvedSummaryInstruction}",
+  "observations": [],
+  "transition_status": "<p>No observation topics configured.</p>",
+  "follow_up_areas": "<p>No follow-up areas identified.</p>",
+  "barriers": []
+}
+
+Guidelines:
+- barriers: ${barriersGuidance || "Extract ANY barriers to care, recovery, or well-being. If no barriers are identified, return an empty array []."}
+Source ID: {{SOURCE_ID}}
+
+SOURCE TEXT:
+{{SOURCE_TEXT}}`;
   }
 
-  if (!Array.isArray(parsed.qa_pairs)) {
-    parsed.qa_pairs = [];
-  }
+  return `You are an expert healthcare call analyst for Guideway Care. Analyze the following patient interaction transcript and produce a structured JSON output.
+${contextBlock}
+###CORE FORMATTING RULES
+1. Use Third Person Perspective
+   - "Patient reports..." (when patient answered directly)
+   - "Patient's [relationship] reports..." (when family/caregiver answered)
+   - Never use first person ("I", "we") or second person ("you")
+2. Present Information Objectively
+   - Report exactly what was stated without interpretation
+   - Maintain factual tone without emotional language
 
-  if (!Array.isArray(parsed.barriers)) {
-    parsed.barriers = [];
-  }
+Your response MUST be valid JSON with exactly this structure:
+{
+  "summary": "${resolvedSummaryInstruction}",
+  "observations": [
+${observationsSchema}
+  ],
+  "transition_status": "A single HTML string covering ALL ${topicCount} observation topics. This value MUST be a valid JSON string. Do NOT start with a quote character. Use inline styles for color-coded status badges. For enum topics, format as: <b>Topic:</b> <span style='INLINE_STYLE'>ENUM_VALUE</span><br>Detail sentence.<br><br> — where ENUM_VALUE is the actual observation value and INLINE_STYLE is the corresponding color style. NEVER use the color name as the badge text. Use these exact inline styles: ${colorStyles} — Mappings: ${statusMappings}. ALWAYS include all ${topicCount} topics. IMPORTANT: Order discussed topics first, 'Not Discussed' topics at the bottom.",
+  "follow_up_areas": "A single HTML string listing follow-up areas. Use <ul>/<li> with <b> for topic names. Only include items with issues. If none, use '<p>No follow-up areas identified.</p>'.",
+  "barriers": [
+    {
+      "barrier": "Short description of the barrier",
+      "context": "Full context and details about the barrier",
+      "category": "Category (Transportation, Financial, Medication Access, Social Support, Health Literacy, Language, Housing, Caregiver Burden, Emotional/Mental Health, Physical Limitation, Insurance/Coverage, Other)",
+      "severity": "high, medium, or low",
+      "observation_name": "Related observation name or null",
+      "observation_display_name": "Related observation display name or null",
+      "evidence": "Direct quote from the transcript"
+    }
+  ]
+}
 
-  if (!Array.isArray(parsed.call_qa)) {
-    parsed.call_qa = [];
-  }
+Guidelines:
+- All output must use third person perspective.
+- DO NOT HALLUCINATE OR INFER: Only extract information explicitly discussed. Mark undiscussed topics as "Not Discussed".
+- summary: Brief overall summary based on questions asked and patient's responses.
+- observations: Return exactly ${topicCount} objects. IMPORTANT: The /* EVALUATION GUIDANCE */ comments are instructions for choosing values — do NOT copy them into the detail field.${observationsGuidance ? `\n- GENERAL OBSERVATIONS GUIDANCE: ${observationsGuidance}` : ""}
+- transition_status: Return a single HTML string. Detail text MUST be original, not copied from guidance.
+- follow_up_areas: Return a single HTML string.
+- barriers: ${barriersGuidance || "Extract ANY barriers to care, recovery, or well-being. Include explicit and implied barriers. If none, return an empty array []."}
+Source ID: {{SOURCE_ID}}
 
-  return {
-    analysis: parsed as TranscriptAnalysis,
-    promptUsed: prompt,
-    tokenUsage: { promptTokens, completionTokens, totalTokens, estimatedCost },
-  };
+SOURCE TEXT:
+{{SOURCE_TEXT}}`;
+}
+
+export function buildBackgroundPromptTemplate(activeObservations: Observation[], callQAPrompts?: CallQAPrompt[]): string {
+  const obsNames = activeObservations.map(o => `"${o.name}" ("${o.displayName}")`).join(", ");
+
+  return `You are an expert healthcare call analyst. Analyze the following transcript and extract detailed Q&A pairs and call quality evaluation.
+
+Your response MUST be valid JSON with exactly this structure:
+{
+  "qa_pairs": [
+    {
+      "question": "The question that was asked",
+      "answer": "The response given",
+      "asked_by": "care_guide or patient or caregiver",
+      "answered_by": "patient or caregiver or care_guide",
+      "observation_name": "Matching observation name or null",
+      "observation_display_name": "Matching observation display name or null",
+      "category": "A short category label"
+    }
+  ],
+  "call_qa": [${(callQAPrompts || []).length > 0 ? `
+    {
+      "name": "The prompt name",
+      "display_name": "The prompt display name",
+      "value": "The evaluated response value",
+      "detail": "Brief explanation",
+      "evidence": "Supporting quote or null"
+    }
+  ` : ""}]
+}
+
+Guidelines:
+- qa_pairs: Extract EVERY question and answer exchange from the transcript, in chronological order. Include ALL exchanges. Try to match each Q&A to configured observations: ${obsNames || "none configured"}. Set observation_name/display_name to null if no match. Assign a descriptive category.${(callQAPrompts || []).length > 0 ? `
+- call_qa: For each prompt, assess the overall call:
+${buildCallQABlock(callQAPrompts || [])}
+  Return one object per prompt.` : `
+- call_qa: Return an empty array [].`}
+Source ID: {{SOURCE_ID}}
+
+SOURCE TEXT:
+{{SOURCE_TEXT}}`;
+}
+
+export async function analyzeTranscriptFast(
+  sourceId: string,
+  sourceText: string,
+  activeObservations: Observation[],
+  summaryInstruction?: string,
+  contextParams?: ContextParameter[],
+  contextValues?: Record<string, string>,
+  observationsGuidance?: string,
+  barriersGuidance?: string,
+): Promise<{ analysis: Partial<TranscriptAnalysis>; tokenUsage: { promptTokens: number; completionTokens: number; totalTokens: number; estimatedCost: number } }> {
+  const model = buildGeminiModel();
+  const template = buildFastPromptTemplate(activeObservations, summaryInstruction, contextParams, observationsGuidance, barriersGuidance, contextValues);
+  const prompt = resolvePrompt(template, sourceId, sourceText, contextParams, contextValues);
+
+  console.log(`[FAST] Starting Gemini call for ${sourceId}`);
+  const result = await model.generateContent(prompt);
+  const response = result.response;
+  const tokenUsage = extractTokenUsage(response);
+  const parsed = parseGeminiResponse(response);
+  console.log(`[FAST] Gemini completed for ${sourceId} in ${tokenUsage.totalTokens} tokens`);
+
+  if (!parsed.summary || !parsed.transition_status || !parsed.follow_up_areas) {
+    throw new Error("Fast Gemini response missing required fields.");
+  }
+  if (!Array.isArray(parsed.observations)) parsed.observations = [];
+  if (!Array.isArray(parsed.barriers)) parsed.barriers = [];
+
+  return { analysis: parsed, tokenUsage };
+}
+
+export async function analyzeTranscriptBackground(
+  sourceId: string,
+  sourceText: string,
+  activeObservations: Observation[],
+  callQAPrompts?: CallQAPrompt[],
+): Promise<{ qa_pairs: QAPair[]; call_qa: CallQAResult[]; tokenUsage: { promptTokens: number; completionTokens: number; totalTokens: number; estimatedCost: number } }> {
+  const model = buildGeminiModel();
+  const template = buildBackgroundPromptTemplate(activeObservations, callQAPrompts);
+  const prompt = resolvePrompt(template, sourceId, sourceText);
+
+  console.log(`[BACKGROUND] Starting Gemini call for ${sourceId}`);
+  const result = await model.generateContent(prompt);
+  const response = result.response;
+  const tokenUsage = extractTokenUsage(response);
+  const parsed = parseGeminiResponse(response);
+  console.log(`[BACKGROUND] Gemini completed for ${sourceId} in ${tokenUsage.totalTokens} tokens`);
+
+  if (!Array.isArray(parsed.qa_pairs)) parsed.qa_pairs = [];
+  if (!Array.isArray(parsed.call_qa)) parsed.call_qa = [];
+
+  return { qa_pairs: parsed.qa_pairs, call_qa: parsed.call_qa, tokenUsage };
 }
 
 export async function aiObservationAssistant(
