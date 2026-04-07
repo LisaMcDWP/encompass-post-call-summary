@@ -220,25 +220,123 @@ export async function registerRoutes(
         return res.status(401).json({ status: "error", message: "Invalid or missing API key" });
       }
     }
-    const originalJson = res.json.bind(res);
-    res.json = (body: any) => {
-      if (body?.data?.analysis) {
-        const { transition_status, follow_up_areas, ...restAnalysis } = body.data.analysis;
-        body = {
-          ...body,
-          data: {
-            ...body.data,
-            analysis: {
-              ...restAnalysis,
-              observations_summary_formatted: transition_status,
-              followup_formatted: follow_up_areas,
-            },
-          },
-        };
+
+    const startTime = Date.now();
+    const { care_flow_id, processed_datetime, source_type, source_id, source_text, context, client: reqClient, pathway: reqPathway, ...rest } = req.body;
+    const { source_text: _omit, ...requestMeta } = req.body;
+    const requestBodyJson = JSON.stringify(requestMeta);
+
+    const relevantHeaders: Record<string, string> = {};
+    for (const [key, value] of Object.entries(req.headers)) {
+      const lk = key.toLowerCase();
+      if (lk.startsWith("x-awell-") || lk.startsWith("x-gwc-") || lk === "x-api-key" || lk === "x-forwarded-for" || lk === "user-agent") {
+        relevantHeaders[key] = String(value);
       }
-      return originalJson(body);
-    };
-    return handleAnalyze(req, res);
+    }
+    const requestHeadersJson = Object.keys(relevantHeaders).length > 0 ? JSON.stringify(relevantHeaders) : undefined;
+
+    if (!source_text || typeof source_text !== "string" || source_text.trim().length === 0) {
+      return res.status(400).json({ status: "error", message: "A non-empty source_text string is required." });
+    }
+
+    const resolvedSourceId = source_id || `call_${randomUUID().slice(0, 12)}`;
+    const clientPathwayId = req.body.client_pathway_id ? Number(req.body.client_pathway_id) : null;
+
+    try {
+      let cpId = clientPathwayId;
+      if (!cpId) {
+        const allCPs = await storage.getClientPathways();
+        if (reqClient && reqPathway) {
+          const match = allCPs.find((cp: any) => cp.client === reqClient && cp.pathway === reqPathway);
+          if (match) cpId = match.id;
+        }
+        if (!cpId && allCPs.length > 0) cpId = allCPs[0].id;
+      }
+      if (!cpId) {
+        return res.status(400).json({ status: "error", message: "No client/pathway configuration found." });
+      }
+
+      const cpRecord = await storage.getClientPathway(cpId);
+      const resolvedClient = reqClient || cpRecord?.client || null;
+      const resolvedPathway = reqPathway || cpRecord?.pathway || null;
+
+      const { prompt: _promptText, promptVersion, promptVersionDate } = await getPromptWithVersion(cpId);
+      const activeObs = await storage.getActiveObservations(cpId);
+      const summaryInstruction = await storage.getSetting(cpId, "summary_instruction");
+      const observationsGuidance = await storage.getSetting(cpId, "observations_prompt_guidance");
+      const barriersGuidance = await storage.getSetting(cpId, "barriers_prompt_guidance");
+      const contextParams = await storage.getActiveContextParameters(cpId);
+      const contextValues: Record<string, string> = {};
+      const contextSource = (context && typeof context === "object") ? context : rest;
+      for (const param of contextParams) {
+        if (contextSource[param.name] !== undefined && contextSource[param.name] !== null) {
+          contextValues[param.name] = String(contextSource[param.name]);
+        }
+      }
+      const callQAPrompts = await storage.getActiveCallQAPrompts(cpId);
+
+      const { analysis, tokenUsage } = await analyzeTranscript(
+        resolvedSourceId, source_text.trim(), activeObs, undefined,
+        summaryInstruction || undefined, contextParams, contextValues,
+        observationsGuidance || undefined, barriersGuidance || undefined, callQAPrompts
+      );
+      const processingTime = Date.now() - startTime;
+
+      const { transition_status, follow_up_areas, ...restAnalysis } = analysis;
+      const responseBody = {
+        status: "success",
+        data: {
+          care_flow_id: care_flow_id || null,
+          processed_datetime: processed_datetime || new Date().toISOString(),
+          source_type: source_type || null,
+          source_id: resolvedSourceId,
+          context: contextValues,
+          processedAt: new Date().toISOString(),
+          processingTimeMs: processingTime,
+          prompt_version: promptVersion,
+          prompt_version_date: promptVersionDate,
+          analysis: {
+            ...restAnalysis,
+            observations_summary_formatted: transition_status,
+            followup_formatted: follow_up_areas,
+          },
+          tokenUsage,
+        },
+      };
+
+      res.json(responseBody);
+
+      const processedAt = new Date().toISOString();
+      Promise.all([
+        insertCallInfo({
+          callId: resolvedSourceId, careFlowId: care_flow_id || null,
+          processedDatetime: processed_datetime || processedAt, sourceType: source_type || null,
+          sourceId: resolvedSourceId, processedAt, processingTimeMs: processingTime,
+          promptVersion, promptVersionDate, contextValues,
+          transcriptLength: source_text.length, summary: analysis.summary,
+          followUpAreas: analysis.follow_up_areas, transitionStatus: analysis.transition_status,
+          promptTokens: tokenUsage.promptTokens, completionTokens: tokenUsage.completionTokens,
+          totalTokens: tokenUsage.totalTokens, estimatedCost: tokenUsage.estimatedCost,
+          status: "success", requestBody: requestBodyJson, requestHeaders: requestHeadersJson,
+          client: resolvedClient, pathway: resolvedPathway,
+        }),
+        insertCallObservations(resolvedSourceId, analysis.observations),
+        insertCallQAPairs(resolvedSourceId, analysis.qa_pairs),
+        insertCallBarriers(resolvedSourceId, analysis.barriers),
+        insertCallQAResults(resolvedSourceId, analysis.call_qa || []),
+      ]).catch(err => console.error(`Background BigQuery writes failed for ${resolvedSourceId}:`, err.message));
+
+    } catch (error: any) {
+      const processingTime = Date.now() - startTime;
+      insertCallInfo({
+        callId: resolvedSourceId, processedAt: new Date().toISOString(),
+        processingTimeMs: processingTime, transcriptLength: source_text.length,
+        status: "error", errorMessage: error.message,
+        requestBody: requestBodyJson, requestHeaders: requestHeadersJson,
+      }).catch(() => {});
+      console.error("Transcript analysis failed:", error);
+      return res.status(500).json({ status: "error", message: "Failed to analyze transcript. " + error.message });
+    }
   });
 
   app.post("/api/observations/ai-suggest", async (req, res) => {
