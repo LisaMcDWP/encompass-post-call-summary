@@ -114,7 +114,7 @@ function buildSummaryTopics(obs: Observation[]): string {
 }
 
 function buildObservationsSchema(obs: Observation[], contextParams?: ContextParameter[], contextValues?: Record<string, string>): string {
-  const entries = obs.map(o => {
+  const entries = obs.map((o, idx) => {
     const valuesNote = o.valueType === "enum" && Array.isArray(o.value) && o.value.length > 0
       ? `One of: ${(o.value as EnumValue[]).map(v => `"${v.label}"`).join(", ")}, or null if not discussed`
       : o.valueType === "boolean"
@@ -145,9 +145,9 @@ function buildObservationsSchema(obs: Observation[], contextParams?: ContextPara
       : contextHint
         ? ` /* ${contextHint} */`
         : "";
-    return `    { "name": "${o.name}", "display_name": "${o.displayName}", "domain": "${o.domain}", "value_type": "${o.valueType}", "value": "${valuesNote}", "detail": "Write a brief 1-2 sentence explanation of what was observed in the transcript for this topic. Do NOT repeat the evaluation guidance — describe what actually happened.", "evidence": "Direct quote or specific reference from the transcript that supports this observation value. Use null if the topic was not discussed.", "confidence": "One of: high, medium, low — how confident the analysis is based on the clarity and directness of the transcript evidence" }${guidanceComment}`;
+    return `    /* OBSERVATION ${idx + 1} of ${obs.length} — "${o.name}" */ { "name": "${o.name}", "display_name": "${o.displayName}", "domain": "${o.domain}", "value_type": "${o.valueType}", "value": "${valuesNote}", "detail": "Write a brief 1-2 sentence explanation of what was observed in the transcript for this topic. Do NOT repeat the evaluation guidance — describe what actually happened.", "evidence": "Direct quote or specific reference from the transcript that supports this observation value. Use null if the topic was not discussed.", "confidence": "One of: high, medium, low — how confident the analysis is based on the clarity and directness of the transcript evidence" }${guidanceComment}`;
   });
-  return entries.join(",\n");
+  return `    /* OUTPUT EXACTLY ${obs.length} observation objects below — one per topic, indices 1 through ${obs.length}. Each name MUST appear exactly once. NEVER repeat a name. */\n` + entries.join(",\n");
 }
 
 export const DEFAULT_SUMMARY_INSTRUCTION = "A brief overall summary of the call based on the questions asked of the patient and their responses. If the patient answered the call, include the following topics at a minimum (only comment on what the patient actually responded to): {{SUMMARY_TOPICS}}.";
@@ -348,7 +348,7 @@ function buildGeminiModel() {
     model: "gemini-2.5-flash",
     generationConfig: {
       responseMimeType: "application/json",
-      temperature: 0.2,
+      temperature: 0.1,
     },
   });
 }
