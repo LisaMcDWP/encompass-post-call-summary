@@ -279,7 +279,7 @@ export async function registerRoutes(
       const { analysis: fastAnalysis, tokenUsage: fastTokenUsage } = await analyzeTranscriptFast(
         resolvedSourceId, source_text.trim(), activeObs,
         summaryInstruction || undefined, contextParams, contextValues,
-        observationsGuidance || undefined, barriersGuidance || undefined,
+        observationsGuidance || undefined,
       );
       const processingTime = Date.now() - startTime;
       console.log(`[AWELL] Fast Gemini completed for ${resolvedSourceId} in ${processingTime}ms — responding to Awell now`);
@@ -299,7 +299,6 @@ export async function registerRoutes(
           analysis: {
             summary: fastAnalysis.summary,
             observations: fastAnalysis.observations,
-            barriers: fastAnalysis.barriers,
             observations_summary_formatted: fastAnalysis.transition_status,
             followup_formatted: fastAnalysis.follow_up_areas,
           },
@@ -314,14 +313,16 @@ export async function registerRoutes(
       (async () => {
         try {
           const bgResult = await analyzeTranscriptBackground(
-            resolvedSourceId, source_text.trim(), activeObs, callQAPrompts
+            resolvedSourceId, source_text.trim(), activeObs, callQAPrompts,
+            barriersGuidance || undefined,
           );
           const bgTime = Date.now() - bgStart;
-          console.log(`[AWELL-BG] Background Gemini completed for ${resolvedSourceId} in ${bgTime}ms (${bgResult.qa_pairs.length} qa_pairs, ${bgResult.call_qa.length} call_qa)`);
+          console.log(`[AWELL-BG] Background Gemini completed for ${resolvedSourceId} in ${bgTime}ms (${bgResult.qa_pairs.length} qa_pairs, ${bgResult.barriers.length} barriers, ${bgResult.call_qa.length} call_qa)`);
 
           const fullAnalysis = {
             ...fastAnalysis,
             qa_pairs: bgResult.qa_pairs,
+            barriers: bgResult.barriers,
             call_qa: bgResult.call_qa,
           };
 
@@ -348,7 +349,7 @@ export async function registerRoutes(
             }),
             insertCallObservations(resolvedSourceId, fullAnalysis.observations || []),
             insertCallQAPairs(resolvedSourceId, bgResult.qa_pairs),
-            insertCallBarriers(resolvedSourceId, fullAnalysis.barriers || []),
+            insertCallBarriers(resolvedSourceId, bgResult.barriers),
             insertCallQAResults(resolvedSourceId, bgResult.call_qa),
           ]);
           console.log(`[AWELL-BG] All BigQuery writes completed for ${resolvedSourceId}`);
@@ -367,10 +368,9 @@ export async function registerRoutes(
             responseJson: JSON.stringify(fastAnalysis),
             client: resolvedClient, pathway: resolvedPathway,
             errorMessage: `Background processing failed: ${bgErr.message}`,
-          }),
-          insertCallObservations(resolvedSourceId, fastAnalysis.observations || []).catch(() => {}),
-          insertCallBarriers(resolvedSourceId, fastAnalysis.barriers || []).catch(() => {}),
-          console.error(`[AWELL-BG] Saved partial results (fast-only) for ${resolvedSourceId}`);
+          }).catch(() => {});
+          insertCallObservations(resolvedSourceId, fastAnalysis.observations || []).catch(() => {});
+          console.error(`[AWELL-BG] Saved partial results (fast-only, no barriers/qa) for ${resolvedSourceId}`);
         }
       })();
 

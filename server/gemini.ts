@@ -425,12 +425,11 @@ Your response MUST be valid JSON with exactly this structure:
   "summary": "${resolvedSummaryInstruction}",
   "observations": [],
   "transition_status": "<p>No observation topics configured.</p>",
-  "follow_up_areas": "<p>No follow-up areas identified.</p>",
-  "barriers": []
+  "follow_up_areas": "<p>No follow-up areas identified.</p>"
 }
 
 Guidelines:
-- barriers: ${barriersGuidance || "Extract ANY barriers to care, recovery, or well-being. If no barriers are identified, return an empty array []."}
+- summary: Brief overall summary based on questions asked and patient's responses.
 Source ID: {{SOURCE_ID}}
 
 SOURCE TEXT:
@@ -455,18 +454,7 @@ Your response MUST be valid JSON with exactly this structure:
 ${observationsSchema}
   ],
   "transition_status": "A single HTML string covering ALL ${topicCount} observation topics. This value MUST be a valid JSON string. Do NOT start with a quote character. Use inline styles for color-coded status badges. For enum topics, format as: <b>Topic:</b> <span style='INLINE_STYLE'>ENUM_VALUE</span><br>Detail sentence.<br><br> — where ENUM_VALUE is the actual observation value and INLINE_STYLE is the corresponding color style. NEVER use the color name as the badge text. Use these exact inline styles: ${colorStyles} — Mappings: ${statusMappings}. ALWAYS include all ${topicCount} topics. IMPORTANT: Order discussed topics first, 'Not Discussed' topics at the bottom.",
-  "follow_up_areas": "A single HTML string listing follow-up areas. Use <ul>/<li> with <b> for topic names. Only include items with issues. If none, use '<p>No follow-up areas identified.</p>'.",
-  "barriers": [
-    {
-      "barrier": "Short description of the barrier",
-      "context": "Full context and details about the barrier",
-      "category": "Category (Transportation, Financial, Medication Access, Social Support, Health Literacy, Language, Housing, Caregiver Burden, Emotional/Mental Health, Physical Limitation, Insurance/Coverage, Other)",
-      "severity": "high, medium, or low",
-      "observation_name": "Related observation name or null",
-      "observation_display_name": "Related observation display name or null",
-      "evidence": "Direct quote from the transcript"
-    }
-  ]
+  "follow_up_areas": "A single HTML string listing follow-up areas. Use <ul>/<li> with <b> for topic names. Only include items with issues. If none, use '<p>No follow-up areas identified.</p>'."
 }
 
 Guidelines:
@@ -476,17 +464,16 @@ Guidelines:
 - observations: Return exactly ${topicCount} objects. IMPORTANT: The /* EVALUATION GUIDANCE */ comments are instructions for choosing values — do NOT copy them into the detail field.${observationsGuidance ? `\n- GENERAL OBSERVATIONS GUIDANCE: ${observationsGuidance}` : ""}
 - transition_status: Return a single HTML string. Detail text MUST be original, not copied from guidance.
 - follow_up_areas: Return a single HTML string.
-- barriers: ${barriersGuidance || "Extract ANY barriers to care, recovery, or well-being. Include explicit and implied barriers. If none, return an empty array []."}
 Source ID: {{SOURCE_ID}}
 
 SOURCE TEXT:
 {{SOURCE_TEXT}}`;
 }
 
-export function buildBackgroundPromptTemplate(activeObservations: Observation[], callQAPrompts?: CallQAPrompt[]): string {
+export function buildBackgroundPromptTemplate(activeObservations: Observation[], callQAPrompts?: CallQAPrompt[], barriersGuidance?: string): string {
   const obsNames = activeObservations.map(o => `"${o.name}" ("${o.displayName}")`).join(", ");
 
-  return `You are an expert healthcare call analyst. Analyze the following transcript and extract detailed Q&A pairs and call quality evaluation.
+  return `You are an expert healthcare call analyst. Analyze the following transcript and extract detailed Q&A pairs, barriers to care, and call quality evaluation.
 
 Your response MUST be valid JSON with exactly this structure:
 {
@@ -501,6 +488,17 @@ Your response MUST be valid JSON with exactly this structure:
       "category": "A short category label"
     }
   ],
+  "barriers": [
+    {
+      "barrier": "Short description of the barrier",
+      "context": "Full context and details about the barrier — what was said, the circumstances, and any relevant background that helps understand the barrier's impact on the patient's care",
+      "category": "Category of barrier (e.g. Transportation, Financial, Medication Access, Social Support, Health Literacy, Language, Housing, Caregiver Burden, Emotional/Mental Health, Physical Limitation, Insurance/Coverage, Other)",
+      "severity": "high, medium, or low based on potential impact on patient care",
+      "observation_name": "The observation name this barrier relates to (from configured observations), or null",
+      "observation_display_name": "The display name of the related observation, or null",
+      "evidence": "Direct quote from the transcript that reveals or supports this barrier"
+    }
+  ],
   "call_qa": [${(callQAPrompts || []).length > 0 ? `
     {
       "name": "The prompt name",
@@ -513,7 +511,8 @@ Your response MUST be valid JSON with exactly this structure:
 }
 
 Guidelines:
-- qa_pairs: Extract EVERY question and answer exchange from the transcript, in chronological order. Include ALL exchanges. Try to match each Q&A to configured observations: ${obsNames || "none configured"}. Set observation_name/display_name to null if no match. Assign a descriptive category.${(callQAPrompts || []).length > 0 ? `
+- qa_pairs: Extract EVERY question and answer exchange from the transcript, in chronological order. Include ALL exchanges. Try to match each Q&A to configured observations: ${obsNames || "none configured"}. Set observation_name/display_name to null if no match. Assign a descriptive category.
+- barriers: ${barriersGuidance || "Extract ANY barriers to care, recovery, or well-being that the patient or caregiver mentions or that can be identified from the conversation. Include barriers that are explicitly stated AND those clearly implied. If no barriers are identified, return an empty array []. Assign a severity (high/medium/low) based on potential impact on patient outcomes."}${(callQAPrompts || []).length > 0 ? `
 - call_qa: For each prompt, assess the overall call:
 ${buildCallQABlock(callQAPrompts || [])}
   Return one object per prompt.` : `
@@ -532,10 +531,9 @@ export async function analyzeTranscriptFast(
   contextParams?: ContextParameter[],
   contextValues?: Record<string, string>,
   observationsGuidance?: string,
-  barriersGuidance?: string,
 ): Promise<{ analysis: Partial<TranscriptAnalysis>; tokenUsage: { promptTokens: number; completionTokens: number; totalTokens: number; estimatedCost: number } }> {
   const model = buildGeminiModel();
-  const template = buildFastPromptTemplate(activeObservations, summaryInstruction, contextParams, observationsGuidance, barriersGuidance, contextValues);
+  const template = buildFastPromptTemplate(activeObservations, summaryInstruction, contextParams, observationsGuidance, undefined, contextValues);
   const prompt = resolvePrompt(template, sourceId, sourceText, contextParams, contextValues);
 
   console.log(`[FAST] Starting Gemini call for ${sourceId}`);
@@ -549,7 +547,6 @@ export async function analyzeTranscriptFast(
     throw new Error("Fast Gemini response missing required fields.");
   }
   if (!Array.isArray(parsed.observations)) parsed.observations = [];
-  if (!Array.isArray(parsed.barriers)) parsed.barriers = [];
 
   return { analysis: parsed, tokenUsage };
 }
@@ -559,9 +556,10 @@ export async function analyzeTranscriptBackground(
   sourceText: string,
   activeObservations: Observation[],
   callQAPrompts?: CallQAPrompt[],
-): Promise<{ qa_pairs: QAPair[]; call_qa: CallQAResult[]; tokenUsage: { promptTokens: number; completionTokens: number; totalTokens: number; estimatedCost: number } }> {
+  barriersGuidance?: string,
+): Promise<{ qa_pairs: QAPair[]; barriers: Barrier[]; call_qa: CallQAResult[]; tokenUsage: { promptTokens: number; completionTokens: number; totalTokens: number; estimatedCost: number } }> {
   const model = buildGeminiModel();
-  const template = buildBackgroundPromptTemplate(activeObservations, callQAPrompts);
+  const template = buildBackgroundPromptTemplate(activeObservations, callQAPrompts, barriersGuidance);
   const prompt = resolvePrompt(template, sourceId, sourceText);
 
   console.log(`[BACKGROUND] Starting Gemini call for ${sourceId}`);
@@ -572,9 +570,10 @@ export async function analyzeTranscriptBackground(
   console.log(`[BACKGROUND] Gemini completed for ${sourceId} in ${tokenUsage.totalTokens} tokens`);
 
   if (!Array.isArray(parsed.qa_pairs)) parsed.qa_pairs = [];
+  if (!Array.isArray(parsed.barriers)) parsed.barriers = [];
   if (!Array.isArray(parsed.call_qa)) parsed.call_qa = [];
 
-  return { qa_pairs: parsed.qa_pairs, call_qa: parsed.call_qa, tokenUsage };
+  return { qa_pairs: parsed.qa_pairs, barriers: parsed.barriers, call_qa: parsed.call_qa, tokenUsage };
 }
 
 export async function aiObservationAssistant(
