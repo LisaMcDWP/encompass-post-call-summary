@@ -7,7 +7,7 @@ A full-stack application that provides a Gemini-powered transcript analysis API.
 - **Frontend**: React + Vite + Tailwind CSS v4 + shadcn/ui components
 - **Backend**: Express.js (Node/TypeScript)
 - **Database**: Google BigQuery (observations model + API logging)
-- **AI**: Google Vertex AI Gemini (`gemini-2.0-flash-001`) via `@google-cloud/vertexai`
+- **AI**: Google Vertex AI Gemini (`gemini-2.5-flash`) via `@google-cloud/vertexai`
 - **Logging**: Google BigQuery via `@google-cloud/bigquery`
 - **Auth**: GCP Service Account (shared between Gemini and BigQuery)
 
@@ -27,8 +27,22 @@ A full-stack application that provides a Gemini-powered transcript analysis API.
 - API processing (`/api/analyze`) resolves `client_pathway_id` from request body, then tries client/pathway string match, then falls back to first available CP
 - Batch processing uses the first configured client/pathway (or `clientPathwayId` query param)
 
+## Awell Webhook — Async Pattern
+The `/gwc_observation_summarization` endpoint supports both sync and async modes:
+- **Sync (default)**: Returns analysis inline (fast Gemini call). Background Gemini call for qa_pairs/barriers runs after response.
+- **Async**: Triggered by `"async": true` or providing a `webhook_url` in the request body. Returns `202 Accepted` with a `job_id` immediately. Runs a single complete Gemini call in background.
+- **Retrieve results**: `GET /gwc_observation_summarization/:job_id` returns `{ status: "processing" }`, `{ status: "completed", data: {...} }`, or `{ status: "failed", error: "..." }`.
+- **Webhook callback**: If `webhook_url` is provided, full results are POSTed to that URL when processing completes (with 3 retries).
+
+## Deduplication Safety Nets
+Gemini 2.5 Flash can produce duplicate items. Post-processing dedup applied to:
+- `observations` array → `deduplicateByName()` (by observation name)
+- `transition_status` HTML → `deduplicateTransitionStatus()` (by topic name in `<b>` tags)
+- `barriers` array → `deduplicateBarriers()` (by barrier text)
+- `call_qa` array → `deduplicateByName()` (by prompt name)
+
 ## Key Files
-- `server/routes.ts` — API endpoints (`POST /api/analyze`, `GET /api/prompt`, `GET /api/health`, observations CRUD, client-pathways CRUD)
+- `server/routes.ts` — API endpoints (`POST /api/analyze`, `GET /api/prompt`, `GET /api/health`, observations CRUD, client-pathways CRUD, async webhook)
 - `server/gemini.ts` — Vertex AI Gemini integration with dynamic prompt builder from observations
 - `server/bigquery.ts` — BigQuery logging: `call_info` (one row per call) + `call_observations` (one row per observation)
 - `server/storage.ts` — BigQueryStorage class with all CRUD operations scoped by `clientPathwayId`

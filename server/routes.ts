@@ -223,7 +223,8 @@ export async function registerRoutes(
     }
 
     const startTime = Date.now();
-    const { care_flow_id, processed_datetime, source_type, source_id, source_text, context, client: reqClient, pathway: reqPathway, ...rest } = req.body;
+    const { care_flow_id, processed_datetime, source_type, source_id, source_text, context, client: reqClient, pathway: reqPathway, webhook_url, ...rest } = req.body;
+    const isAsync = req.body.async === true || req.body.async === "true" || !!webhook_url;
     const { source_text: _omit, ...requestMeta } = req.body;
     const requestBodyJson = JSON.stringify(requestMeta);
 
@@ -242,6 +243,163 @@ export async function registerRoutes(
 
     const resolvedSourceId = source_id || `call_${randomUUID().slice(0, 12)}`;
     const clientPathwayId = req.body.client_pathway_id ? Number(req.body.client_pathway_id) : null;
+
+    if (isAsync) {
+      console.log(`[AWELL-ASYNC] Accepted job ${resolvedSourceId} (webhook: ${webhook_url || "none"})`);
+      res.status(202).json({
+        status: "accepted",
+        job_id: resolvedSourceId,
+        message: "Processing started. Retrieve results via GET /gwc_observation_summarization/:job_id" + (webhook_url ? " or wait for webhook callback." : "."),
+      });
+
+      (async () => {
+        try {
+          let cpId = clientPathwayId;
+          if (!cpId) {
+            const allCPs = await storage.getClientPathways();
+            if (reqClient && reqPathway) {
+              const match = allCPs.find((cp: any) => cp.client === reqClient && cp.pathway === reqPathway);
+              if (match) cpId = match.id;
+            }
+            if (!cpId && allCPs.length > 0) cpId = allCPs[0].id;
+          }
+          if (!cpId) {
+            console.error(`[AWELL-ASYNC] No client/pathway config for ${resolvedSourceId}`);
+            return;
+          }
+
+          const cpRecord = await storage.getClientPathway(cpId);
+          const resolvedClient = reqClient || cpRecord?.client || null;
+          const resolvedPathway = reqPathway || cpRecord?.pathway || null;
+
+          const [
+            { prompt: _p, promptVersion, promptVersionDate },
+            activeObs,
+            summaryInstruction,
+            observationsGuidance,
+            barriersGuidance,
+            contextParams,
+            callQAPrompts,
+          ] = await Promise.all([
+            getPromptWithVersion(cpId),
+            storage.getActiveObservations(cpId),
+            storage.getSetting(cpId, "summary_instruction"),
+            storage.getSetting(cpId, "observations_prompt_guidance"),
+            storage.getSetting(cpId, "barriers_prompt_guidance"),
+            storage.getActiveContextParameters(cpId),
+            storage.getActiveCallQAPrompts(cpId),
+          ]);
+
+          const contextValues: Record<string, string> = {};
+          const contextSource = (context && typeof context === "object") ? context : rest;
+          for (const param of contextParams) {
+            if (contextSource[param.name] !== undefined && contextSource[param.name] !== null) {
+              contextValues[param.name] = String(contextSource[param.name]);
+            }
+          }
+
+          console.log(`[AWELL-ASYNC] Starting full Gemini analysis for ${resolvedSourceId}`);
+          const { analysis, tokenUsage } = await analyzeTranscript(
+            resolvedSourceId, source_text.trim(), activeObs,
+            undefined,
+            summaryInstruction || undefined, contextParams, contextValues,
+            observationsGuidance || undefined, barriersGuidance || undefined,
+            callQAPrompts,
+          );
+          const processingTime = Date.now() - startTime;
+          const processedAt = new Date().toISOString();
+
+          console.log(`[AWELL-ASYNC] Gemini completed for ${resolvedSourceId} in ${processingTime}ms — writing to BigQuery`);
+
+          await Promise.all([
+            insertCallInfo({
+              callId: resolvedSourceId, careFlowId: care_flow_id || null,
+              processedDatetime: processed_datetime || processedAt, sourceType: source_type || null,
+              sourceId: resolvedSourceId, processedAt, processingTimeMs: processingTime,
+              promptVersion, promptVersionDate, contextValues,
+              transcriptLength: source_text.length, summary: analysis.summary || "",
+              followUpAreas: analysis.follow_up_areas || "", transitionStatus: analysis.transition_status || "",
+              promptTokens: tokenUsage.promptTokens, completionTokens: tokenUsage.completionTokens,
+              totalTokens: tokenUsage.totalTokens, estimatedCost: tokenUsage.estimatedCost,
+              status: "success", requestBody: requestBodyJson, requestHeaders: requestHeadersJson,
+              responseJson: JSON.stringify(analysis),
+              client: resolvedClient, pathway: resolvedPathway,
+            }),
+            insertCallObservations(resolvedSourceId, analysis.observations || []),
+            insertCallQAPairs(resolvedSourceId, analysis.qa_pairs || []),
+            insertCallBarriers(resolvedSourceId, analysis.barriers || []),
+            insertCallQAResults(resolvedSourceId, analysis.call_qa || []),
+          ]);
+
+          console.log(`[AWELL-ASYNC] BigQuery writes completed for ${resolvedSourceId}`);
+
+          if (webhook_url) {
+            const webhookPayload = {
+              status: "completed",
+              job_id: resolvedSourceId,
+              data: {
+                care_flow_id: care_flow_id || null,
+                processed_datetime: processed_datetime || processedAt,
+                source_type: source_type || null,
+                source_id: resolvedSourceId,
+                context: contextValues,
+                processedAt,
+                processingTimeMs: processingTime,
+                prompt_version: promptVersion,
+                prompt_version_date: promptVersionDate,
+                analysis: {
+                  summary: analysis.summary,
+                  observations: analysis.observations,
+                  observations_summary_formatted: analysis.transition_status,
+                  followup_formatted: analysis.follow_up_areas,
+                  qa_pairs: analysis.qa_pairs,
+                  barriers: analysis.barriers,
+                  call_qa: analysis.call_qa,
+                },
+                tokenUsage,
+              },
+            };
+
+            const maxRetries = 3;
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+              try {
+                const webhookRes = await fetch(webhook_url, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(webhookPayload),
+                });
+                console.log(`[AWELL-ASYNC] Webhook callback to ${webhook_url} returned ${webhookRes.status} (attempt ${attempt})`);
+                if (webhookRes.ok) break;
+                if (attempt < maxRetries) await new Promise(r => setTimeout(r, 2000 * attempt));
+              } catch (whErr: any) {
+                console.error(`[AWELL-ASYNC] Webhook callback failed (attempt ${attempt}): ${whErr.message}`);
+                if (attempt < maxRetries) await new Promise(r => setTimeout(r, 2000 * attempt));
+              }
+            }
+          }
+        } catch (err: any) {
+          console.error(`[AWELL-ASYNC] Processing FAILED for ${resolvedSourceId}:`, err.message);
+          const processingTime = Date.now() - startTime;
+          insertCallInfo({
+            callId: resolvedSourceId, careFlowId: care_flow_id || null,
+            processedAt: new Date().toISOString(), processingTimeMs: processingTime,
+            transcriptLength: source_text.length, status: "error",
+            errorMessage: err.message, requestBody: requestBodyJson, requestHeaders: requestHeadersJson,
+          }).catch(() => {});
+
+          if (webhook_url) {
+            try {
+              await fetch(webhook_url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ status: "failed", job_id: resolvedSourceId, error: err.message }),
+              });
+            } catch {}
+          }
+        }
+      })();
+      return;
+    }
 
     try {
       let cpId = clientPathwayId;
@@ -384,6 +542,78 @@ export async function registerRoutes(
       }).catch(() => {});
       console.error("Transcript analysis failed:", error);
       return res.status(500).json({ status: "error", message: "Failed to analyze transcript. " + error.message });
+    }
+  });
+
+  app.get("/gwc_observation_summarization/:jobId", async (req, res) => {
+    const apiKey = process.env.GWC_OBSERVATION_SUMMARIZATION_API_KEY;
+    if (apiKey) {
+      const provided = req.headers["x-api-key"];
+      if (!provided || provided !== apiKey) {
+        return res.status(401).json({ status: "error", message: "Invalid or missing API key" });
+      }
+    }
+
+    const { jobId } = req.params;
+    if (!jobId) {
+      return res.status(400).json({ status: "error", message: "job_id is required." });
+    }
+
+    try {
+      const detail = await getCallDetail(jobId);
+
+      if (!detail.callInfo) {
+        return res.json({ status: "processing", job_id: jobId, message: "Job is still processing. Try again shortly." });
+      }
+
+      if (detail.callInfo.status === "error") {
+        return res.json({ status: "failed", job_id: jobId, error: detail.callInfo.error_message || "Processing failed." });
+      }
+
+      const responseData: any = {
+        status: "completed",
+        job_id: jobId,
+        data: {
+          care_flow_id: detail.callInfo.care_flow_id || null,
+          processed_datetime: detail.callInfo.processed_datetime || null,
+          source_type: detail.callInfo.source_type || null,
+          source_id: detail.callInfo.source_id || jobId,
+          context: detail.callInfo.context_values || null,
+          processedAt: detail.callInfo.processed_at,
+          processingTimeMs: detail.callInfo.processing_time_ms,
+          prompt_version: detail.callInfo.prompt_version,
+          prompt_version_date: detail.callInfo.prompt_version_date,
+          analysis: {
+            summary: detail.callInfo.summary,
+            observations: detail.observations.map((o: any) => ({
+              name: o.observation_name,
+              display_name: o.observation_display_name,
+              domain: o.domain,
+              value_type: o.value_type,
+              value: o.observation_value,
+              detail: o.detail,
+              evidence: o.evidence,
+              confidence: o.confidence,
+            })),
+            observations_summary_formatted: detail.callInfo.transition_status,
+            followup_formatted: detail.callInfo.follow_up_areas,
+            qa_pairs: detail.qaPairs,
+            barriers: detail.barriers,
+            call_qa: detail.callQA,
+          },
+          tokenUsage: {
+            promptTokens: detail.callInfo.prompt_tokens,
+            completionTokens: detail.callInfo.completion_tokens,
+            totalTokens: detail.callInfo.total_tokens,
+            estimatedCost: detail.callInfo.estimated_cost,
+          },
+        },
+      };
+
+      return res.json(responseData);
+    } catch (error: any) {
+      console.error(`[AWELL-ASYNC] Failed to retrieve job ${jobId}:`, error.message);
+      return res.status(500).json({ status: "error", message: "Failed to retrieve job results." });
     }
   });
 
