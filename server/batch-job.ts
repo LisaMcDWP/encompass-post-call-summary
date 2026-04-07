@@ -125,6 +125,7 @@ async function processBatch() {
         estimatedCost: tokenUsage.estimatedCost,
         status: "success",
         requestBody: JSON.stringify({ batch_id: item.batch_id, bland_call_id: item.bland_call_id }),
+        responseJson: JSON.stringify(analysis),
         client: batchCP.client || null,
         pathway: batchCP.pathway || null,
       });

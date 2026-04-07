@@ -162,6 +162,7 @@ export async function registerRoutes(
         status: "success",
         requestBody: requestBodyJson,
         requestHeaders: requestHeadersJson,
+        responseJson: JSON.stringify(analysis),
         client: resolvedClient,
         pathway: resolvedPathway,
       });
@@ -318,6 +319,7 @@ export async function registerRoutes(
           promptTokens: tokenUsage.promptTokens, completionTokens: tokenUsage.completionTokens,
           totalTokens: tokenUsage.totalTokens, estimatedCost: tokenUsage.estimatedCost,
           status: "success", requestBody: requestBodyJson, requestHeaders: requestHeadersJson,
+          responseJson: JSON.stringify(analysis),
           client: resolvedClient, pathway: resolvedPathway,
         }),
         insertCallObservations(resolvedSourceId, analysis.observations),
@@ -980,6 +982,7 @@ export async function registerRoutes(
             estimatedCost: tokenUsage.estimatedCost,
             status: "success",
             requestBody: JSON.stringify({ batch_id: item.batch_id, bland_call_id: item.bland_call_id }),
+            responseJson: JSON.stringify(analysis),
             client: batchCPRecord?.client || null,
             pathway: batchCPRecord?.pathway || null,
           });
