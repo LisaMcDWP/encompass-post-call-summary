@@ -1,0 +1,52 @@
+is.com/execution_name\"=guideway-batch-job-7fckc" --project=encompass-476415 --limit=50 --format="value(textPayload)" --order=asc
+
+Batch job starting. Batch size: 100, Delay: 1000ms
+BigQuery batch_processing table ready.
+BigQuery table call_info ready.
+BigQuery table call_observations ready.
+BigQuery table call_information.client_pathway ready.
+Found 100 pending items to process (using client/pathway: Encompass Health/Post discharge follow-up day 4).
+BigQuery table call_information.observations ready.
+BigQuery table call_information.settings ready.
+BigQuery table call_information.context_parameters ready.
+BigQuery table call_information.call_qa_prompts ready.
+Processing 100 items with concurrency=5
+Processing: fff9c9b1-931a-4dec-8d0e-3454b3173f2a
+Processing: 7b779fdb-fac8-4ffa-ba2c-b3f822d5c4f0
+Processing: 6e7e1934-a100-4496-a81c-f8052135e948
+Processing: 00386906-1029-4111-a1bc-7596f3503e24
+Processing: d1477dbe-c478-4f66-884d-8f36d91c9622
+Batch job failed: ApiError: Could not serialize access to table encompass-476415:call_information.batch_processing due to concurrent update
+    at new ApiError (/app/node_modules/@google-cloud/common/build/src/util.js:78:15)
+    at Util.parseHttpRespBody (/app/node_modules/@google-cloud/common/build/src/util.js:213:38)
+    at Util.handleResp (/app/node_modules/@google-cloud/common/build/src/util.js:154:117)
+    at /app/node_modules/@google-cloud/common/build/src/util.js:535:22
+    at onResponse (/app/node_modules/retry-request/index.js:259:7)
+    at <anonymous> (/app/node_modules/teeny-request/src/index.ts:348:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5) {
+  code: 400,
+  errors: [
+    {
+      message: 'Could not serialize access to table encompass-476415:call_information.batch_processing due to concurrent update',
+      domain: 'global',
+      reason: 'invalidQuery',
+      location: 'q',
+      locationType: 'parameter'
+    }
+  ],
+  response: Gunzip {
+    _writeState: Uint32Array(2) [ 15887, 0 ],
+    _events: {
+      close: [Array],
+      error: [Array],
+      prefinish: [Function: prefinish],
+      finish: [Function: onfinish],
+      drain: undefined,
+      data: undefined,
+      end: [Function: onend],
+      readable: [Function: next],
+      unpipe: undefined
+    },
+    _readableState: ReadableState {
+      highWaterMark: 16384,
+      buffer: [],

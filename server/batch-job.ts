@@ -59,6 +59,7 @@ async function processBatch() {
 
   let successCount = 0;
   let failCount = 0;
+  let skippedCount = 0;
   const CONCURRENCY = parseInt(process.env.BATCH_CONCURRENCY || "5", 10);
 
   const activeObs = await storage.getActiveObservations(cpId);
@@ -69,14 +70,51 @@ async function processBatch() {
   const { promptVersion, promptVersionDate } = await getPromptWithVersion(cpId);
   const batchCallQAPrompts = await storage.getActiveCallQAPrompts(cpId);
 
+  console.log(`Claiming ${pendingItems.length} items sequentially to avoid BigQuery concurrent DML...`);
+  const claimedItems: any[] = [];
+  for (const item of pendingItems) {
+    try {
+      const claimed = await updateBatchItemStatus(item.bland_call_id, "processing");
+      if (claimed > 0) {
+        claimedItems.push(item);
+      } else {
+        skippedCount++;
+        console.log(`Skipped (already claimed): ${item.bland_call_id}`);
+      }
+    } catch (err: any) {
+      skippedCount++;
+      console.error(`Failed to claim ${item.bland_call_id}: ${err.message}`);
+    }
+  }
+  console.log(`Claimed ${claimedItems.length} items, skipped ${skippedCount}.`);
+
+  if (claimedItems.length === 0) {
+    console.log("No items to process after claiming. Job complete.");
+    return;
+  }
+
+  const bqUpdateQueue: Array<() => Promise<void>> = [];
+  let bqQueueRunning = false;
+
+  async function drainBqQueue() {
+    if (bqQueueRunning) return;
+    bqQueueRunning = true;
+    while (bqUpdateQueue.length > 0) {
+      const task = bqUpdateQueue.shift()!;
+      try { await task(); } catch (err: any) {
+        console.error(`BQ queue task error: ${err.message}`);
+      }
+    }
+    bqQueueRunning = false;
+  }
+
+  function enqueueBqUpdate(fn: () => Promise<void>) {
+    bqUpdateQueue.push(fn);
+    drainBqQueue();
+  }
+
   async function processItem(item: any) {
     console.log(`Processing: ${item.bland_call_id}`);
-    const claimed = await updateBatchItemStatus(item.bland_call_id, "processing");
-    if (claimed === 0) {
-      console.log(`Skipped (already claimed): ${item.bland_call_id}`);
-      return;
-    }
-
     try {
       const sourceId = `batch_${item.bland_call_id}`;
       const startTime = Date.now();
@@ -132,27 +170,36 @@ async function processBatch() {
 
       await insertCallObservations(sourceId, analysis.observations);
       await insertCallQAResults(sourceId, analysis.call_qa || []);
-      await updateBatchItemStatus(item.bland_call_id, "completed", sourceId);
+
+      enqueueBqUpdate(async () => {
+        await updateBatchItemStatus(item.bland_call_id, "completed", sourceId);
+      });
 
       successCount++;
       console.log(`Completed: ${item.bland_call_id} → ${sourceId} (${processingTimeMs}ms)`);
     } catch (err: any) {
       failCount++;
       console.error(`Failed: ${item.bland_call_id} - ${err.message}`);
-      await updateBatchItemStatus(item.bland_call_id, "failed", undefined, err.message);
+      enqueueBqUpdate(async () => {
+        await updateBatchItemStatus(item.bland_call_id, "failed", undefined, err.message);
+      });
     }
   }
 
-  console.log(`Processing ${pendingItems.length} items with concurrency=${CONCURRENCY}`);
-  for (let i = 0; i < pendingItems.length; i += CONCURRENCY) {
-    const chunk = pendingItems.slice(i, i + CONCURRENCY);
+  console.log(`Processing ${claimedItems.length} items with concurrency=${CONCURRENCY}`);
+  for (let i = 0; i < claimedItems.length; i += CONCURRENCY) {
+    const chunk = claimedItems.slice(i, i + CONCURRENCY);
     await Promise.all(chunk.map(processItem));
-    if (DELAY_MS > 0 && i + CONCURRENCY < pendingItems.length) {
+    if (DELAY_MS > 0 && i + CONCURRENCY < claimedItems.length) {
       await new Promise(resolve => setTimeout(resolve, DELAY_MS));
     }
   }
 
-  console.log(`Batch job complete. Success: ${successCount}, Failed: ${failCount}`);
+  while (bqUpdateQueue.length > 0 || bqQueueRunning) {
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
+
+  console.log(`Batch job complete. Claimed: ${claimedItems.length}, Success: ${successCount}, Failed: ${failCount}, Skipped: ${skippedCount}`);
 }
 
 processBatch()
