@@ -60,7 +60,7 @@ async function processBatch() {
   let successCount = 0;
   let failCount = 0;
   let skippedCount = 0;
-  const CONCURRENCY = parseInt(process.env.BATCH_CONCURRENCY || "5", 10);
+  const CONCURRENCY = parseInt(process.env.BATCH_CONCURRENCY || "10", 10);
 
   const activeObs = await storage.getActiveObservations(cpId);
   const summaryInstruction = await storage.getSetting(cpId, "summary_instruction");
