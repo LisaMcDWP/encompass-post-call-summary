@@ -343,31 +343,28 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
                 <span className="text-[9px] font-normal ml-1">({transcript.length.toLocaleString()} chars)</span>
               </summary>
               <div className="bg-[#f8f9fb] rounded-lg border border-border/40 p-4 mt-1 max-h-[500px] overflow-y-auto" data-testid="detail-transcript">
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {transcript.split("\n").filter(line => line.trim()).map((line, idx) => {
                     const match = line.match(/^(user|assistant|agent|care guide|patient|AI):\s*/i);
                     if (match) {
                       const speaker = match[1];
                       const text = line.slice(match[0].length);
                       const isAgent = /^(assistant|agent|care guide|ai)$/i.test(speaker);
+                      const roleLabel = isAgent ? "Care Guide" : "Patient";
+                      const roleColor = isAgent ? "text-[#0098db]" : "text-[#5a8a00]";
+                      const dotColor = isAgent ? "bg-[#0098db]" : "bg-[#96d410]";
                       return (
-                        <div key={idx} className={`flex gap-3 ${isAgent ? "" : "flex-row-reverse"}`}>
-                          <div className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-bold shadow-sm ${isAgent ? "bg-[#0098db] text-white" : "bg-[#96d410] text-white"}`}>
-                            {isAgent ? "CG" : "PT"}
+                        <div key={idx} className="text-left">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <span className={`inline-block w-2 h-2 rounded-full ${dotColor}`} />
+                            <span className={`text-xs font-bold uppercase tracking-wide ${roleColor}`}>{roleLabel}</span>
                           </div>
-                          <div className="max-w-[78%]">
-                            <div className={`text-[10px] font-semibold mb-1 ${isAgent ? "text-[#0098db]" : "text-right text-[#5a8a00]"}`}>
-                              {isAgent ? "Care Guide" : "Patient"}
-                            </div>
-                            <div className={`rounded-2xl px-4 py-2.5 text-xs leading-relaxed shadow-sm ${isAgent ? "bg-white border border-border/60 rounded-tl-sm text-[#172938]" : "bg-[#e8f7ff] border border-[#0098db]/15 rounded-tr-sm text-[#172938]"}`}>
-                              {text}
-                            </div>
-                          </div>
+                          <p className="text-[13px] leading-relaxed text-[#172938] pl-3.5 border-l-2 border-border/40 ml-[3px]">{text}</p>
                         </div>
                       );
                     }
                     return (
-                      <div key={idx} className="text-[11px] text-muted-foreground text-center py-1 italic">{line}</div>
+                      <div key={idx} className="text-[11px] text-muted-foreground py-1 italic pl-3.5 ml-[3px]">{line}</div>
                     );
                   })}
                 </div>
