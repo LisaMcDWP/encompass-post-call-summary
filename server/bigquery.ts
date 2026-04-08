@@ -200,6 +200,13 @@ async function migrateCallInfoColumns(): Promise<void> {
       });
       console.log("Added response_json column to call_info table.");
     }
+    if (!fieldNames.has("processing_id")) {
+      await client.query({
+        query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\` ADD COLUMN processing_id STRING`,
+        location: "US",
+      });
+      console.log("Added processing_id column to call_info table.");
+    }
   } catch (err: any) {
     console.error("Migration check for call_info columns:", err.message);
   }
@@ -221,6 +228,7 @@ export async function initializeCallTables(): Promise<void> {
 
 export interface CallInfoEntry {
   callId: string;
+  processingId?: string | null;
   careFlowId?: string | null;
   processedDatetime?: string | null;
   callDate?: string | null;
@@ -242,7 +250,7 @@ export interface CallInfoEntry {
   completionTokens?: number;
   totalTokens?: number;
   estimatedCost?: number;
-  status: "success" | "error";
+  status: "success" | "success_partial" | "error";
   errorMessage?: string;
   client?: string | null;
   pathway?: string | null;
@@ -270,6 +278,7 @@ export async function insertCallInfo(entry: CallInfoEntry): Promise<void> {
     const client = getBigQueryClient();
     const row: Record<string, any> = {
       call_id: entry.callId,
+      processing_id: entry.processingId || null,
       care_flow_id: entry.careFlowId || null,
       processed_datetime: entry.processedDatetime || null,
       call_date: entry.callDate || null,

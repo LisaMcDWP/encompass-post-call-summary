@@ -391,7 +391,8 @@ function exportReferencePdf() {
 {
   "status": "success",
   "call_id": "call_987654321",
-  "message": "Sync response includes summary, observations, and transition status. Use GET /gwc_observation_summarization/call_987654321 to retrieve full results (qa_pairs, barriers, call_qa) after background processing completes.",
+  "processing_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "message": "Use GET /gwc_observation_summarization/call_987654321 to retrieve full results ...",
   "data": {
     "care_flow_id": "cf_abc123",
     "processed_datetime": "2026-03-06T10:30:00Z",
@@ -435,6 +436,7 @@ function exportReferencePdf() {
 {
   "status": "accepted",
   "job_id": "call_a1b2c3d4e5f6",
+  "processing_id": "a8b3c7d1-9e4f-4a2b-b6c8-1d2e3f4a5b6c",
   "message": "Processing started. Retrieve results via GET /gwc_observation_summarization/:job_id."
 }`);
   divider();
@@ -445,6 +447,7 @@ function exportReferencePdf() {
 {
   "status": "accepted",
   "job_id": "call_a1b2c3d4e5f6",
+  "processing_id": "a8b3c7d1-9e4f-4a2b-b6c8-1d2e3f4a5b6c",
   "message": "Processing started. Retrieve results via GET /gwc_observation_summarization/:job_id or wait for webhook callback."
 }
 
@@ -452,6 +455,7 @@ function exportReferencePdf() {
 {
   "status": "completed",
   "job_id": "call_a1b2c3d4e5f6",
+  "processing_id": "a8b3c7d1-9e4f-4a2b-b6c8-1d2e3f4a5b6c",
   "data": { ... }  // same shape as GET response below
 }`);
 
@@ -469,6 +473,7 @@ function exportReferencePdf() {
   codeBlock(`{
   "status": "completed",
   "job_id": "call_a1b2c3d4e5f6",
+  "processing_id": "a8b3c7d1-9e4f-4a2b-b6c8-1d2e3f4a5b6c",
   "data": {
     "care_flow_id": "cf_abc123",
     "processed_datetime": "2026-03-06T10:30:00Z",
@@ -1718,7 +1723,8 @@ export default function Reference() {
 {
   "status": "success",
   "call_id": "call_987654321",
-  "message": "Sync response includes summary, observations, and transition status. Use GET /gwc_observation_summarization/call_987654321 to retrieve full results ...",
+  "processing_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "message": "Use GET /gwc_observation_summarization/call_987654321 to retrieve full results ...",
   "data": {
     "care_flow_id": "cf_abc123",
     "processed_datetime": "2026-03-06T10:30:00Z",
@@ -1777,6 +1783,7 @@ export default function Reference() {
 {
   "status": "accepted",
   "job_id": "call_987654321",
+  "processing_id": "a8b3c7d1-9e4f-4a2b-b6c8-1d2e3f4a5b6c",
   "message": "Processing started. Retrieve results via GET /gwc_observation_summarization/:job_id."
 }`}
               </pre>
@@ -1801,6 +1808,7 @@ export default function Reference() {
 {
   "status": "accepted",
   "job_id": "call_a1b2c3d4e5f6",
+  "processing_id": "a8b3c7d1-9e4f-4a2b-b6c8-1d2e3f4a5b6c",
   "message": "Processing started. Retrieve results via GET /gwc_observation_summarization/:job_id or wait for webhook callback."
 }
 
@@ -1808,6 +1816,7 @@ export default function Reference() {
 {
   "status": "completed",
   "job_id": "call_a1b2c3d4e5f6",
+  "processing_id": "a8b3c7d1-9e4f-4a2b-b6c8-1d2e3f4a5b6c",
   "data": { ... }
 }`}
               </pre>
@@ -1847,6 +1856,7 @@ export default function Reference() {
 {`{
   "status": "completed",
   "job_id": "call_a1b2c3d4e5f6",
+  "processing_id": "a8b3c7d1-9e4f-4a2b-b6c8-1d2e3f4a5b6c",
   "data": {
     "care_flow_id": "cf_abc123",
     "processed_datetime": "2026-03-06T10:30:00Z",

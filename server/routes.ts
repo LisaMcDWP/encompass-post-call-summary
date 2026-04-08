@@ -242,13 +242,15 @@ export async function registerRoutes(
     }
 
     const resolvedSourceId = source_id || `call_${randomUUID().slice(0, 12)}`;
+    const processingId = randomUUID();
     const clientPathwayId = req.body.client_pathway_id ? Number(req.body.client_pathway_id) : null;
 
     if (isAsync) {
-      console.log(`[AWELL-ASYNC] Accepted job ${resolvedSourceId} (webhook: ${webhook_url || "none"})`);
+      console.log(`[AWELL-ASYNC] Accepted job ${resolvedSourceId} processing_id=${processingId} (webhook: ${webhook_url || "none"})`);
       res.status(202).json({
         status: "accepted",
         job_id: resolvedSourceId,
+        processing_id: processingId,
         message: "Processing started. Retrieve results via GET /gwc_observation_summarization/:job_id" + (webhook_url ? " or wait for webhook callback." : "."),
       });
 
@@ -313,7 +315,7 @@ export async function registerRoutes(
 
           await Promise.all([
             insertCallInfo({
-              callId: resolvedSourceId, careFlowId: care_flow_id || null,
+              callId: resolvedSourceId, processingId, careFlowId: care_flow_id || null,
               processedDatetime: processed_datetime || processedAt, sourceType: source_type || null,
               sourceId: resolvedSourceId, processedAt, processingTimeMs: processingTime,
               promptVersion, promptVersionDate, contextValues,
@@ -337,6 +339,7 @@ export async function registerRoutes(
             const webhookPayload = {
               status: "completed",
               job_id: resolvedSourceId,
+              processing_id: processingId,
               data: {
                 care_flow_id: care_flow_id || null,
                 processed_datetime: processed_datetime || processedAt,
@@ -445,6 +448,7 @@ export async function registerRoutes(
       const responseBody = {
         status: "success",
         call_id: resolvedSourceId,
+        processing_id: processingId,
         message: "Sync response includes summary, observations, and transition status. Use GET /gwc_observation_summarization/" + resolvedSourceId + " to retrieve full results (qa_pairs, barriers, call_qa) after background processing completes.",
         data: {
           care_flow_id: care_flow_id || null,
@@ -495,7 +499,7 @@ export async function registerRoutes(
 
           await Promise.all([
             insertCallInfo({
-              callId: resolvedSourceId, careFlowId: care_flow_id || null,
+              callId: resolvedSourceId, processingId, careFlowId: care_flow_id || null,
               processedDatetime: processed_datetime || processedAt, sourceType: source_type || null,
               sourceId: resolvedSourceId, processedAt, processingTimeMs: processingTime,
               promptVersion, promptVersionDate, contextValues,
@@ -516,7 +520,7 @@ export async function registerRoutes(
         } catch (bgErr: any) {
           console.error(`[AWELL-BG] Background processing FAILED for ${resolvedSourceId}:`, bgErr.message);
           insertCallInfo({
-            callId: resolvedSourceId, careFlowId: care_flow_id || null,
+            callId: resolvedSourceId, processingId, careFlowId: care_flow_id || null,
             processedDatetime: processed_datetime || processedAt, sourceType: source_type || null,
             sourceId: resolvedSourceId, processedAt, processingTimeMs: processingTime,
             promptVersion, promptVersionDate, contextValues,
@@ -537,7 +541,7 @@ export async function registerRoutes(
     } catch (error: any) {
       const processingTime = Date.now() - startTime;
       insertCallInfo({
-        callId: resolvedSourceId, processedAt: new Date().toISOString(),
+        callId: resolvedSourceId, processingId, processedAt: new Date().toISOString(),
         processingTimeMs: processingTime, transcriptLength: source_text.length,
         status: "error", errorMessage: error.message,
         requestBody: requestBodyJson, requestHeaders: requestHeadersJson,
@@ -575,6 +579,7 @@ export async function registerRoutes(
       const responseData: any = {
         status: "completed",
         job_id: jobId,
+        processing_id: detail.callInfo.processing_id || null,
         data: {
           care_flow_id: detail.callInfo.care_flow_id || null,
           processed_datetime: detail.callInfo.processed_datetime || null,
