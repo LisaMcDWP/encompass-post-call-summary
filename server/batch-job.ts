@@ -2,7 +2,7 @@ import { getPendingBatchItems, updateBatchItemStatus, initializeBatchTable, ensu
 import { insertCallInfo, insertCallObservations, insertCallQAResults } from "./bigquery";
 import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION } from "./gemini";
 import { storage } from "./storage";
-import { createHash } from "crypto";
+import { createHash, randomUUID } from "crypto";
 
 async function getPromptWithVersion(clientPathwayId: number) {
   const activeObs = await storage.getActiveObservations(clientPathwayId);
@@ -142,8 +142,10 @@ async function processBatch() {
       const blandTs = (item as any).bland_created_at?.value || (item as any).bland_created_at || null;
       const callDate = blandTs ? new Date(blandTs).toISOString() : null;
 
+      const processingId = randomUUID();
       await insertCallInfo({
         callId: sourceId,
+        processingId,
         careFlowId: item.care_flow_id || null,
         callDate,
         sourceType: item.source_type || "bland_call",

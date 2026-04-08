@@ -84,6 +84,7 @@ export async function registerRoutes(
     }
 
     const resolvedSourceId = source_id || `call_${randomUUID().slice(0, 12)}`;
+    const analyzeProcessingId = randomUUID();
     const clientPathwayId = req.body.client_pathway_id ? Number(req.body.client_pathway_id) : null;
 
     try {
@@ -142,6 +143,7 @@ export async function registerRoutes(
 
       await insertCallInfo({
         callId: resolvedSourceId,
+        processingId: analyzeProcessingId,
         careFlowId: care_flow_id || null,
         processedDatetime: processed_datetime || processedAt,
         sourceType: source_type || null,
@@ -193,6 +195,7 @@ export async function registerRoutes(
 
       await insertCallInfo({
         callId: resolvedSourceId,
+        processingId: analyzeProcessingId,
         processedAt: new Date().toISOString(),
         processingTimeMs: processingTime,
         transcriptLength: source_text.length,
