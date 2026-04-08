@@ -110,6 +110,16 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
     },
   });
 
+  const { data: obsConfig } = useQuery<{ name: string; display_order: number }[]>({
+    queryKey: ["/api/observations-order"],
+    queryFn: async () => {
+      const res = await fetch("/api/observations?clientPathwayId=1");
+      if (!res.ok) return [];
+      const items = await res.json();
+      return items.map((o: any) => ({ name: o.name, display_order: o.displayOrder ?? 999 }));
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" onClick={onClose}>
@@ -135,7 +145,14 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
   }
 
   const info = data.callInfo;
-  const obs = data.observations;
+  const obsRaw = data.observations;
+  const obs = obsConfig
+    ? [...obsRaw].sort((a, b) => {
+        const orderA = obsConfig.find(c => c.name === a.observation_name)?.display_order ?? 999;
+        const orderB = obsConfig.find(c => c.name === b.observation_name)?.display_order ?? 999;
+        return orderA - orderB;
+      })
+    : obsRaw;
   const qaPairs = data.qaPairs || [];
   const barriers = data.barriers || [];
   const callQA = data.callQA || [];
@@ -424,6 +441,24 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
             </Card>
           )}
 
+          {info.transition_status && (
+            <Card className="border-border/60 bg-card shadow-sm">
+              <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
+                <CardTitle className="text-base flex items-center gap-2 text-secondary">
+                  <ClipboardList className="h-4 w-4 text-primary" />
+                  Transition Status
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div
+                  className="bg-muted/30 p-4 rounded-lg border border-border/50 text-sm leading-relaxed"
+                  data-testid="detail-transition"
+                  dangerouslySetInnerHTML={{ __html: info.transition_status }}
+                />
+              </CardContent>
+            </Card>
+          )}
+
           {obs.length > 0 && (
             <Card className="border-border/60 bg-card shadow-sm" data-testid="detail-observations">
               <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
@@ -492,54 +527,39 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
             </Card>
           )}
 
-          {qaPairs.length > 0 && (
-            <Card className="border-border/60 bg-card shadow-sm" data-testid="detail-qa-pairs">
+          {callQA.length > 0 && (
+            <Card className="border-border/60 bg-card shadow-sm" data-testid="detail-call-qa">
               <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
                 <CardTitle className="text-base flex items-center gap-2 text-secondary">
-                  <MessageSquare className="h-4 w-4 text-primary" />
-                  Questions & Answers
-                  <Badge variant="outline" className="text-xs ml-2">{qaPairs.length} exchanges</Badge>
+                  <ClipboardCheck className="h-4 w-4 text-primary" />
+                  Call QA
+                  <Badge variant="outline" className="text-xs ml-2">{callQA.length} assessments</Badge>
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-4">
                 <div className="space-y-3">
-                  {qaPairs.map((qa, i) => (
+                  {callQA.map((cq, i) => (
                     <div
-                      key={`qa-${i}`}
+                      key={`call-qa-${i}`}
                       className="p-3 rounded-lg border border-border/50 bg-muted/20"
-                      data-testid={`detail-qa-${i}`}
+                      data-testid={`detail-call-qa-${i}`}
                     >
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono">
-                          #{qa.sequence_number}
-                        </Badge>
-                        {qa.category && (
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                            {qa.category}
-                          </Badge>
-                        )}
-                        {qa.observation_display_name && (
+                        <span className="text-sm font-semibold text-foreground">{cq.display_name || cq.name}</span>
+                        {cq.value && (
                           <Badge className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border border-primary/20">
-                            {qa.observation_display_name}
+                            {cq.value}
                           </Badge>
                         )}
                       </div>
-                      <div className="space-y-1.5">
-                        <div className="flex items-start gap-2">
-                          <span className="text-[10px] font-semibold uppercase text-muted-foreground/70 w-8 shrink-0 pt-0.5">Q</span>
-                          <p className="text-sm leading-relaxed">
-                            <span className="text-muted-foreground/60 text-xs mr-1">({qa.asked_by || "unknown"})</span>
-                            {qa.question}
-                          </p>
+                      {cq.detail && (
+                        <p className="text-sm text-muted-foreground leading-relaxed">{cq.detail}</p>
+                      )}
+                      {cq.evidence && (
+                        <div className="mt-2 pl-3 border-l-2 border-primary/30">
+                          <p className="text-xs italic text-muted-foreground/80">"{cq.evidence}"</p>
                         </div>
-                        <div className="flex items-start gap-2">
-                          <span className="text-[10px] font-semibold uppercase text-primary/70 w-8 shrink-0 pt-0.5">A</span>
-                          <p className="text-sm leading-relaxed">
-                            <span className="text-muted-foreground/60 text-xs mr-1">({qa.answered_by || "unknown"})</span>
-                            {qa.answer}
-                          </p>
-                        </div>
-                      </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -606,39 +626,54 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
             </Card>
           )}
 
-          {callQA.length > 0 && (
-            <Card className="border-border/60 bg-card shadow-sm" data-testid="detail-call-qa">
+          {qaPairs.length > 0 && (
+            <Card className="border-border/60 bg-card shadow-sm" data-testid="detail-qa-pairs">
               <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
                 <CardTitle className="text-base flex items-center gap-2 text-secondary">
-                  <ClipboardCheck className="h-4 w-4 text-primary" />
-                  Call QA
-                  <Badge variant="outline" className="text-xs ml-2">{callQA.length} assessments</Badge>
+                  <MessageSquare className="h-4 w-4 text-primary" />
+                  Questions & Answers
+                  <Badge variant="outline" className="text-xs ml-2">{qaPairs.length} exchanges</Badge>
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-4">
                 <div className="space-y-3">
-                  {callQA.map((cq, i) => (
+                  {qaPairs.map((qa, i) => (
                     <div
-                      key={`call-qa-${i}`}
+                      key={`qa-${i}`}
                       className="p-3 rounded-lg border border-border/50 bg-muted/20"
-                      data-testid={`detail-call-qa-${i}`}
+                      data-testid={`detail-qa-${i}`}
                     >
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        <span className="text-sm font-semibold text-foreground">{cq.display_name || cq.name}</span>
-                        {cq.value && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono">
+                          #{qa.sequence_number}
+                        </Badge>
+                        {qa.category && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                            {qa.category}
+                          </Badge>
+                        )}
+                        {qa.observation_display_name && (
                           <Badge className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border border-primary/20">
-                            {cq.value}
+                            {qa.observation_display_name}
                           </Badge>
                         )}
                       </div>
-                      {cq.detail && (
-                        <p className="text-sm text-muted-foreground leading-relaxed">{cq.detail}</p>
-                      )}
-                      {cq.evidence && (
-                        <div className="mt-2 pl-3 border-l-2 border-primary/30">
-                          <p className="text-xs italic text-muted-foreground/80">"{cq.evidence}"</p>
+                      <div className="space-y-1.5">
+                        <div className="flex items-start gap-2">
+                          <span className="text-[10px] font-semibold uppercase text-muted-foreground/70 w-8 shrink-0 pt-0.5">Q</span>
+                          <p className="text-sm leading-relaxed">
+                            <span className="text-muted-foreground/60 text-xs mr-1">({qa.asked_by || "unknown"})</span>
+                            {qa.question}
+                          </p>
                         </div>
-                      )}
+                        <div className="flex items-start gap-2">
+                          <span className="text-[10px] font-semibold uppercase text-primary/70 w-8 shrink-0 pt-0.5">A</span>
+                          <p className="text-sm leading-relaxed">
+                            <span className="text-muted-foreground/60 text-xs mr-1">({qa.answered_by || "unknown"})</span>
+                            {qa.answer}
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -659,24 +694,6 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
                   className="bg-muted/30 p-4 rounded-lg border border-border/50 text-sm leading-relaxed"
                   data-testid="detail-follow-up"
                   dangerouslySetInnerHTML={{ __html: info.follow_up_areas }}
-                />
-              </CardContent>
-            </Card>
-          )}
-
-          {info.transition_status && (
-            <Card className="border-border/60 bg-card shadow-sm">
-              <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
-                <CardTitle className="text-base flex items-center gap-2 text-secondary">
-                  <ClipboardList className="h-4 w-4 text-primary" />
-                  Transition Status
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <div
-                  className="bg-muted/30 p-4 rounded-lg border border-border/50 text-sm leading-relaxed"
-                  data-testid="detail-transition"
-                  dangerouslySetInnerHTML={{ __html: info.transition_status }}
                 />
               </CardContent>
             </Card>
