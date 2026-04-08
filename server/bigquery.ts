@@ -1276,6 +1276,21 @@ export async function getPendingBatchItems(limit = 10, batchId?: string): Promis
   return rows as any[];
 }
 
+export async function claimPendingBatchItems(blandCallIds: string[]): Promise<number> {
+  if (blandCallIds.length === 0) return 0;
+  const client = getBigQueryClient();
+  const idList = blandCallIds.map(id => `'${id.replace(/'/g, "\\'")}'`).join(",");
+  const query = `
+    UPDATE \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
+    SET status = 'processing'
+    WHERE bland_call_id IN (${idList}) AND status = 'pending'
+  `;
+  const result = await client.query({ query, location: "US" });
+  const metadata = (result as any)[2] || {};
+  const affected = Number(metadata?.dmlStats?.updatedRowCount || metadata?.numDmlAffectedRows || 0);
+  return affected;
+}
+
 const VALID_BATCH_STATUSES = new Set(["pending", "processing", "completed", "failed"]);
 
 export async function updateBatchItemStatus(

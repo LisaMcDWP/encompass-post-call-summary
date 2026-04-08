@@ -1,4 +1,4 @@
-import { getPendingBatchItems, updateBatchItemStatus, initializeBatchTable, ensureCallQATable, initializeCallTables } from "./bigquery";
+import { getPendingBatchItems, updateBatchItemStatus, claimPendingBatchItems, initializeBatchTable, ensureCallQATable, initializeCallTables } from "./bigquery";
 import { insertCallInfo, insertCallObservations, insertCallQAResults } from "./bigquery";
 import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION } from "./gemini";
 import { storage } from "./storage";
@@ -31,7 +31,7 @@ async function getPromptWithVersion(clientPathwayId: number) {
 }
 
 async function processBatch() {
-  const BATCH_SIZE = parseInt(process.env.BATCH_SIZE || "10", 10);
+  const BATCH_SIZE = parseInt(process.env.BATCH_SIZE || "100", 10);
   const DELAY_MS = parseInt(process.env.BATCH_DELAY_MS || "1000", 10);
 
   console.log(`Batch job starting. Batch size: ${BATCH_SIZE}, Delay: ${DELAY_MS}ms`);
@@ -70,23 +70,20 @@ async function processBatch() {
   const { promptVersion, promptVersionDate } = await getPromptWithVersion(cpId);
   const batchCallQAPrompts = await storage.getActiveCallQAPrompts(cpId);
 
-  console.log(`Claiming ${pendingItems.length} items sequentially to avoid BigQuery concurrent DML...`);
-  const claimedItems: any[] = [];
-  for (const item of pendingItems) {
-    try {
-      const claimed = await updateBatchItemStatus(item.bland_call_id, "processing");
-      if (claimed > 0) {
-        claimedItems.push(item);
-      } else {
-        skippedCount++;
-        console.log(`Skipped (already claimed): ${item.bland_call_id}`);
-      }
-    } catch (err: any) {
-      skippedCount++;
-      console.error(`Failed to claim ${item.bland_call_id}: ${err.message}`);
-    }
+  console.log(`Claiming ${pendingItems.length} items in bulk...`);
+  const allIds = pendingItems.map(item => item.bland_call_id);
+  let claimedCount = 0;
+  try {
+    claimedCount = await claimPendingBatchItems(allIds);
+  } catch (err: any) {
+    console.error(`Bulk claim failed: ${err.message}`);
+    return;
   }
-  console.log(`Claimed ${claimedItems.length} items, skipped ${skippedCount}.`);
+  skippedCount = pendingItems.length - claimedCount;
+  const claimedItems = claimedCount < pendingItems.length
+    ? pendingItems.slice(0, claimedCount)
+    : pendingItems;
+  console.log(`Claimed ${claimedCount} items, skipped ${skippedCount}.`);
 
   if (claimedItems.length === 0) {
     console.log("No items to process after claiming. Job complete.");
