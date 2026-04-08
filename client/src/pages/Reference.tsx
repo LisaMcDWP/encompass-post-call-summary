@@ -366,20 +366,159 @@ function exportReferencePdf() {
   subheading("POST /api/batch/reset-failed");
   para("Resets failed items back to pending for reprocessing.");
 
-  heading("Awell Integration");
-  subheading("Webhook Configuration");
-  para("URL: https://guideway-care-api-855188300685.us-central1.run.app/api/analyze");
-  para("Method: POST | Content-Type: application/json");
+  heading("POST /gwc_observation_summarization");
+  para("Awell webhook endpoint for transcript analysis. Supports both synchronous and asynchronous processing modes. Requires X-API-Key header.");
   divider();
-  subheading("Response Mapping");
+  subheading("Authentication");
+  para("Header: X-API-Key: <GWC_OBSERVATION_SUMMARIZATION_API_KEY>");
+  divider();
+  subheading("Request Body Fields");
+  fieldDesc("source_text", "(string, required) The full patient call transcript.");
+  fieldDesc("source_id", "(string, optional) Unique identifier. Auto-generated if omitted (call_<uuid>).");
+  fieldDesc("care_flow_id", "(string, optional) Identifier for the care flow.");
+  fieldDesc("processed_datetime", "(string, optional) ISO 8601 datetime.");
+  fieldDesc("source_type", "(string, optional) Type of source (phone_call, chat, note).");
+  fieldDesc("client", "(string, optional) Client name for multi-tenant routing.");
+  fieldDesc("pathway", "(string, optional) Pathway label for multi-tenant routing.");
+  fieldDesc("client_pathway_id", "(number, optional) Direct client/pathway ID (overrides client+pathway lookup).");
+  fieldDesc("context", "(object, optional) Key-value pairs for known context injection.");
+  fieldDesc("async", "(boolean, optional) Set to true for async mode. Returns 202 immediately.");
+  fieldDesc("webhook_url", "(string, optional) URL to POST results to on completion. Implies async mode.");
+  divider();
+  subheading("Mode 1: Synchronous (default)");
+  para("Returns 200 with analysis inline. Uses fast Gemini call (summary, observations, transition_status, follow_up_areas). Background call adds qa_pairs, barriers, call_qa to BigQuery after response.");
+  codeBlock(`// 200 Response
+{
+  "status": "success",
+  "data": {
+    "care_flow_id": "cf_abc123",
+    "processed_datetime": "2026-03-06T10:30:00Z",
+    "source_type": "phone_call",
+    "source_id": "call_987654321",
+    "context": { "home_health_ordered": "true" },
+    "processedAt": "2026-03-06T10:30:15.123Z",
+    "processingTimeMs": 8450,
+    "prompt_version": 42,
+    "prompt_version_date": "2026-03-06T10:00:00.000Z",
+    "analysis": {
+      "summary": "Patient reported ...",
+      "observations": [
+        {
+          "name": "overall_feeling",
+          "display_name": "Overall Feeling",
+          "domain": "clinical",
+          "value_type": "enum",
+          "value": "Good",
+          "detail": "Patient reports feeling well",
+          "evidence": "I'm feeling much better",
+          "confidence": 0.95
+        }
+      ],
+      "observations_summary_formatted": "<div>...</div>",
+      "followup_formatted": "<ul>...</ul>"
+    },
+    "tokenUsage": {
+      "promptTokens": 3200,
+      "completionTokens": 1100,
+      "totalTokens": 4300,
+      "estimatedCost": 0.0028
+    }
+  }
+}`);
+  divider();
+  subheading("Mode 2: Async with Polling");
+  para("Send async: true in the request body. Returns 202 immediately with a job_id. Poll GET /gwc_observation_summarization/:job_id for results. Runs a single complete Gemini call including qa_pairs, barriers, and call_qa.");
+  codeBlock(`// Request: { "source_text": "...", "async": true }
+// 202 Response
+{
+  "status": "accepted",
+  "job_id": "call_a1b2c3d4e5f6",
+  "message": "Processing started. Retrieve results via GET /gwc_observation_summarization/:job_id."
+}`);
+  divider();
+  subheading("Mode 3: Async with Webhook Callback");
+  para("Include a webhook_url in the request body. Returns 202 immediately. When processing completes, the API POSTs full results to your webhook URL (3 retries with exponential backoff).");
+  codeBlock(`// Request: { "source_text": "...", "webhook_url": "https://example.com/callback" }
+// 202 Response
+{
+  "status": "accepted",
+  "job_id": "call_a1b2c3d4e5f6",
+  "message": "Processing started. Retrieve results via GET /gwc_observation_summarization/:job_id or wait for webhook callback."
+}
+
+// Webhook POST to your URL on completion:
+{
+  "status": "completed",
+  "job_id": "call_a1b2c3d4e5f6",
+  "data": { ... }  // same shape as GET response below
+}`);
+
+  heading("GET /gwc_observation_summarization/:jobId");
+  para("Retrieve results for an async job. Requires X-API-Key header. Returns processing status, completed results, or failure details.");
+  divider();
+  subheading("Processing (still running)");
+  codeBlock(`{
+  "status": "processing",
+  "job_id": "call_a1b2c3d4e5f6",
+  "message": "Job is still processing. Try again shortly."
+}`);
+  divider();
+  subheading("Completed (full results)");
+  codeBlock(`{
+  "status": "completed",
+  "job_id": "call_a1b2c3d4e5f6",
+  "data": {
+    "care_flow_id": "cf_abc123",
+    "processed_datetime": "2026-03-06T10:30:00Z",
+    "source_type": "phone_call",
+    "source_id": "call_a1b2c3d4e5f6",
+    "context": { "home_health_ordered": "true" },
+    "processedAt": "2026-03-06T10:30:22.456Z",
+    "processingTimeMs": 15200,
+    "prompt_version": 42,
+    "prompt_version_date": "2026-03-06T10:00:00.000Z",
+    "analysis": {
+      "summary": "Patient reported ...",
+      "observations": [ { "name": "...", "display_name": "...", "domain": "...", "value_type": "...", "value": "...", "detail": "...", "evidence": "...", "confidence": 0.95 } ],
+      "observations_summary_formatted": "<div>...</div>",
+      "followup_formatted": "<ul>...</ul>",
+      "qa_pairs": [ { "question": "...", "answer": "...", "asked_by": "...", "answered_by": "...", "observation_name": "...", "category": "..." } ],
+      "barriers": [ { "barrier": "...", "context": "...", "category": "...", "severity": "...", "evidence": "...", "observation_name": "...", "observation_display_name": "..." } ],
+      "call_qa": [ { "name": "...", "display_name": "...", "value": "...", "detail": "...", "evidence": "..." } ]
+    },
+    "tokenUsage": {
+      "promptTokens": 5800,
+      "completionTokens": 2400,
+      "totalTokens": 8200,
+      "estimatedCost": 0.0052
+    }
+  }
+}`);
+  divider();
+  subheading("Failed");
+  codeBlock(`{
+  "status": "failed",
+  "job_id": "call_a1b2c3d4e5f6",
+  "error": "Processing failed."
+}`);
+
+  heading("Awell Integration");
+  subheading("Webhook Configuration (Sync)");
+  para("URL: https://guideway-care-api-855188300685.us-central1.run.app/gwc_observation_summarization");
+  para("Method: POST | Content-Type: application/json | X-API-Key: <your-api-key>");
+  divider();
+  subheading("Sync Response Mapping");
   fieldDesc("data.analysis.summary", "Call Summary");
-  fieldDesc("data.analysis.observations", "Array of Extracted Observations");
-  fieldDesc("data.analysis.transition_status", "Transition Status Details (HTML)");
-  fieldDesc("data.analysis.follow_up_areas", "Follow-Up Items (HTML)");
-  fieldDesc("data.analysis.qa_pairs", "Array of Q&A exchanges");
-  fieldDesc("data.analysis.barriers", "Array of barriers to care");
-  fieldDesc("data.analysis.call_qa", "Array of Call QA assessments");
+  fieldDesc("data.analysis.observations", "Array of Extracted Observations (name, display_name, domain, value_type, value, detail, evidence, confidence)");
+  fieldDesc("data.analysis.observations_summary_formatted", "Transition Status Details (HTML with color-coded badges)");
+  fieldDesc("data.analysis.followup_formatted", "Follow-Up Items (HTML)");
   fieldDesc("data.tokenUsage", "Token usage and cost metrics");
+  divider();
+  subheading("Async Response Mapping (via GET or webhook)");
+  para("Async mode includes all sync fields plus additional analysis fields:");
+  fieldDesc("data.analysis.qa_pairs", "Array of Q&A exchanges (question, answer, asked_by, answered_by, observation_name, category)");
+  fieldDesc("data.analysis.barriers", "Array of barriers to care (barrier, context, category, severity, evidence, observation linkage)");
+  fieldDesc("data.analysis.call_qa", "Array of Call QA assessments (name, display_name, value, detail, evidence)");
 
   heading("GCP Deployment Setup");
   subheading("Prerequisites");
@@ -1528,6 +1667,265 @@ export default function Reference() {
           </CardContent>
         </Card>
 
+        <Card className="border-primary/20 bg-primary/5 shadow-sm mb-6">
+          <CardHeader>
+            <CardTitle className="text-foreground flex items-center gap-2">
+              <Webhook className="h-5 w-5 text-primary" />
+              POST /gwc_observation_summarization
+              <Badge className="bg-primary/10 text-primary border-primary/20 ml-2">Webhook</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <p className="text-muted-foreground">Awell webhook endpoint for transcript analysis. Supports <strong>synchronous</strong> and <strong>asynchronous</strong> processing modes. Requires <code className="text-primary">X-API-Key</code> header.</p>
+
+            <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-2">
+              <p className="text-foreground"><span className="text-primary font-semibold">URL</span> — https://guideway-care-api-855188300685.us-central1.run.app/gwc_observation_summarization</p>
+              <p className="text-foreground"><span className="text-primary font-semibold">Method</span> — POST</p>
+              <p className="text-foreground"><span className="text-primary font-semibold">Headers</span> — Content-Type: application/json, X-API-Key: &lt;your-api-key&gt;</p>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2" data-testid="text-request-fields">Request Body Fields</h3>
+              <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-2">
+                <p className="text-foreground"><span className="text-primary font-semibold">source_text</span> <span className="text-muted-foreground">(string, required)</span> — The full patient call transcript.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">source_id</span> <span className="text-muted-foreground">(string, optional)</span> — Unique identifier. Auto-generated if omitted (call_&lt;uuid&gt;).</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">care_flow_id</span> <span className="text-muted-foreground">(string, optional)</span> — Identifier for the care flow.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">processed_datetime</span> <span className="text-muted-foreground">(string, optional)</span> — ISO 8601 datetime.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">source_type</span> <span className="text-muted-foreground">(string, optional)</span> — Type of source (phone_call, chat, note).</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">client</span> <span className="text-muted-foreground">(string, optional)</span> — Client name for multi-tenant routing.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">pathway</span> <span className="text-muted-foreground">(string, optional)</span> — Pathway label for multi-tenant routing.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">client_pathway_id</span> <span className="text-muted-foreground">(number, optional)</span> — Direct client/pathway ID (overrides client+pathway lookup).</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">context</span> <span className="text-muted-foreground">(object, optional)</span> — Key-value pairs for known context injection.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">async</span> <span className="text-muted-foreground">(boolean, optional)</span> — Set to true for async mode. Returns 202 immediately.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">webhook_url</span> <span className="text-muted-foreground">(string, optional)</span> — URL to POST results to on completion. Implies async mode.</p>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2 flex items-center gap-2">
+                Mode 1: Synchronous
+                <Badge variant="outline" className="text-xs">Default</Badge>
+              </h3>
+              <p className="text-muted-foreground text-sm mb-3">Returns 200 with analysis inline. Uses fast Gemini call (summary, observations, transition status, follow-up areas). Background call adds qa_pairs, barriers, and call_qa to BigQuery after response is sent.</p>
+              <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`// 200 Response
+{
+  "status": "success",
+  "data": {
+    "care_flow_id": "cf_abc123",
+    "processed_datetime": "2026-03-06T10:30:00Z",
+    "source_type": "phone_call",
+    "source_id": "call_987654321",
+    "context": { "home_health_ordered": "true" },
+    "processedAt": "2026-03-06T10:30:15.123Z",
+    "processingTimeMs": 8450,
+    "prompt_version": 42,
+    "prompt_version_date": "2026-03-06T10:00:00.000Z",
+    "analysis": {
+      "summary": "Patient reported ...",
+      "observations": [
+        {
+          "name": "overall_feeling",
+          "display_name": "Overall Feeling",
+          "domain": "clinical",
+          "value_type": "enum",
+          "value": "Good",
+          "detail": "Patient reports feeling well",
+          "evidence": "I'm feeling much better",
+          "confidence": 0.95
+        }
+      ],
+      "observations_summary_formatted": "<div>...</div>",
+      "followup_formatted": "<ul>...</ul>"
+    },
+    "tokenUsage": {
+      "promptTokens": 3200,
+      "completionTokens": 1100,
+      "totalTokens": 4300,
+      "estimatedCost": 0.0028
+    }
+  }
+}`}
+              </pre>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2 flex items-center gap-2">
+                Mode 2: Async with Polling
+                <Badge className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30 text-xs">202 Accepted</Badge>
+              </h3>
+              <p className="text-muted-foreground text-sm mb-3">Send <code className="text-primary">"async": true</code> in the request body. Returns 202 immediately with a <code className="text-primary">job_id</code>. Poll <code className="text-primary">GET /gwc_observation_summarization/:job_id</code> for results. Runs a single complete Gemini call including qa_pairs, barriers, and call_qa.</p>
+              <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`// Request
+{
+  "source_text": "Care Guide: Hello, this is Maria...",
+  "source_id": "call_987654321",
+  "async": true
+}
+
+// 202 Response
+{
+  "status": "accepted",
+  "job_id": "call_987654321",
+  "message": "Processing started. Retrieve results via GET /gwc_observation_summarization/:job_id."
+}`}
+              </pre>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2 flex items-center gap-2">
+                Mode 3: Async with Webhook Callback
+                <Badge className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30 text-xs">202 + Webhook</Badge>
+              </h3>
+              <p className="text-muted-foreground text-sm mb-3">Include a <code className="text-primary">webhook_url</code> in the request body. Returns 202 immediately. When processing completes, the API POSTs full results to your webhook URL (3 retries with exponential backoff).</p>
+              <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`// Request
+{
+  "source_text": "Care Guide: Hello, this is Maria...",
+  "webhook_url": "https://hooks.awell.health/your-callback"
+}
+
+// 202 Response
+{
+  "status": "accepted",
+  "job_id": "call_a1b2c3d4e5f6",
+  "message": "Processing started. Retrieve results via GET /gwc_observation_summarization/:job_id or wait for webhook callback."
+}
+
+// Webhook POST to your URL on completion:
+{
+  "status": "completed",
+  "job_id": "call_a1b2c3d4e5f6",
+  "data": { ... }
+}`}
+              </pre>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/60 shadow-sm mb-6">
+          <CardHeader>
+            <CardTitle className="text-foreground flex items-center gap-2">
+              <Activity className="h-5 w-5 text-primary" />
+              GET /gwc_observation_summarization/:jobId
+              <Badge className="bg-primary/10 text-primary border-primary/20 ml-2">Polling</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <p className="text-muted-foreground">Retrieve results for an async job. Requires <code className="text-primary">X-API-Key</code> header. Returns processing status, completed results, or failure details.</p>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">Processing (still running)</h3>
+              <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`{
+  "status": "processing",
+  "job_id": "call_a1b2c3d4e5f6",
+  "message": "Job is still processing. Try again shortly."
+}`}
+              </pre>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">Completed (full results)</h3>
+              <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`{
+  "status": "completed",
+  "job_id": "call_a1b2c3d4e5f6",
+  "data": {
+    "care_flow_id": "cf_abc123",
+    "processed_datetime": "2026-03-06T10:30:00Z",
+    "source_type": "phone_call",
+    "source_id": "call_a1b2c3d4e5f6",
+    "context": { "home_health_ordered": "true" },
+    "processedAt": "2026-03-06T10:30:22.456Z",
+    "processingTimeMs": 15200,
+    "prompt_version": 42,
+    "prompt_version_date": "2026-03-06T10:00:00.000Z",
+    "analysis": {
+      "summary": "Patient reported ...",
+      "observations": [
+        {
+          "name": "overall_feeling",
+          "display_name": "Overall Feeling",
+          "domain": "clinical",
+          "value_type": "enum",
+          "value": "Good",
+          "detail": "Patient reports feeling well",
+          "evidence": "I'm feeling much better",
+          "confidence": 0.95
+        }
+      ],
+      "observations_summary_formatted": "<div>...</div>",
+      "followup_formatted": "<ul>...</ul>",
+      "qa_pairs": [
+        {
+          "question": "How are you feeling?",
+          "answer": "I'm feeling much better today",
+          "asked_by": "Care Guide",
+          "answered_by": "Patient",
+          "observation_name": "overall_feeling",
+          "category": "clinical"
+        }
+      ],
+      "barriers": [
+        {
+          "barrier": "Transportation challenges",
+          "context": "Patient mentioned difficulty getting to appointments",
+          "category": "access",
+          "severity": "moderate",
+          "evidence": "I don't have a ride to my follow-up",
+          "observation_name": "follow_up_appointments",
+          "observation_display_name": "Follow-Up Appointments"
+        }
+      ],
+      "call_qa": [
+        {
+          "name": "greeting_quality",
+          "display_name": "Greeting Quality",
+          "value": "Good",
+          "detail": "Care guide introduced themselves clearly",
+          "evidence": "Hello, this is Maria from Guideway Care"
+        }
+      ]
+    },
+    "tokenUsage": {
+      "promptTokens": 5800,
+      "completionTokens": 2400,
+      "totalTokens": 8200,
+      "estimatedCost": 0.0052
+    }
+  }
+}`}
+              </pre>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">Failed</h3>
+              <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`{
+  "status": "failed",
+  "job_id": "call_a1b2c3d4e5f6",
+  "error": "Processing failed."
+}`}
+              </pre>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className="border-border/60 shadow-sm mb-6">
           <CardHeader>
             <CardTitle className="text-foreground flex items-center gap-2">
@@ -1536,22 +1934,10 @@ export default function Reference() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-muted-foreground">To connect this API from Awell, configure a webhook or custom action with the following:</p>
+            <p className="text-muted-foreground">To connect this API from Awell, configure a webhook or custom action:</p>
             <div className="space-y-3">
               <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
-                <p className="text-primary font-mono text-sm mb-1">URL</p>
-                <p className="text-foreground text-sm">https://guideway-care-api-855188300685.us-central1.run.app/api/analyze</p>
-              </div>
-              <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
-                <p className="text-primary font-mono text-sm mb-1">Method</p>
-                <p className="text-foreground text-sm">POST</p>
-              </div>
-              <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
-                <p className="text-primary font-mono text-sm mb-1">Headers</p>
-                <p className="text-foreground text-sm">Content-Type: application/json</p>
-              </div>
-              <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
-                <p className="text-primary font-mono text-sm mb-1">Body</p>
+                <p className="text-primary font-mono text-sm mb-1">Sync Example Body</p>
                 <pre className="text-foreground text-sm mt-1">
 {`{
   "care_flow_id": "{{awell.care_flow_id}}",
@@ -1566,18 +1952,44 @@ export default function Reference() {
 }`}
                 </pre>
               </div>
+              <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
+                <p className="text-primary font-mono text-sm mb-1">Async Example Body (with polling)</p>
+                <pre className="text-foreground text-sm mt-1">
+{`{
+  "care_flow_id": "{{awell.care_flow_id}}",
+  "source_text": "{{awell.source_text}}",
+  "async": true
+}`}
+                </pre>
+              </div>
+              <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
+                <p className="text-primary font-mono text-sm mb-1">Async Example Body (with webhook callback)</p>
+                <pre className="text-foreground text-sm mt-1">
+{`{
+  "care_flow_id": "{{awell.care_flow_id}}",
+  "source_text": "{{awell.source_text}}",
+  "webhook_url": "https://hooks.awell.health/your-callback"
+}`}
+                </pre>
+              </div>
             </div>
             <div className="bg-primary/5 border border-primary/20 p-4 rounded-lg mt-4">
-              <p className="text-primary font-semibold text-sm mb-2">Mapping Response Fields in Awell</p>
+              <p className="text-primary font-semibold text-sm mb-2">Sync Response Mapping in Awell</p>
               <div className="text-muted-foreground text-sm space-y-1">
                 <p><code className="text-primary">data.analysis.summary</code> → Call Summary</p>
                 <p><code className="text-primary">data.analysis.observations</code> → Array of Extracted Observations</p>
-                <p><code className="text-primary">data.analysis.transition_status</code> → Transition Status Details (HTML)</p>
-                <p><code className="text-primary">data.analysis.follow_up_areas</code> → Follow-Up Items (HTML)</p>
-                <p><code className="text-primary">data.analysis.qa_pairs</code> → Array of Q&A exchanges (question, answer, category, observation linkage)</p>
-                <p><code className="text-primary">data.analysis.barriers</code> → Array of barriers to care (barrier, context, category, severity, evidence, observation linkage)</p>
-                <p><code className="text-primary">data.analysis.call_qa</code> → Array of Call QA assessments (name, display_name, value, detail, evidence)</p>
+                <p><code className="text-primary">data.analysis.observations_summary_formatted</code> → Transition Status (HTML with color badges)</p>
+                <p><code className="text-primary">data.analysis.followup_formatted</code> → Follow-Up Items (HTML)</p>
                 <p><code className="text-primary">data.tokenUsage</code> → Token usage and cost metrics</p>
+              </div>
+            </div>
+            <div className="bg-primary/5 border border-primary/20 p-4 rounded-lg">
+              <p className="text-primary font-semibold text-sm mb-2">Async Response Mapping (via GET or webhook)</p>
+              <p className="text-muted-foreground text-xs mb-2">Includes all sync fields plus:</p>
+              <div className="text-muted-foreground text-sm space-y-1">
+                <p><code className="text-primary">data.analysis.qa_pairs</code> → Array of Q&A exchanges (question, answer, asked_by, answered_by, observation_name, category)</p>
+                <p><code className="text-primary">data.analysis.barriers</code> → Array of barriers to care (barrier, context, category, severity, evidence)</p>
+                <p><code className="text-primary">data.analysis.call_qa</code> → Array of Call QA assessments (name, display_name, value, detail, evidence)</p>
               </div>
             </div>
           </CardContent>
