@@ -386,10 +386,12 @@ function exportReferencePdf() {
   fieldDesc("webhook_url", "(string, optional) URL to POST results to on completion. Implies async mode.");
   divider();
   subheading("Mode 1: Synchronous (default)");
-  para("Returns 200 with analysis inline. Uses fast Gemini call (summary, observations, transition_status, follow_up_areas). Background call adds qa_pairs, barriers, call_qa to BigQuery after response.");
+  para("Returns 200 with analysis inline. Uses fast Gemini call (summary, observations, transition_status, follow_up_areas). Background call adds qa_pairs, barriers, call_qa to BigQuery after response. The response includes a top-level call_id that you can use with GET /gwc_observation_summarization/:call_id to retrieve the full results once background processing completes.");
   codeBlock(`// 200 Response
 {
   "status": "success",
+  "call_id": "call_987654321",
+  "message": "Sync response includes summary, observations, and transition status. Use GET /gwc_observation_summarization/call_987654321 to retrieve full results (qa_pairs, barriers, call_qa) after background processing completes.",
   "data": {
     "care_flow_id": "cf_abc123",
     "processed_datetime": "2026-03-06T10:30:00Z",
@@ -1710,11 +1712,13 @@ export default function Reference() {
                 Mode 1: Synchronous
                 <Badge variant="outline" className="text-xs">Default</Badge>
               </h3>
-              <p className="text-muted-foreground text-sm mb-3">Returns 200 with analysis inline. Uses fast Gemini call (summary, observations, transition status, follow-up areas). Background call adds qa_pairs, barriers, and call_qa to BigQuery after response is sent.</p>
+              <p className="text-muted-foreground text-sm mb-3">Returns 200 with analysis inline. Uses fast Gemini call (summary, observations, transition status, follow-up areas). Background call adds qa_pairs, barriers, and call_qa to BigQuery after response is sent. The response includes a top-level <code className="text-primary">call_id</code> — use it with <code className="text-primary">GET /gwc_observation_summarization/:call_id</code> to retrieve the full results once background processing completes.</p>
               <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
 {`// 200 Response
 {
   "status": "success",
+  "call_id": "call_987654321",
+  "message": "Sync response includes summary, observations, and transition status. Use GET /gwc_observation_summarization/call_987654321 to retrieve full results ...",
   "data": {
     "care_flow_id": "cf_abc123",
     "processed_datetime": "2026-03-06T10:30:00Z",

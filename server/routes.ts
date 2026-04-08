@@ -444,6 +444,8 @@ export async function registerRoutes(
 
       const responseBody = {
         status: "success",
+        call_id: resolvedSourceId,
+        message: "Sync response includes summary, observations, and transition status. Use GET /gwc_observation_summarization/" + resolvedSourceId + " to retrieve full results (qa_pairs, barriers, call_qa) after background processing completes.",
         data: {
           care_flow_id: care_flow_id || null,
           processed_datetime: processed_datetime || new Date().toISOString(),
