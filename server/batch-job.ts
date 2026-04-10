@@ -1,6 +1,6 @@
-import { getPendingBatchItems, updateBatchItemStatus, claimPendingBatchItems, initializeBatchTable, ensureCallQATable, initializeCallTables } from "./bigquery";
-import { insertCallInfo, insertCallObservations, insertCallQAResults } from "./bigquery";
-import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION } from "./gemini";
+import { getPendingBatchItems, updateBatchItemStatus, claimPendingBatchItems, initializeBatchTable, ensureCallQATable, initializeCallTables, ensureCallDispositionsTable } from "./bigquery";
+import { insertCallInfo, insertCallObservations, insertCallQAResults, insertCallDisposition } from "./bigquery";
+import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, type DispositionConfig } from "./gemini";
 import { storage } from "./storage";
 import { createHash, randomUUID } from "crypto";
 
@@ -11,7 +11,10 @@ async function getPromptWithVersion(clientPathwayId: number) {
   const barriersGuidance = await storage.getSetting(clientPathwayId, "barriers_prompt_guidance");
   const contextParams = await storage.getActiveContextParameters(clientPathwayId);
   const callQAPrompts = await storage.getActiveCallQAPrompts(clientPathwayId);
-  const prompt = buildPromptTemplate(activeObs, summaryInstruction || undefined, contextParams, observationsGuidance || undefined, barriersGuidance || undefined, callQAPrompts);
+  const dispCategories = await storage.getDispositionCategories(clientPathwayId);
+  const dispDetails = await storage.getDispositionDetails(clientPathwayId);
+  const dispConfig: DispositionConfig = { categories: dispCategories, details: dispDetails };
+  const prompt = buildPromptTemplate(activeObs, summaryInstruction || undefined, contextParams, observationsGuidance || undefined, barriersGuidance || undefined, callQAPrompts, undefined, dispConfig);
 
   const hash = createHash("sha256").update(prompt).digest("hex");
   const storedHash = await storage.getSetting(clientPathwayId, "prompt_hash");
@@ -38,6 +41,7 @@ async function processBatch() {
 
   await initializeBatchTable();
   await ensureCallQATable();
+  await ensureCallDispositionsTable();
   await initializeCallTables();
 
   const allCPs = await storage.getClientPathways();
@@ -69,6 +73,9 @@ async function processBatch() {
   const contextParams = await storage.getActiveContextParameters(cpId);
   const { promptVersion, promptVersionDate } = await getPromptWithVersion(cpId);
   const batchCallQAPrompts = await storage.getActiveCallQAPrompts(cpId);
+  const batchDispCats = await storage.getDispositionCategories(cpId);
+  const batchDispDets = await storage.getDispositionDetails(cpId);
+  const batchDispConfig: DispositionConfig = { categories: batchDispCats, details: batchDispDets };
 
   console.log(`Claiming ${pendingItems.length} items in bulk...`);
   const allIds = pendingItems.map(item => item.bland_call_id);
@@ -131,7 +138,8 @@ async function processBatch() {
         batchContext,
         observationsGuidance || undefined,
         barriersGuidance || undefined,
-        batchCallQAPrompts
+        batchCallQAPrompts,
+        batchDispConfig,
       );
 
       const processingTimeMs = Date.now() - startTime;
@@ -169,6 +177,9 @@ async function processBatch() {
 
       await insertCallObservations(sourceId, analysis.observations);
       await insertCallQAResults(sourceId, analysis.call_qa || []);
+      if (analysis.disposition) {
+        await insertCallDisposition(sourceId, analysis.disposition);
+      }
 
       enqueueBqUpdate(async () => {
         await updateBatchItemStatus(item.bland_call_id, "completed", sourceId);

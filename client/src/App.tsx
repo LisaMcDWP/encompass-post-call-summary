@@ -21,6 +21,7 @@ import BarriersPrompt from "@/pages/BarriersPrompt";
 import CallQA from "@/pages/CallQA";
 import ClientPathway from "@/pages/ClientPathway";
 import CallStats from "@/pages/CallStats";
+import Dispositions from "@/pages/Dispositions";
 
 function Router() {
   return (
@@ -30,6 +31,7 @@ function Router() {
         <Route path="/calls" component={CallHistory} />
         <Route path="/overview" component={ProjectOverview} />
         <Route path="/observations" component={Observations} />
+        <Route path="/dispositions" component={Dispositions} />
         <Route path="/summary-prompt" component={SummaryPrompt} />
         <Route path="/barriers-prompt" component={BarriersPrompt} />
         <Route path="/call-qa" component={CallQA} />

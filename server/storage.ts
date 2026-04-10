@@ -1,5 +1,5 @@
 import { BigQuery } from "@google-cloud/bigquery";
-import type { Observation, InsertObservation, EnumValue, ContextParameter, InsertContextParameter, CallQAPrompt, InsertCallQAPrompt, ClientPathway, InsertClientPathway } from "@shared/schema";
+import type { Observation, InsertObservation, EnumValue, ContextParameter, InsertContextParameter, CallQAPrompt, InsertCallQAPrompt, ClientPathway, InsertClientPathway, DispositionCategory, InsertDispositionCategory, DispositionDetail, InsertDispositionDetail } from "@shared/schema";
 
 const DATASET_ID = "call_information";
 const TABLE_ID = "observations";
@@ -7,6 +7,8 @@ const SETTINGS_TABLE_ID = "settings";
 const CONTEXT_PARAMS_TABLE_ID = "context_parameters";
 const CALL_QA_PROMPTS_TABLE_ID = "call_qa_prompts";
 const CLIENT_PATHWAY_TABLE_ID = "client_pathway";
+const DISPOSITION_CATEGORIES_TABLE_ID = "disposition_categories";
+const DISPOSITION_DETAILS_TABLE_ID = "disposition_details";
 
 let bigquery: BigQuery | null = null;
 
@@ -29,6 +31,8 @@ let settingsTableInitialized = false;
 let contextParamsTableInitialized = false;
 let callQAPromptsTableInitialized = false;
 let clientPathwayTableInitialized = false;
+let dispositionCategoriesTableInitialized = false;
+let dispositionDetailsTableInitialized = false;
 
 async function ensureSettingsTable(): Promise<void> {
   if (settingsTableInitialized) return;
@@ -227,6 +231,82 @@ function rowToCallQAPrompt(row: any): CallQAPrompt {
   };
 }
 
+async function ensureDispositionCategoriesTable(): Promise<void> {
+  if (dispositionCategoriesTableInitialized) return;
+  const client = getBigQueryClient();
+  const projectId = process.env.GCP_PROJECT_ID;
+  const fullTable = `${projectId}.${DATASET_ID}.${DISPOSITION_CATEGORIES_TABLE_ID}`;
+  try {
+    await client.query({
+      query: `CREATE TABLE IF NOT EXISTS \`${fullTable}\` (
+        id INT64 NOT NULL,
+        name STRING NOT NULL,
+        display_name STRING NOT NULL,
+        description STRING DEFAULT '',
+        display_order INT64 DEFAULT 0,
+        is_active BOOL DEFAULT TRUE,
+        client_pathway_id INT64
+      )`,
+    });
+    console.log(`BigQuery table ${DATASET_ID}.${DISPOSITION_CATEGORIES_TABLE_ID} ready.`);
+  } catch (err: any) {
+    if (err.message?.includes("Already Exists")) {
+      console.log(`BigQuery table ${DATASET_ID}.${DISPOSITION_CATEGORIES_TABLE_ID} already exists.`);
+    } else { throw err; }
+  }
+  dispositionCategoriesTableInitialized = true;
+}
+
+async function ensureDispositionDetailsTable(): Promise<void> {
+  if (dispositionDetailsTableInitialized) return;
+  const client = getBigQueryClient();
+  const projectId = process.env.GCP_PROJECT_ID;
+  const fullTable = `${projectId}.${DATASET_ID}.${DISPOSITION_DETAILS_TABLE_ID}`;
+  try {
+    await client.query({
+      query: `CREATE TABLE IF NOT EXISTS \`${fullTable}\` (
+        id INT64 NOT NULL,
+        category_id INT64 NOT NULL,
+        name STRING NOT NULL,
+        display_name STRING NOT NULL,
+        description STRING DEFAULT '',
+        display_order INT64 DEFAULT 0,
+        is_active BOOL DEFAULT TRUE,
+        client_pathway_id INT64
+      )`,
+    });
+    console.log(`BigQuery table ${DATASET_ID}.${DISPOSITION_DETAILS_TABLE_ID} ready.`);
+  } catch (err: any) {
+    if (err.message?.includes("Already Exists")) {
+      console.log(`BigQuery table ${DATASET_ID}.${DISPOSITION_DETAILS_TABLE_ID} already exists.`);
+    } else { throw err; }
+  }
+  dispositionDetailsTableInitialized = true;
+}
+
+function rowToDispositionCategory(row: any): DispositionCategory {
+  return {
+    id: row.id,
+    name: row.name,
+    displayName: row.display_name,
+    description: row.description || "",
+    displayOrder: row.display_order ?? 0,
+    isActive: row.is_active,
+  };
+}
+
+function rowToDispositionDetail(row: any): DispositionDetail {
+  return {
+    id: row.id,
+    categoryId: row.category_id,
+    name: row.name,
+    displayName: row.display_name,
+    description: row.description || "",
+    displayOrder: row.display_order ?? 0,
+    isActive: row.is_active,
+  };
+}
+
 function rowToObservation(row: any): Observation {
   return {
     id: row.id,
@@ -275,6 +355,20 @@ export interface IStorage {
   createCallQAPrompt(clientPathwayId: number, qa: InsertCallQAPrompt): Promise<CallQAPrompt>;
   updateCallQAPrompt(id: number, qa: Partial<InsertCallQAPrompt>, clientPathwayId?: number): Promise<CallQAPrompt | undefined>;
   deleteCallQAPrompt(id: number, clientPathwayId?: number): Promise<boolean>;
+
+  getDispositionCategories(clientPathwayId: number): Promise<DispositionCategory[]>;
+  getActiveDispositionCategories(clientPathwayId: number): Promise<DispositionCategory[]>;
+  getDispositionCategory(id: number, clientPathwayId?: number): Promise<DispositionCategory | undefined>;
+  createDispositionCategory(clientPathwayId: number, data: InsertDispositionCategory): Promise<DispositionCategory>;
+  updateDispositionCategory(id: number, data: Partial<InsertDispositionCategory>, clientPathwayId?: number): Promise<DispositionCategory | undefined>;
+  deleteDispositionCategory(id: number, clientPathwayId?: number): Promise<boolean>;
+
+  getDispositionDetails(clientPathwayId: number, categoryId?: number): Promise<DispositionDetail[]>;
+  getActiveDispositionDetails(clientPathwayId: number, categoryId?: number): Promise<DispositionDetail[]>;
+  getDispositionDetail(id: number, clientPathwayId?: number): Promise<DispositionDetail | undefined>;
+  createDispositionDetail(clientPathwayId: number, data: InsertDispositionDetail): Promise<DispositionDetail>;
+  updateDispositionDetail(id: number, data: Partial<InsertDispositionDetail>, clientPathwayId?: number): Promise<DispositionDetail | undefined>;
+  deleteDispositionDetail(id: number, clientPathwayId?: number): Promise<boolean>;
 }
 
 export class BigQueryStorage implements IStorage {
@@ -712,6 +806,175 @@ export class BigQueryStorage implements IStorage {
       query: `DELETE FROM ${table} WHERE key = @key AND client_pathway_id = @cpId`,
       params: { key, cpId: clientPathwayId },
     });
+  }
+
+  private getDispositionCategoriesTable(): string {
+    const projectId = process.env.GCP_PROJECT_ID;
+    return `\`${projectId}.${DATASET_ID}.${DISPOSITION_CATEGORIES_TABLE_ID}\``;
+  }
+  private getDispositionDetailsTable(): string {
+    const projectId = process.env.GCP_PROJECT_ID;
+    return `\`${projectId}.${DATASET_ID}.${DISPOSITION_DETAILS_TABLE_ID}\``;
+  }
+
+  async getDispositionCategories(clientPathwayId: number): Promise<DispositionCategory[]> {
+    await ensureDispositionCategoriesTable();
+    const client = getBigQueryClient();
+    const table = this.getDispositionCategoriesTable();
+    const [rows] = await client.query({
+      query: `SELECT * FROM ${table} WHERE client_pathway_id = @cpId ORDER BY display_order, id`,
+      params: { cpId: clientPathwayId },
+    });
+    return rows.map(rowToDispositionCategory);
+  }
+
+  async getActiveDispositionCategories(clientPathwayId: number): Promise<DispositionCategory[]> {
+    await ensureDispositionCategoriesTable();
+    const client = getBigQueryClient();
+    const table = this.getDispositionCategoriesTable();
+    const [rows] = await client.query({
+      query: `SELECT * FROM ${table} WHERE client_pathway_id = @cpId AND is_active = TRUE ORDER BY display_order, id`,
+      params: { cpId: clientPathwayId },
+    });
+    return rows.map(rowToDispositionCategory);
+  }
+
+  async getDispositionCategory(id: number, clientPathwayId?: number): Promise<DispositionCategory | undefined> {
+    await ensureDispositionCategoriesTable();
+    const client = getBigQueryClient();
+    const table = this.getDispositionCategoriesTable();
+    const cpFilter = clientPathwayId ? " AND client_pathway_id = @cpId" : "";
+    const params: any = { id };
+    if (clientPathwayId) params.cpId = clientPathwayId;
+    const [rows] = await client.query({ query: `SELECT * FROM ${table} WHERE id = @id${cpFilter}`, params });
+    return rows.length > 0 ? rowToDispositionCategory(rows[0]) : undefined;
+  }
+
+  async createDispositionCategory(clientPathwayId: number, data: InsertDispositionCategory): Promise<DispositionCategory> {
+    await ensureDispositionCategoriesTable();
+    const client = getBigQueryClient();
+    const table = this.getDispositionCategoriesTable();
+    const [maxRows] = await client.query({ query: `SELECT COALESCE(MAX(id), 0) as maxId FROM ${table}` });
+    const newId = (maxRows[0]?.maxId || 0) + 1;
+    await client.query({
+      query: `INSERT INTO ${table} (id, name, display_name, description, display_order, is_active, client_pathway_id) VALUES (@id, @name, @displayName, @description, @displayOrder, @isActive, @cpId)`,
+      params: { id: newId, name: data.name, displayName: data.displayName, description: data.description || "", displayOrder: data.displayOrder ?? 0, isActive: data.isActive ?? true, cpId: clientPathwayId },
+    });
+    return { id: newId, name: data.name, displayName: data.displayName, description: data.description || "", displayOrder: data.displayOrder ?? 0, isActive: data.isActive ?? true };
+  }
+
+  async updateDispositionCategory(id: number, data: Partial<InsertDispositionCategory>, clientPathwayId?: number): Promise<DispositionCategory | undefined> {
+    await ensureDispositionCategoriesTable();
+    const client = getBigQueryClient();
+    const table = this.getDispositionCategoriesTable();
+    const sets: string[] = [];
+    const params: any = { id };
+    if (clientPathwayId) params.cpId = clientPathwayId;
+    if (data.name !== undefined) { sets.push("name = @name"); params.name = data.name; }
+    if (data.displayName !== undefined) { sets.push("display_name = @displayName"); params.displayName = data.displayName; }
+    if (data.description !== undefined) { sets.push("description = @description"); params.description = data.description; }
+    if (data.displayOrder !== undefined) { sets.push("display_order = @displayOrder"); params.displayOrder = data.displayOrder; }
+    if (data.isActive !== undefined) { sets.push("is_active = @isActive"); params.isActive = data.isActive; }
+    if (sets.length === 0) return this.getDispositionCategory(id, clientPathwayId);
+    const cpFilter = clientPathwayId ? " AND client_pathway_id = @cpId" : "";
+    await client.query({ query: `UPDATE ${table} SET ${sets.join(", ")} WHERE id = @id${cpFilter}`, params });
+    return this.getDispositionCategory(id, clientPathwayId);
+  }
+
+  async deleteDispositionCategory(id: number, clientPathwayId?: number): Promise<boolean> {
+    await ensureDispositionCategoriesTable();
+    await ensureDispositionDetailsTable();
+    const client = getBigQueryClient();
+    const catTable = this.getDispositionCategoriesTable();
+    const detTable = this.getDispositionDetailsTable();
+    const cpFilter = clientPathwayId ? " AND client_pathway_id = @cpId" : "";
+    const params: any = { id };
+    if (clientPathwayId) params.cpId = clientPathwayId;
+    await client.query({ query: `DELETE FROM ${detTable} WHERE category_id = @id${cpFilter}`, params });
+    await client.query({ query: `DELETE FROM ${catTable} WHERE id = @id${cpFilter}`, params });
+    return true;
+  }
+
+  async getDispositionDetails(clientPathwayId: number, categoryId?: number): Promise<DispositionDetail[]> {
+    await ensureDispositionDetailsTable();
+    const client = getBigQueryClient();
+    const table = this.getDispositionDetailsTable();
+    const catFilter = categoryId ? " AND category_id = @catId" : "";
+    const params: any = { cpId: clientPathwayId };
+    if (categoryId) params.catId = categoryId;
+    const [rows] = await client.query({
+      query: `SELECT * FROM ${table} WHERE client_pathway_id = @cpId${catFilter} ORDER BY display_order, id`,
+      params,
+    });
+    return rows.map(rowToDispositionDetail);
+  }
+
+  async getActiveDispositionDetails(clientPathwayId: number, categoryId?: number): Promise<DispositionDetail[]> {
+    await ensureDispositionDetailsTable();
+    const client = getBigQueryClient();
+    const table = this.getDispositionDetailsTable();
+    const catFilter = categoryId ? " AND category_id = @catId" : "";
+    const params: any = { cpId: clientPathwayId };
+    if (categoryId) params.catId = categoryId;
+    const [rows] = await client.query({
+      query: `SELECT * FROM ${table} WHERE client_pathway_id = @cpId AND is_active = TRUE${catFilter} ORDER BY display_order, id`,
+      params,
+    });
+    return rows.map(rowToDispositionDetail);
+  }
+
+  async getDispositionDetail(id: number, clientPathwayId?: number): Promise<DispositionDetail | undefined> {
+    await ensureDispositionDetailsTable();
+    const client = getBigQueryClient();
+    const table = this.getDispositionDetailsTable();
+    const cpFilter = clientPathwayId ? " AND client_pathway_id = @cpId" : "";
+    const params: any = { id };
+    if (clientPathwayId) params.cpId = clientPathwayId;
+    const [rows] = await client.query({ query: `SELECT * FROM ${table} WHERE id = @id${cpFilter}`, params });
+    return rows.length > 0 ? rowToDispositionDetail(rows[0]) : undefined;
+  }
+
+  async createDispositionDetail(clientPathwayId: number, data: InsertDispositionDetail): Promise<DispositionDetail> {
+    await ensureDispositionDetailsTable();
+    const client = getBigQueryClient();
+    const table = this.getDispositionDetailsTable();
+    const [maxRows] = await client.query({ query: `SELECT COALESCE(MAX(id), 0) as maxId FROM ${table}` });
+    const newId = (maxRows[0]?.maxId || 0) + 1;
+    await client.query({
+      query: `INSERT INTO ${table} (id, category_id, name, display_name, description, display_order, is_active, client_pathway_id) VALUES (@id, @categoryId, @name, @displayName, @description, @displayOrder, @isActive, @cpId)`,
+      params: { id: newId, categoryId: data.categoryId, name: data.name, displayName: data.displayName, description: data.description || "", displayOrder: data.displayOrder ?? 0, isActive: data.isActive ?? true, cpId: clientPathwayId },
+    });
+    return { id: newId, categoryId: data.categoryId, name: data.name, displayName: data.displayName, description: data.description || "", displayOrder: data.displayOrder ?? 0, isActive: data.isActive ?? true };
+  }
+
+  async updateDispositionDetail(id: number, data: Partial<InsertDispositionDetail>, clientPathwayId?: number): Promise<DispositionDetail | undefined> {
+    await ensureDispositionDetailsTable();
+    const client = getBigQueryClient();
+    const table = this.getDispositionDetailsTable();
+    const sets: string[] = [];
+    const params: any = { id };
+    if (clientPathwayId) params.cpId = clientPathwayId;
+    if (data.categoryId !== undefined) { sets.push("category_id = @categoryId"); params.categoryId = data.categoryId; }
+    if (data.name !== undefined) { sets.push("name = @name"); params.name = data.name; }
+    if (data.displayName !== undefined) { sets.push("display_name = @displayName"); params.displayName = data.displayName; }
+    if (data.description !== undefined) { sets.push("description = @description"); params.description = data.description; }
+    if (data.displayOrder !== undefined) { sets.push("display_order = @displayOrder"); params.displayOrder = data.displayOrder; }
+    if (data.isActive !== undefined) { sets.push("is_active = @isActive"); params.isActive = data.isActive; }
+    if (sets.length === 0) return this.getDispositionDetail(id, clientPathwayId);
+    const cpFilter = clientPathwayId ? " AND client_pathway_id = @cpId" : "";
+    await client.query({ query: `UPDATE ${table} SET ${sets.join(", ")} WHERE id = @id${cpFilter}`, params });
+    return this.getDispositionDetail(id, clientPathwayId);
+  }
+
+  async deleteDispositionDetail(id: number, clientPathwayId?: number): Promise<boolean> {
+    await ensureDispositionDetailsTable();
+    const client = getBigQueryClient();
+    const table = this.getDispositionDetailsTable();
+    const cpFilter = clientPathwayId ? " AND client_pathway_id = @cpId" : "";
+    const params: any = { id };
+    if (clientPathwayId) params.cpId = clientPathwayId;
+    await client.query({ query: `DELETE FROM ${table} WHERE id = @id${cpFilter}`, params });
+    return true;
   }
 }
 

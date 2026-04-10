@@ -117,3 +117,43 @@ export interface CallQAPrompt {
   isActive: boolean;
   displayOrder: number;
 }
+
+export const insertDispositionCategorySchema = z.object({
+  name: z.string(),
+  displayName: z.string(),
+  description: z.string().default(""),
+  displayOrder: z.number().int().default(0),
+  isActive: z.boolean().default(true),
+});
+
+export type InsertDispositionCategory = z.infer<typeof insertDispositionCategorySchema>;
+
+export interface DispositionCategory {
+  id: number;
+  name: string;
+  displayName: string;
+  description: string;
+  displayOrder: number;
+  isActive: boolean;
+}
+
+export const insertDispositionDetailSchema = z.object({
+  categoryId: z.number().int(),
+  name: z.string(),
+  displayName: z.string(),
+  description: z.string().default(""),
+  displayOrder: z.number().int().default(0),
+  isActive: z.boolean().default(true),
+});
+
+export type InsertDispositionDetail = z.infer<typeof insertDispositionDetailSchema>;
+
+export interface DispositionDetail {
+  id: number;
+  categoryId: number;
+  name: string;
+  displayName: string;
+  description: string;
+  displayOrder: number;
+  isActive: boolean;
+}

@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Phone, Clock, Coins, ChevronRight, ChevronLeft, X, FileText, Activity, ListChecks, ClipboardList, AlertCircle, MessageSquare, ShieldAlert, ClipboardCheck, RefreshCw, Download, History } from "lucide-react";
+import { Loader2, Phone, Clock, Coins, ChevronRight, ChevronLeft, X, FileText, Activity, ListChecks, ClipboardList, AlertCircle, MessageSquare, ShieldAlert, ClipboardCheck, RefreshCw, Download, History, Tag } from "lucide-react";
 import { exportCallDetailPdf } from "@/lib/exportPdf";
 
 interface CallInfo {
@@ -156,6 +156,7 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
   const qaPairs = data.qaPairs || [];
   const barriers = data.barriers || [];
   const callQA = data.callQA || [];
+  const disposition = data.disposition || null;
   const transcript = data.transcript || null;
   const totalRuns = data.totalRuns || 1;
   const currentRun = data.currentRun || 1;
@@ -437,6 +438,33 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
               </CardHeader>
               <CardContent className="pt-4">
                 <p className="text-sm leading-relaxed" data-testid="detail-summary">{info.summary}</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {disposition && (
+            <Card className="border-border/60 bg-card shadow-sm">
+              <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
+                <CardTitle className="text-base flex items-center gap-2 text-secondary">
+                  <Tag className="h-4 w-4 text-primary" />
+                  Call Disposition
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="flex items-center gap-3 mb-2" data-testid="detail-disposition">
+                  <Badge className="text-sm" style={{ backgroundColor: "#0098db", color: "white" }}>
+                    {disposition.disposition_category_display || disposition.disposition_category}
+                  </Badge>
+                  <span className="text-gray-400">&rarr;</span>
+                  <Badge variant="outline" className="text-sm">
+                    {disposition.disposition_detail_display || disposition.disposition_detail}
+                  </Badge>
+                  {disposition.confidence && (
+                    <span className="text-xs text-gray-400 ml-auto">Confidence: {disposition.confidence}</span>
+                  )}
+                </div>
+                {disposition.detail && <p className="text-sm text-gray-600 mt-2">{disposition.detail}</p>}
+                {disposition.evidence && <p className="text-xs text-gray-400 mt-1 italic">"{disposition.evidence}"</p>}
               </CardContent>
             </Card>
           )}

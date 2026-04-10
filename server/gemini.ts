@@ -1,5 +1,5 @@
 import { VertexAI } from "@google-cloud/vertexai";
-import type { Observation, EnumValue, ContextParameter, CallQAPrompt } from "@shared/schema";
+import type { Observation, EnumValue, ContextParameter, CallQAPrompt, DispositionCategory, DispositionDetail } from "@shared/schema";
 
 function getCredentials() {
   const raw = process.env.GCP_SERVICE_ACCOUNT_KEY;
@@ -71,6 +71,16 @@ export interface CallQAResult {
   evidence: string | null;
 }
 
+export interface DispositionResult {
+  disposition_category: string;
+  disposition_category_display?: string;
+  disposition_detail: string;
+  disposition_detail_display?: string;
+  confidence?: string;
+  evidence?: string;
+  detail?: string;
+}
+
 export interface TranscriptAnalysis {
   summary: string;
   transition_status: string;
@@ -79,6 +89,7 @@ export interface TranscriptAnalysis {
   qa_pairs: QAPair[];
   barriers: Barrier[];
   call_qa: CallQAResult[];
+  disposition?: DispositionResult;
 }
 
 const COLOR_STYLES: Record<string, string> = {
@@ -200,14 +211,60 @@ function buildCallQABlock(callQAPrompts: CallQAPrompt[]): string {
   return items.join("\n");
 }
 
-export function buildPromptTemplate(activeObservations: Observation[], summaryInstruction?: string, contextParams?: ContextParameter[], observationsGuidance?: string, barriersGuidance?: string, callQAPrompts?: CallQAPrompt[], contextValues?: Record<string, string>): string {
+export interface DispositionConfig {
+  categories: DispositionCategory[];
+  details: DispositionDetail[];
+}
+
+function buildDispositionBlock(config?: DispositionConfig): string {
+  if (!config || config.categories.length === 0) return "";
+  const lines: string[] = [];
+  for (const cat of config.categories.filter(c => c.isActive).sort((a, b) => a.displayOrder - b.displayOrder)) {
+    const catDetails = config.details.filter(d => d.categoryId === cat.id && d.isActive).sort((a, b) => a.displayOrder - b.displayOrder);
+    lines.push(`  Category: "${cat.name}" ("${cat.displayName}")${cat.description ? ` — ${cat.description}` : ""}`);
+    for (const det of catDetails) {
+      lines.push(`    Detail: "${det.name}" ("${det.displayName}")${det.description ? ` — ${det.description}` : ""}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+function buildDispositionPromptSection(config?: DispositionConfig): string {
+  if (!config || config.categories.length === 0) return "";
+  const block = buildDispositionBlock(config);
+  return `\n###CALL DISPOSITION TAXONOMY
+Classify the overall call outcome using the taxonomy below. Choose exactly ONE category and ONE detail within that category.
+${block}
+`;
+}
+
+function buildDispositionJsonField(config?: DispositionConfig): string {
+  if (!config || config.categories.length === 0) return "";
+  return `,
+  "disposition": {
+    "disposition_category": "The category name from the taxonomy (e.g. 'connected', 'no_contact')",
+    "disposition_category_display": "The display name of the chosen category",
+    "disposition_detail": "The detail name within the category (e.g. 'completed_interaction', 'voicemail_left')",
+    "disposition_detail_display": "The display name of the chosen detail",
+    "confidence": "high, medium, or low",
+    "evidence": "Brief quote or description from the transcript supporting this classification",
+    "detail": "One sentence explaining why this disposition was chosen"
+  }`;
+}
+
+function buildDispositionGuideline(config?: DispositionConfig): string {
+  if (!config || config.categories.length === 0) return "";
+  return `\n- disposition: Classify the overall call outcome. Choose exactly ONE category and ONE detail from the CALL DISPOSITION TAXONOMY above. Base your choice on observable evidence in the transcript (e.g. was the conversation completed? did the line disconnect? was a voicemail reached?).`;
+}
+
+export function buildPromptTemplate(activeObservations: Observation[], summaryInstruction?: string, contextParams?: ContextParameter[], observationsGuidance?: string, barriersGuidance?: string, callQAPrompts?: CallQAPrompt[], contextValues?: Record<string, string>, dispositionConfig?: DispositionConfig): string {
   const instruction = summaryInstruction || DEFAULT_SUMMARY_INSTRUCTION;
   const contextBlock = buildContextBlock(contextParams || []);
 
   if (activeObservations.length === 0) {
     const resolvedInstruction = instruction.replace("{{SUMMARY_TOPICS}}", "general topics discussed");
     return `You are an expert healthcare call analyst for Guideway Care. Analyze the following patient interaction transcript and produce a structured JSON output.
-${contextBlock}
+${contextBlock}${buildDispositionPromptSection(dispositionConfig)}
 Your response MUST be valid JSON with exactly this structure:
 {
   "summary": "${resolvedInstruction}",
@@ -244,7 +301,7 @@ Your response MUST be valid JSON with exactly this structure:
       "detail": "Brief explanation of why this value was chosen based on the transcript",
       "evidence": "Direct quote from the transcript supporting this evaluation, or null if not applicable"
     }
-  ` : ""}]
+  ` : ""}]${buildDispositionJsonField(dispositionConfig)}
 }
 
 Guidelines:
@@ -253,7 +310,7 @@ Guidelines:
 - call_qa: For each of the following call experience evaluation prompts, assess the overall call and provide a response:
 ${buildCallQABlock(callQAPrompts || [])}
   Return one object per prompt with the name, display_name, value (your assessment), detail (brief explanation), and evidence (supporting quote or null).` : `
-- call_qa: Return an empty array [].`}
+- call_qa: Return an empty array [].`}${buildDispositionGuideline(dispositionConfig)}
 Source ID: {{SOURCE_ID}}
 
 SOURCE TEXT:
@@ -282,7 +339,7 @@ ${contextBlock}
 
 ###OBSERVATION REFERENCE TABLE (${topicCount} topics — output exactly one JSON object per row, no more, no less)
 ${observationsRefTable}
-
+${buildDispositionPromptSection(dispositionConfig)}
 Your response MUST be valid JSON with exactly this structure:
 {
   "summary": "${resolvedSummaryInstruction}",
@@ -321,7 +378,7 @@ ${observationsSchema}
       "detail": "Brief explanation of why this value was chosen based on the transcript",
       "evidence": "Direct quote from the transcript supporting this evaluation, or null if not applicable"
     }
-  ` : ""}]
+  ` : ""}]${buildDispositionJsonField(dispositionConfig)}
 }
 
 Guidelines:
@@ -337,7 +394,7 @@ Guidelines:
 - call_qa: For each of the following call experience evaluation prompts, assess the overall call and provide a response:
 ${buildCallQABlock(callQAPrompts || [])}
   Return one object per prompt with the name, display_name, value (your assessment), detail (brief explanation), and evidence (supporting quote or null).` : `
-- call_qa: Return an empty array [].`}
+- call_qa: Return an empty array [].`}${buildDispositionGuideline(dispositionConfig)}
 Source ID: {{SOURCE_ID}}
 
 SOURCE TEXT:
@@ -452,10 +509,11 @@ export async function analyzeTranscript(
   contextValues?: Record<string, string>,
   observationsGuidance?: string,
   barriersGuidance?: string,
-  callQAPrompts?: CallQAPrompt[]
+  callQAPrompts?: CallQAPrompt[],
+  dispositionConfig?: DispositionConfig,
 ): Promise<{ analysis: TranscriptAnalysis; promptUsed: string; tokenUsage: { promptTokens: number; completionTokens: number; totalTokens: number; estimatedCost: number } }> {
   const model = buildGeminiModel();
-  const template = customPrompt || buildPromptTemplate(activeObservations, summaryInstruction, contextParams, observationsGuidance, barriersGuidance, callQAPrompts, contextValues);
+  const template = customPrompt || buildPromptTemplate(activeObservations, summaryInstruction, contextParams, observationsGuidance, barriersGuidance, callQAPrompts, contextValues, dispositionConfig);
   const prompt = resolvePrompt(template, sourceId, sourceText, contextParams, contextValues);
 
   const result = await model.generateContent(prompt);
@@ -482,7 +540,7 @@ export async function analyzeTranscript(
   return { analysis: parsed as TranscriptAnalysis, promptUsed: prompt, tokenUsage };
 }
 
-export function buildFastPromptTemplate(activeObservations: Observation[], summaryInstruction?: string, contextParams?: ContextParameter[], observationsGuidance?: string, barriersGuidance?: string, contextValues?: Record<string, string>): string {
+export function buildFastPromptTemplate(activeObservations: Observation[], summaryInstruction?: string, contextParams?: ContextParameter[], observationsGuidance?: string, barriersGuidance?: string, contextValues?: Record<string, string>, dispositionConfig?: DispositionConfig): string {
   const instruction = summaryInstruction || DEFAULT_SUMMARY_INSTRUCTION;
   const contextBlock = buildContextBlock(contextParams || []);
   const topicCount = activeObservations.length;
@@ -495,17 +553,17 @@ export function buildFastPromptTemplate(activeObservations: Observation[], summa
 
   if (activeObservations.length === 0) {
     return `You are an expert healthcare call analyst for Guideway Care. Analyze the following patient interaction transcript and produce a structured JSON output.
-${contextBlock}
+${contextBlock}${buildDispositionPromptSection(dispositionConfig)}
 Your response MUST be valid JSON with exactly this structure:
 {
   "summary": "${resolvedSummaryInstruction}",
   "observations": [],
   "transition_status": "<p>No observation topics configured.</p>",
-  "follow_up_areas": "<p>No follow-up areas identified.</p>"
+  "follow_up_areas": "<p>No follow-up areas identified.</p>"${buildDispositionJsonField(dispositionConfig)}
 }
 
 Guidelines:
-- summary: Brief overall summary based on questions asked and patient's responses.
+- summary: Brief overall summary based on questions asked and patient's responses.${buildDispositionGuideline(dispositionConfig)}
 Source ID: {{SOURCE_ID}}
 
 SOURCE TEXT:
@@ -528,7 +586,7 @@ ${observationsRefTable}
 
 ###CRITICAL RULE — NO DUPLICATES
 The observations array MUST contain EXACTLY ${topicCount} objects. Iterate through the reference table rows 1 to ${topicCount} in order. Output ONE object per row. If you have already output an observation name, do NOT output it again. Each name appears exactly once.
-
+${buildDispositionPromptSection(dispositionConfig)}
 Your response MUST be valid JSON with exactly this structure:
 {
   "summary": "${resolvedSummaryInstruction}",
@@ -536,7 +594,7 @@ Your response MUST be valid JSON with exactly this structure:
 ${observationsSchema}
   ],
   "transition_status": "A single HTML string covering ALL ${topicCount} observation topics — each topic appears ONCE, no duplicates. Use inline styles for color-coded status badges. For enum topics: <b>Topic:</b> <span style='INLINE_STYLE'>ENUM_VALUE</span><br>Detail.<br><br>. Use these styles: ${colorStyles} — Mappings: ${statusMappings}. Order discussed topics first, 'Not Discussed' at the bottom.",
-  "follow_up_areas": "A single HTML string listing follow-up areas. Use <ul>/<li> with <b> for topic names. Only include items with issues. If none, use '<p>No follow-up areas identified.</p>'."
+  "follow_up_areas": "A single HTML string listing follow-up areas. Use <ul>/<li> with <b> for topic names. Only include items with issues. If none, use '<p>No follow-up areas identified.</p>'."${buildDispositionJsonField(dispositionConfig)}
 }
 
 Guidelines:
@@ -545,7 +603,7 @@ Guidelines:
 - summary: Brief overall summary based on questions asked and patient's responses.
 - observations: EXACTLY ${topicCount} objects — one per row in the reference table. Copy name, display_name, domain, value_type from the table. Use evaluation guidance to choose value — do NOT copy guidance text into detail.${observationsGuidance ? `\n- GENERAL OBSERVATIONS GUIDANCE: ${observationsGuidance}` : ""}
 - transition_status: EXACTLY ${topicCount} topics in the HTML — one per observation, no duplicates. Detail text MUST be original.
-- follow_up_areas: Return a single HTML string.
+- follow_up_areas: Return a single HTML string.${buildDispositionGuideline(dispositionConfig)}
 Source ID: {{SOURCE_ID}}
 
 SOURCE TEXT:
@@ -613,9 +671,10 @@ export async function analyzeTranscriptFast(
   contextParams?: ContextParameter[],
   contextValues?: Record<string, string>,
   observationsGuidance?: string,
+  dispositionConfig?: DispositionConfig,
 ): Promise<{ analysis: Partial<TranscriptAnalysis>; tokenUsage: { promptTokens: number; completionTokens: number; totalTokens: number; estimatedCost: number } }> {
   const model = buildGeminiModel();
-  const template = buildFastPromptTemplate(activeObservations, summaryInstruction, contextParams, observationsGuidance, undefined, contextValues);
+  const template = buildFastPromptTemplate(activeObservations, summaryInstruction, contextParams, observationsGuidance, undefined, contextValues, dispositionConfig);
   const prompt = resolvePrompt(template, sourceId, sourceText, contextParams, contextValues);
 
   console.log(`[FAST] Starting Gemini call for ${sourceId}`);

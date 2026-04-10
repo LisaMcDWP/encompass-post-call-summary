@@ -1,10 +1,10 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { analyzeTranscript, analyzeTranscriptFast, analyzeTranscriptBackground, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, aiObservationAssistant } from "./gemini";
-import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBarriers, insertCallQAResults, ensureCallBarriersTable, ensureCallQATable, getCallBarriers, getCallInfoList, getCallDetail, getCallStatsByDay, queryBlandCalls, loadBlandCallsToBatch, fetchAwellContextForCareFlows, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, resetFailedBatchItems, deletePendingBatchItems, recreateBatch, getDistinctTags } from "./bigquery";
+import { analyzeTranscript, analyzeTranscriptFast, analyzeTranscriptBackground, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, aiObservationAssistant, type DispositionConfig } from "./gemini";
+import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBarriers, insertCallQAResults, insertCallDisposition, ensureCallBarriersTable, ensureCallQATable, getCallBarriers, getCallInfoList, getCallDetail, getCallStatsByDay, queryBlandCalls, loadBlandCallsToBatch, fetchAwellContextForCareFlows, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, resetFailedBatchItems, deletePendingBatchItems, recreateBatch, getDistinctTags } from "./bigquery";
 import { randomUUID, createHash } from "crypto";
 import { storage } from "./storage";
-import { insertObservationSchema, enumValueSchema, insertContextParameterSchema, insertCallQAPromptSchema } from "@shared/schema";
+import { insertObservationSchema, enumValueSchema, insertContextParameterSchema, insertCallQAPromptSchema, insertDispositionCategorySchema, insertDispositionDetailSchema } from "@shared/schema";
 import { z } from "zod";
 
 async function getPromptWithVersion(clientPathwayId: number) {
@@ -14,7 +14,10 @@ async function getPromptWithVersion(clientPathwayId: number) {
   const barriersGuidance = await storage.getSetting(clientPathwayId, "barriers_prompt_guidance");
   const contextParams = await storage.getActiveContextParameters(clientPathwayId);
   const callQAPrompts = await storage.getActiveCallQAPrompts(clientPathwayId);
-  const prompt = buildPromptTemplate(activeObs, summaryInstruction || undefined, contextParams, observationsGuidance || undefined, barriersGuidance || undefined, callQAPrompts);
+  const dispCategories = await storage.getDispositionCategories(clientPathwayId);
+  const dispDetails = await storage.getDispositionDetails(clientPathwayId);
+  const dispConfig: DispositionConfig = { categories: dispCategories, details: dispDetails };
+  const prompt = buildPromptTemplate(activeObs, summaryInstruction || undefined, contextParams, observationsGuidance || undefined, barriersGuidance || undefined, callQAPrompts, undefined, dispConfig);
 
   const hash = createHash("sha256").update(prompt).digest("hex");
   const storedHash = await storage.getSetting(clientPathwayId, "prompt_hash");
@@ -124,6 +127,9 @@ export async function registerRoutes(
       }
 
       const callQAPrompts = await storage.getActiveCallQAPrompts(cpId);
+      const dispCategories = await storage.getDispositionCategories(cpId);
+      const dispDetails = await storage.getDispositionDetails(cpId);
+      const dispConfig: DispositionConfig = { categories: dispCategories, details: dispDetails };
 
       const { analysis, tokenUsage } = await analyzeTranscript(
         resolvedSourceId,
@@ -135,7 +141,8 @@ export async function registerRoutes(
         contextValues,
         observationsGuidance || undefined,
         barriersGuidance || undefined,
-        callQAPrompts
+        callQAPrompts,
+        dispConfig,
       );
       const processingTime = Date.now() - startTime;
 
@@ -173,6 +180,9 @@ export async function registerRoutes(
       await insertCallQAPairs(resolvedSourceId, analysis.qa_pairs);
       await insertCallBarriers(resolvedSourceId, analysis.barriers);
       await insertCallQAResults(resolvedSourceId, analysis.call_qa || []);
+      if (analysis.disposition) {
+        await insertCallDisposition(resolvedSourceId, analysis.disposition);
+      }
 
       return res.json({
         status: "success",
@@ -303,13 +313,17 @@ export async function registerRoutes(
             }
           }
 
+          const asyncDispCats = await storage.getDispositionCategories(cpId);
+          const asyncDispDets = await storage.getDispositionDetails(cpId);
+          const asyncDispConfig: DispositionConfig = { categories: asyncDispCats, details: asyncDispDets };
+
           console.log(`[AWELL-ASYNC] Starting full Gemini analysis for ${resolvedSourceId}`);
           const { analysis, tokenUsage } = await analyzeTranscript(
             resolvedSourceId, source_text.trim(), activeObs,
             undefined,
             summaryInstruction || undefined, contextParams, contextValues,
             observationsGuidance || undefined, barriersGuidance || undefined,
-            callQAPrompts,
+            callQAPrompts, asyncDispConfig,
           );
           const processingTime = Date.now() - startTime;
           const processedAt = new Date().toISOString();
@@ -334,6 +348,7 @@ export async function registerRoutes(
             insertCallQAPairs(resolvedSourceId, analysis.qa_pairs || []),
             insertCallBarriers(resolvedSourceId, analysis.barriers || []),
             insertCallQAResults(resolvedSourceId, analysis.call_qa || []),
+            ...(analysis.disposition ? [insertCallDisposition(resolvedSourceId, analysis.disposition)] : []),
           ]);
 
           console.log(`[AWELL-ASYNC] BigQuery writes completed for ${resolvedSourceId}`);
@@ -440,10 +455,14 @@ export async function registerRoutes(
       }
       const callQAPrompts = await storage.getActiveCallQAPrompts(cpId);
 
+      const dispCategories = await storage.getDispositionCategories(cpId);
+      const dispDetails = await storage.getDispositionDetails(cpId);
+      const dispositionConfig: DispositionConfig = { categories: dispCategories, details: dispDetails };
+
       const { analysis: fastAnalysis, tokenUsage: fastTokenUsage } = await analyzeTranscriptFast(
         resolvedSourceId, source_text.trim(), activeObs,
         summaryInstruction || undefined, contextParams, contextValues,
-        observationsGuidance || undefined,
+        observationsGuidance || undefined, dispositionConfig,
       );
       const processingTime = Date.now() - startTime;
       console.log(`[AWELL] Fast Gemini completed for ${resolvedSourceId} in ${processingTime}ms — responding to Awell now`);
@@ -500,7 +519,7 @@ export async function registerRoutes(
             estimatedCost: fastTokenUsage.estimatedCost + bgResult.tokenUsage.estimatedCost,
           };
 
-          await Promise.all([
+          const bqInserts: Promise<void>[] = [
             insertCallInfo({
               callId: resolvedSourceId, processingId, careFlowId: care_flow_id || null,
               processedDatetime: processed_datetime || processedAt, sourceType: source_type || null,
@@ -518,7 +537,11 @@ export async function registerRoutes(
             insertCallQAPairs(resolvedSourceId, bgResult.qa_pairs),
             insertCallBarriers(resolvedSourceId, bgResult.barriers),
             insertCallQAResults(resolvedSourceId, bgResult.call_qa),
-          ]);
+          ];
+          if (fastAnalysis.disposition) {
+            bqInserts.push(insertCallDisposition(resolvedSourceId, fastAnalysis.disposition));
+          }
+          await Promise.all(bqInserts);
           console.log(`[AWELL-BG] All BigQuery writes completed for ${resolvedSourceId}`);
         } catch (bgErr: any) {
           console.error(`[AWELL-BG] Background processing FAILED for ${resolvedSourceId}:`, bgErr.message);
@@ -537,6 +560,9 @@ export async function registerRoutes(
             errorMessage: `Background processing failed: ${bgErr.message}`,
           }).catch(() => {});
           insertCallObservations(resolvedSourceId, fastAnalysis.observations || []).catch(() => {});
+          if (fastAnalysis.disposition) {
+            insertCallDisposition(resolvedSourceId, fastAnalysis.disposition).catch(() => {});
+          }
           console.error(`[AWELL-BG] Saved partial results (fast-only, no barriers/qa) for ${resolvedSourceId}`);
         }
       })();
@@ -712,6 +738,75 @@ export async function registerRoutes(
     const cpId = Number(req.query.clientPathwayId) || undefined;
     const deleted = await storage.deleteObservation(id, cpId);
     if (!deleted) return res.status(404).json({ message: "Observation not found" });
+    res.json({ success: true });
+  });
+
+  app.get("/api/disposition-categories", async (req, res) => {
+    const cpId = Number(req.query.clientPathwayId);
+    if (!cpId) return res.status(400).json({ message: "clientPathwayId query param required" });
+    const cats = await storage.getDispositionCategories(cpId);
+    res.json(cats);
+  });
+
+  app.post("/api/disposition-categories", async (req, res) => {
+    const parsed = insertDispositionCategorySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+    const cpId = Number(req.body.clientPathwayId || req.query.clientPathwayId);
+    if (!cpId) return res.status(400).json({ message: "clientPathwayId required" });
+    const cat = await storage.createDispositionCategory(cpId, parsed.data);
+    res.status(201).json(cat);
+  });
+
+  app.put("/api/disposition-categories/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+    const cpId = Number(req.body.clientPathwayId || req.query.clientPathwayId) || undefined;
+    const cat = await storage.updateDispositionCategory(id, req.body, cpId);
+    if (!cat) return res.status(404).json({ message: "Category not found" });
+    res.json(cat);
+  });
+
+  app.delete("/api/disposition-categories/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+    const cpId = Number(req.query.clientPathwayId) || undefined;
+    const deleted = await storage.deleteDispositionCategory(id, cpId);
+    if (!deleted) return res.status(404).json({ message: "Category not found" });
+    res.json({ success: true });
+  });
+
+  app.get("/api/disposition-details", async (req, res) => {
+    const cpId = Number(req.query.clientPathwayId);
+    if (!cpId) return res.status(400).json({ message: "clientPathwayId query param required" });
+    const categoryId = req.query.categoryId ? Number(req.query.categoryId) : undefined;
+    const details = await storage.getDispositionDetails(cpId, categoryId);
+    res.json(details);
+  });
+
+  app.post("/api/disposition-details", async (req, res) => {
+    const parsed = insertDispositionDetailSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+    const cpId = Number(req.body.clientPathwayId || req.query.clientPathwayId);
+    if (!cpId) return res.status(400).json({ message: "clientPathwayId required" });
+    const det = await storage.createDispositionDetail(cpId, parsed.data);
+    res.status(201).json(det);
+  });
+
+  app.put("/api/disposition-details/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+    const cpId = Number(req.body.clientPathwayId || req.query.clientPathwayId) || undefined;
+    const det = await storage.updateDispositionDetail(id, req.body, cpId);
+    if (!det) return res.status(404).json({ message: "Detail not found" });
+    res.json(det);
+  });
+
+  app.delete("/api/disposition-details/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+    const cpId = Number(req.query.clientPathwayId) || undefined;
+    const deleted = await storage.deleteDispositionDetail(id, cpId);
+    if (!deleted) return res.status(404).json({ message: "Detail not found" });
     res.json({ success: true });
   });
 
@@ -1213,6 +1308,9 @@ export async function registerRoutes(
       const barriersGuidance = await storage.getSetting(resolvedBatchCpId, "barriers_prompt_guidance");
       const contextParams = await storage.getActiveContextParameters(resolvedBatchCpId);
       const callQAPromptsForBatch = await storage.getActiveCallQAPrompts(resolvedBatchCpId);
+      const batchDispCats = await storage.getDispositionCategories(resolvedBatchCpId);
+      const batchDispDets = await storage.getDispositionDetails(resolvedBatchCpId);
+      const batchDispConfig: DispositionConfig = { categories: batchDispCats, details: batchDispDets };
       const { prompt: _p, promptVersion, promptVersionDate } = await getPromptWithVersion(resolvedBatchCpId);
 
       const CONCURRENCY = 5;
@@ -1241,7 +1339,8 @@ export async function registerRoutes(
             batchContext,
             observationsGuidance || undefined,
             barriersGuidance || undefined,
-            callQAPromptsForBatch
+            callQAPromptsForBatch,
+            batchDispConfig,
           );
           const processingTimeMs = Date.now() - startTime;
 
@@ -1278,6 +1377,9 @@ export async function registerRoutes(
           await insertCallQAPairs(callId, analysis.qa_pairs);
           await insertCallBarriers(callId, analysis.barriers);
           await insertCallQAResults(callId, analysis.call_qa || []);
+          if (analysis.disposition) {
+            await insertCallDisposition(callId, analysis.disposition);
+          }
           await updateBatchItemStatus(item.bland_call_id, "completed", callId);
           results.push({ callId: item.bland_call_id, status: "completed" });
         } catch (err: any) {

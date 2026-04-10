@@ -17,10 +17,11 @@ A full-stack application that provides a Gemini-powered transcript analysis API.
 - Context Parameters
 - Settings (summary instruction, observations guidance, barriers guidance, prompt versioning)
 - Call QA Prompts
+- Call Dispositions (two-level: Category → Detail)
 
 ### How it works:
 - `client_pathway` table stores multiple entries (id, client, pathway, description)
-- Config tables (`observations`, `context_parameters`, `settings`, `call_qa_prompts`) all have a `client_pathway_id` column
+- Config tables (`observations`, `context_parameters`, `settings`, `call_qa_prompts`, `disposition_categories`, `disposition_details`) all have a `client_pathway_id` column
 - All config API endpoints require `clientPathwayId` as a query param (GET/DELETE) or body param (POST/PUT)
 - Frontend uses React Context (`ClientPathwayContext`) with a sidebar dropdown selector
 - Setup pages automatically load/save config for the selected client/pathway
@@ -57,6 +58,7 @@ Gemini 2.5 Flash can produce duplicate items. Post-processing dedup applied to:
 - `client/src/pages/SummaryPrompt.tsx` — Summary prompt instruction UI (scoped by selected CP)
 - `client/src/pages/BarriersPrompt.tsx` — Barriers prompt guidance UI (scoped by selected CP)
 - `client/src/pages/CallQA.tsx` — Call QA prompt management UI (scoped by selected CP)
+- `client/src/pages/Dispositions.tsx` — Call Dispositions management UI (scoped by selected CP)
 - `client/src/pages/GeneratedPrompt.tsx` — Read-only generated prompt viewer (scoped by selected CP)
 - `client/src/components/AppLayout.tsx` — Layout with sidebar navigation and CP selector dropdown
 - `client/src/pages/Reference.tsx` — API reference documentation
@@ -74,6 +76,16 @@ Configurable input parameters stored in BigQuery (`call_information.context_para
   - `data_point` — Resolves from Awell data points via `data_points_realtime` / `data_point_definitions_realtime` tables using the `awell_data_point_key`
   - `patient_profile` — Resolves from Awell patient profile via care flow → patient → `patient_profiles_realtime` join using the `awell_patient_profile_field` (e.g. `first_name`, `last_name`, `phone`, `birth_date`, etc.)
 - Management UI at `/context-parameters` in the Setup sidebar section
+
+## Call Dispositions
+Two-level configurable taxonomy (Category → Detail) for classifying call outcomes. Stored in BigQuery config tables scoped by `client_pathway_id`.
+- **Config tables**: `disposition_categories` (id, name, displayName, description, displayOrder, isActive, clientPathwayId) and `disposition_details` (id, categoryId, name, displayName, description, displayOrder, isActive, clientPathwayId)
+- **Results table**: `call_dispositions` (source_id, category_name, category_display_name, detail_name, detail_display_name, confidence, evidence, inserted_at)
+- **Prompt integration**: `DispositionConfig` (categories + details) is injected into all Gemini analysis paths (webhook sync/async, /api/analyze, batch API, batch job). Gemini returns a `disposition` object with category, detail, confidence, and evidence.
+- **API endpoints**: Full CRUD at `/api/disposition-categories` and `/api/disposition-details`, plus seed endpoint at `/api/disposition-categories/seed`
+- **Admin UI**: `/dispositions` page with accordion-style category/detail management
+- **Call detail display**: Disposition card shown in call detail panel (CallHistory.tsx)
+- Seeded with 6 default categories and 25+ details on first run per client/pathway
 
 ## Observations Model
 Observations are dynamic topics stored in BigQuery (`call_information.observations`) used in the Gemini analysis prompt. Each observation has:

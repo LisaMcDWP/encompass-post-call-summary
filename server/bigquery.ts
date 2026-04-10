@@ -9,6 +9,7 @@ const BARRIERS_TABLE_ID = "barriers";
 const BATCH_PROCESSING_TABLE_ID = "batch_processing";
 const CALL_QA_TABLE_ID = "call_qa_results";
 const KNOWN_CONTEXT_TABLE_ID = "known_context_details";
+const CALL_DISPOSITIONS_TABLE_ID = "call_dispositions";
 
 export interface CallInfoRow {
   call_id: string;
@@ -594,6 +595,66 @@ export async function getCallQAResults(callId: string): Promise<any[]> {
   } catch (error: any) {
     console.error("Failed to get call QA results:", error.message);
     return [];
+  }
+}
+
+export async function ensureCallDispositionsTable(): Promise<void> {
+  try {
+    const client = getBigQueryClient();
+    const dataset = client.dataset(DATASET_ID);
+    const table = dataset.table(CALL_DISPOSITIONS_TABLE_ID);
+    const [exists] = await table.exists();
+    if (!exists) {
+      await dataset.createTable(CALL_DISPOSITIONS_TABLE_ID, {
+        schema: {
+          fields: [
+            { name: "call_id", type: "STRING", mode: "REQUIRED" },
+            { name: "disposition_category", type: "STRING", mode: "NULLABLE" },
+            { name: "disposition_category_display", type: "STRING", mode: "NULLABLE" },
+            { name: "disposition_detail", type: "STRING", mode: "NULLABLE" },
+            { name: "disposition_detail_display", type: "STRING", mode: "NULLABLE" },
+            { name: "confidence", type: "STRING", mode: "NULLABLE" },
+            { name: "evidence", type: "STRING", mode: "NULLABLE" },
+            { name: "detail", type: "STRING", mode: "NULLABLE" },
+          ],
+        },
+      });
+      console.log("Created call_dispositions table");
+    }
+  } catch (error: any) {
+    console.error("Failed to ensure call_dispositions table:", error.message);
+  }
+}
+
+export interface CallDispositionEntry {
+  disposition_category: string;
+  disposition_category_display?: string;
+  disposition_detail: string;
+  disposition_detail_display?: string;
+  confidence?: string;
+  evidence?: string;
+  detail?: string;
+}
+
+export async function insertCallDisposition(callId: string, disposition: CallDispositionEntry): Promise<void> {
+  try {
+    if (!disposition || !disposition.disposition_category) return;
+    await deleteExistingCallData(callId, CALL_DISPOSITIONS_TABLE_ID);
+    const client = getBigQueryClient();
+    const row = {
+      call_id: callId,
+      disposition_category: disposition.disposition_category,
+      disposition_category_display: disposition.disposition_category_display || null,
+      disposition_detail: disposition.disposition_detail || null,
+      disposition_detail_display: disposition.disposition_detail_display || null,
+      confidence: disposition.confidence || null,
+      evidence: disposition.evidence || null,
+      detail: disposition.detail || null,
+    };
+    await client.dataset(DATASET_ID).table(CALL_DISPOSITIONS_TABLE_ID).insert([row]);
+    console.log(`BigQuery call_disposition inserted for call ${callId}: ${disposition.disposition_category} / ${disposition.disposition_detail}`);
+  } catch (error: any) {
+    console.error("Failed to insert call disposition:", error.message);
   }
 }
 
@@ -1591,5 +1652,19 @@ export async function getCallDetail(callId: string, runIndex?: number): Promise<
     console.warn("Transcript fetch failed:", err.message);
   }
 
-  return { callInfo, observations: obsRows as CallObservationRow[], qaPairs: qaRows, barriers: barrierRows, callQA: callQARows, transcript, totalRuns, currentRun };
+  let disposition: any = null;
+  try {
+    const dispQuery = `
+      SELECT *
+      FROM \`${client.projectId}.${DATASET_ID}.${CALL_DISPOSITIONS_TABLE_ID}\`
+      WHERE call_id = @callId
+      LIMIT 1
+    `;
+    const [dRows] = await client.query({ query: dispQuery, params: { callId }, location: "US" });
+    if (dRows.length > 0) disposition = dRows[0];
+  } catch (err: any) {
+    console.warn("Disposition fetch failed:", err.message);
+  }
+
+  return { callInfo, observations: obsRows as CallObservationRow[], qaPairs: qaRows, barriers: barrierRows, callQA: callQARows, disposition, transcript, totalRuns, currentRun };
 }
