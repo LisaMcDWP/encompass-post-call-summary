@@ -89,6 +89,7 @@ Configurable checklist items for human reviewers to evaluate processed calls. Sc
 - **Admin UI**: `/review-items` page with category-grouped list, add/edit/delete dialogs
 - **Call detail integration**: Review checklist card in `CallDetailPanel` (CallHistory.tsx) with status cycling, notes, save to BigQuery, per-call review status selector, and reprocess button
 - **Call list integration**: Review status badge shown per call in the Processed Calls list
+- **Call Reviews page** (`/call-reviews`): Dedicated analytics page listing all calls with review status, tags, notes. Features status filter cards (counts per status), tag filtering, text search (ID, patient name, summary, notes, tags). Uses `GET /api/calls/review-list` endpoint joining `call_info` + `call_review_statuses`.
 
 ## Call Dispositions
 Two-level configurable taxonomy (Category → Detail) for classifying call outcomes. Stored in BigQuery config tables scoped by `client_pathway_id`.

@@ -23,6 +23,7 @@ import ClientPathway from "@/pages/ClientPathway";
 import CallStats from "@/pages/CallStats";
 import Dispositions from "@/pages/Dispositions";
 import ReviewItems from "@/pages/ReviewItems";
+import CallReviews from "@/pages/CallReviews";
 
 function Router() {
   return (
@@ -41,6 +42,7 @@ function Router() {
         <Route path="/client-pathway" component={ClientPathway} />
         <Route path="/generated-prompt" component={GeneratedPrompt} />
         <Route path="/api-reference" component={ApiReference} />
+        <Route path="/call-reviews" component={CallReviews} />
         <Route path="/call-stats" component={CallStats} />
         <Route path="/batch" component={BatchProcessing} />
         <Route path="/product" component={ProductReference} />

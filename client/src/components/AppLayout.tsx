@@ -23,6 +23,7 @@ const SETUP_ITEMS: NavItem[] = [
 
 const ANALYTICS_ITEMS: NavItem[] = [
   { label: "Processed Calls", href: "/calls", icon: <Phone className="h-4 w-4" />, section: "analytics" },
+  { label: "Call Reviews", href: "/call-reviews", icon: <ClipboardCheck className="h-4 w-4" />, section: "analytics" },
   { label: "Call Volume", href: "/call-stats", icon: <BarChart3 className="h-4 w-4" />, section: "analytics" },
   { label: "Batch Processing", href: "/batch", icon: <Package className="h-4 w-4" />, section: "analytics" },
 ];

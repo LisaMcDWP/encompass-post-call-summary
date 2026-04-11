@@ -886,6 +886,70 @@ export async function getCallReviewStatusesBulk(callIds: string[]): Promise<Reco
   }
 }
 
+export async function getCallReviewList(limit = 200): Promise<any[]> {
+  try {
+    await ensureCallReviewStatusesTable();
+    const client = getBigQueryClient();
+    const projectId = process.env.GCP_PROJECT_ID;
+    const ciTable = `\`${projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\``;
+    const crsTable = `\`${projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\``;
+    const query = `
+      WITH latest_calls AS (
+        SELECT *, ROW_NUMBER() OVER (PARTITION BY call_id ORDER BY processed_at DESC) AS rn
+        FROM ${ciTable}
+      ),
+      latest_reviews AS (
+        SELECT call_id, review_status, tags, notes, updated_at,
+          ROW_NUMBER() OVER (PARTITION BY call_id ORDER BY updated_at DESC) AS rn
+        FROM ${crsTable}
+      )
+      SELECT
+        c.call_id, c.source_id, c.source_type, c.call_date, c.processed_at,
+        c.summary, c.status, c.client, c.pathway, c.context_values,
+        c.transcript_length, c.error_message,
+        r.review_status, r.tags, r.notes, r.updated_at AS review_updated_at
+      FROM latest_calls c
+      LEFT JOIN latest_reviews r ON c.call_id = r.call_id AND r.rn = 1
+      WHERE c.rn = 1
+      ORDER BY c.processed_at DESC
+      LIMIT @limit
+    `;
+    const [rows] = await client.query({ query, params: { limit }, location: "US" });
+    return (rows as any[]).map(row => {
+      let parsedTags: string[] = [];
+      try { if (row.tags) parsedTags = JSON.parse(row.tags); } catch {}
+      let contextValues: Record<string, string> | null = null;
+      if (row.context_values) {
+        try {
+          const parsed = JSON.parse(row.context_values);
+          if (parsed && typeof parsed === "object" && Object.keys(parsed).length > 0) contextValues = parsed;
+        } catch {}
+      }
+      return {
+        call_id: row.call_id,
+        source_id: row.source_id,
+        source_type: row.source_type,
+        call_date: extractTimestamp(row.call_date),
+        processed_at: extractTimestamp(row.processed_at),
+        summary: row.summary,
+        status: row.status,
+        client: row.client || null,
+        pathway: row.pathway || null,
+        context_values: contextValues,
+        transcript_length: row.transcript_length,
+        error_message: row.error_message,
+        review_status: row.review_status || "not_reviewed",
+        tags: parsedTags,
+        notes: row.notes || "",
+        review_updated_at: row.review_updated_at ? extractTimestamp(row.review_updated_at) : null,
+      };
+    });
+  } catch (error: any) {
+    console.error("Failed to get call review list:", error.message);
+    throw error;
+  }
+}
+
 export async function ensureKnownContextTable(): Promise<void> {
   try {
     const client = getBigQueryClient();
