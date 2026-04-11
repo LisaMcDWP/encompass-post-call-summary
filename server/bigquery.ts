@@ -747,6 +747,12 @@ export async function getCallReviews(sourceId: string): Promise<any[]> {
   }
 }
 
+export interface CallReviewMeta {
+  review_status: string;
+  tags: string[];
+  notes: string;
+}
+
 export async function ensureCallReviewStatusesTable(): Promise<void> {
   try {
     const client = getBigQueryClient();
@@ -759,56 +765,104 @@ export async function ensureCallReviewStatusesTable(): Promise<void> {
           fields: [
             { name: "call_id", type: "STRING", mode: "REQUIRED" },
             { name: "review_status", type: "STRING", mode: "REQUIRED" },
+            { name: "tags", type: "STRING", mode: "NULLABLE" },
+            { name: "notes", type: "STRING", mode: "NULLABLE" },
             { name: "updated_at", type: "TIMESTAMP", mode: "REQUIRED" },
           ],
         },
       });
       console.log("Created call_review_statuses table");
+    } else {
+      const [metadata] = await table.getMetadata();
+      const fieldNames = new Set(metadata.schema.fields.map((f: any) => f.name));
+      if (!fieldNames.has("tags")) {
+        await client.query({
+          query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\` ADD COLUMN tags STRING`,
+        });
+        console.log("Added tags column to call_review_statuses table.");
+      }
+      if (!fieldNames.has("notes")) {
+        await client.query({
+          query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\` ADD COLUMN notes STRING`,
+        });
+        console.log("Added notes column to call_review_statuses table.");
+      }
     }
   } catch (error: any) {
     console.error("Failed to ensure call_review_statuses table:", error.message);
   }
 }
 
-export async function upsertCallReviewStatus(callId: string, reviewStatus: string): Promise<void> {
+export async function upsertCallReviewMeta(callId: string, data: { reviewStatus?: string; tags?: string[]; notes?: string }): Promise<void> {
   try {
     await ensureCallReviewStatusesTable();
     const client = getBigQueryClient();
     const projectId = process.env.GCP_PROJECT_ID;
     const fullTable = `\`${projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\``;
+    let existing: any = null;
+    try {
+      const [rows] = await client.query({
+        query: `SELECT * FROM ${fullTable} WHERE call_id = @callId ORDER BY updated_at DESC LIMIT 1`,
+        params: { callId },
+      });
+      if ((rows as any[]).length > 0) existing = (rows as any[])[0];
+    } catch {}
     try {
       await client.query({ query: `DELETE FROM ${fullTable} WHERE call_id = @callId`, params: { callId } });
     } catch (e: any) {
-      console.warn(`Could not delete existing review status for ${callId}: ${e.message}`);
+      console.warn(`Could not delete existing review meta for ${callId}: ${e.message}`);
     }
     const now = new Date().toISOString();
+    const reviewStatus = data.reviewStatus ?? existing?.review_status ?? "not_reviewed";
+    let existingTags: string[] = [];
+    try { if (existing?.tags) existingTags = JSON.parse(existing.tags); } catch { existingTags = []; }
+    const tags = data.tags !== undefined ? data.tags : existingTags;
+    const notes = data.notes !== undefined ? data.notes : (existing?.notes ?? "");
     await client.dataset(DATASET_ID).table(CALL_REVIEW_STATUSES_TABLE_ID).insert([{
       call_id: callId,
       review_status: reviewStatus,
+      tags: JSON.stringify(tags),
+      notes: notes,
       updated_at: now,
     }]);
-    console.log(`BigQuery call_review_status set for ${callId}: ${reviewStatus}`);
+    console.log(`BigQuery call_review_meta set for ${callId}: status=${reviewStatus}, tags=${tags.length}, notes=${notes.length > 0}`);
   } catch (error: any) {
-    console.error("Failed to upsert call review status:", error.message);
+    console.error("Failed to upsert call review meta:", error.message);
     throw error;
   }
 }
 
-export async function getCallReviewStatus(callId: string): Promise<string | null> {
+export async function upsertCallReviewStatus(callId: string, reviewStatus: string): Promise<void> {
+  await upsertCallReviewMeta(callId, { reviewStatus });
+}
+
+export async function getCallReviewMeta(callId: string): Promise<CallReviewMeta | null> {
   try {
     await ensureCallReviewStatusesTable();
     const client = getBigQueryClient();
     const projectId = process.env.GCP_PROJECT_ID;
     const fullTable = `\`${projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\``;
     const [rows] = await client.query({
-      query: `SELECT review_status FROM ${fullTable} WHERE call_id = @callId ORDER BY updated_at DESC LIMIT 1`,
+      query: `SELECT * FROM ${fullTable} WHERE call_id = @callId ORDER BY updated_at DESC LIMIT 1`,
       params: { callId },
     });
-    if ((rows as any[]).length > 0) return (rows as any[])[0].review_status;
+    if ((rows as any[]).length > 0) {
+      const row = (rows as any[])[0];
+      return {
+        review_status: row.review_status,
+        tags: (() => { try { return row.tags ? JSON.parse(row.tags) : []; } catch { return []; } })(),
+        notes: row.notes || "",
+      };
+    }
     return null;
   } catch {
     return null;
   }
+}
+
+export async function getCallReviewStatus(callId: string): Promise<string | null> {
+  const meta = await getCallReviewMeta(callId);
+  return meta?.review_status ?? null;
 }
 
 export async function getCallReviewStatusesBulk(callIds: string[]): Promise<Record<string, string>> {
@@ -1841,11 +1895,18 @@ export async function getCallDetail(callId: string, runIndex?: number): Promise<
   }
 
   let reviewStatus: string | null = null;
+  let reviewTags: string[] = [];
+  let reviewNotes: string = "";
   try {
-    reviewStatus = await getCallReviewStatus(callId);
+    const meta = await getCallReviewMeta(callId);
+    if (meta) {
+      reviewStatus = meta.review_status;
+      reviewTags = meta.tags;
+      reviewNotes = meta.notes;
+    }
   } catch (err: any) {
-    console.warn("Review status fetch failed:", err.message);
+    console.warn("Review meta fetch failed:", err.message);
   }
 
-  return { callInfo, observations: obsRows as CallObservationRow[], qaPairs: qaRows, barriers: barrierRows, callQA: callQARows, disposition, transcript, totalRuns, currentRun, reviewStatus };
+  return { callInfo, observations: obsRows as CallObservationRow[], qaPairs: qaRows, barriers: barrierRows, callQA: callQARows, disposition, transcript, totalRuns, currentRun, reviewStatus, reviewTags, reviewNotes };
 }

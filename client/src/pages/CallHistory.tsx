@@ -3,7 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Phone, Clock, Coins, ChevronRight, ChevronLeft, X, FileText, Activity, ListChecks, ClipboardList, AlertCircle, MessageSquare, ShieldAlert, ClipboardCheck, RefreshCw, Download, History, Tag, CheckCircle2, Flag, MinusCircle, Circle, Save, RotateCcw } from "lucide-react";
+import { Loader2, Phone, Clock, Coins, ChevronRight, ChevronLeft, X, FileText, Activity, ListChecks, ClipboardList, AlertCircle, MessageSquare, ShieldAlert, ClipboardCheck, RefreshCw, Download, History, Tag, CheckCircle2, Flag, MinusCircle, Circle, Save, RotateCcw, Plus } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { exportCallDetailPdf } from "@/lib/exportPdf";
@@ -90,6 +91,8 @@ interface CallDetail {
   totalRuns: number;
   currentRun: number;
   reviewStatus: string | null;
+  reviewTags: string[];
+  reviewNotes: string;
 }
 
 type CallReviewStatus = "not_reviewed" | "in_progress" | "reviewed" | "flagged";
@@ -160,6 +163,11 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
   const [callReviewStatus, setCallReviewStatus] = useState<CallReviewStatus>("not_reviewed");
   const [reviewStatusSaving, setReviewStatusSaving] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
+  const [reviewTags, setReviewTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
+  const [reviewNotesText, setReviewNotesText] = useState("");
+  const [metaDirty, setMetaDirty] = useState(false);
+  const [metaSaving, setMetaSaving] = useState(false);
 
   const { data: reviewItems } = useQuery<ReviewItemConfig[]>({
     queryKey: ["/api/call-review-items-for-call", selectedCPId],
@@ -255,6 +263,38 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
     }
   };
 
+  const addTag = useCallback((tag: string) => {
+    const trimmed = tag.trim();
+    if (!trimmed || reviewTags.includes(trimmed)) return;
+    setReviewTags((prev) => [...prev, trimmed]);
+    setTagInput("");
+    setMetaDirty(true);
+  }, [reviewTags]);
+
+  const removeTag = useCallback((tag: string) => {
+    setReviewTags((prev) => prev.filter((t) => t !== tag));
+    setMetaDirty(true);
+  }, []);
+
+  const saveReviewMeta = async () => {
+    setMetaSaving(true);
+    try {
+      const res = await fetch(`/api/calls/${callId}/review-meta`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tags: reviewTags, notes: reviewNotesText }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      setMetaDirty(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/calls", callId] });
+      toast({ title: "Review tags & notes saved" });
+    } catch {
+      toast({ title: "Error", description: "Failed to save review data", variant: "destructive" });
+    } finally {
+      setMetaSaving(false);
+    }
+  };
+
   const reprocessCall = async () => {
     setReprocessing(true);
     try {
@@ -292,7 +332,11 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
     } else {
       setCallReviewStatus("not_reviewed");
     }
-  }, [data?.reviewStatus]);
+    if (!metaDirty) {
+      setReviewTags(data?.reviewTags || []);
+      setReviewNotesText(data?.reviewNotes || "");
+    }
+  }, [data?.reviewStatus, data?.reviewTags, data?.reviewNotes]);
 
   const { data: obsConfig } = useQuery<{ name: string; display_order: number }[]>({
     queryKey: ["/api/observations-order"],
@@ -972,7 +1016,87 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
                   })}
                 </div>
               </CardHeader>
-              <CardContent className="pt-4">
+              <CardContent className="pt-4 space-y-4">
+                <div className="space-y-3" data-testid="review-tags-notes">
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-xs font-medium text-muted-foreground">Tags</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {reviewTags.map((tag) => (
+                        <Badge
+                          key={tag}
+                          variant="secondary"
+                          className="text-[11px] px-2 py-0.5 bg-[#0098db]/10 text-[#0098db] border border-[#0098db]/20 gap-1"
+                        >
+                          {tag}
+                          <button
+                            onClick={() => removeTag(tag)}
+                            className="hover:text-red-500 transition-colors ml-0.5"
+                            data-testid={`button-remove-tag-${tag}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                      {reviewTags.length === 0 && (
+                        <span className="text-[11px] text-muted-foreground/50 italic">No tags</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        value={tagInput}
+                        onChange={(e) => setTagInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            addTag(tagInput);
+                          }
+                        }}
+                        placeholder="Add a tag..."
+                        className="h-7 text-xs flex-1"
+                        data-testid="input-add-tag"
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2"
+                        onClick={() => addTag(tagInput)}
+                        disabled={!tagInput.trim()}
+                        data-testid="button-add-tag"
+                      >
+                        <Plus className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-xs font-medium text-muted-foreground">Review Notes</span>
+                    </div>
+                    <Textarea
+                      value={reviewNotesText}
+                      onChange={(e) => { setReviewNotesText(e.target.value); setMetaDirty(true); }}
+                      placeholder="Add review notes for this call..."
+                      className="text-xs min-h-[60px] resize-none"
+                      data-testid="textarea-review-notes"
+                    />
+                  </div>
+                  <div className="flex justify-end">
+                    <Button
+                      size="sm"
+                      disabled={!metaDirty || metaSaving}
+                      onClick={saveReviewMeta}
+                      className="bg-[#0098db] hover:bg-[#0086c3] h-7 text-xs"
+                      data-testid="button-save-review-meta"
+                    >
+                      {metaSaving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
+                      {metaSaving ? "Saving..." : "Save Tags & Notes"}
+                    </Button>
+                  </div>
+                </div>
+
                 {reviewStates.length === 0 ? (
                   <p className="text-xs text-muted-foreground italic">No review checklist items configured. Add them in the Review Items setup page.</p>
                 ) : (<div className="space-y-2">

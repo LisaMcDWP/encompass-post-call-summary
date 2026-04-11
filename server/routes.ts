@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { analyzeTranscript, analyzeTranscriptFast, analyzeTranscriptBackground, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, aiObservationAssistant, type DispositionConfig } from "./gemini";
-import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBarriers, insertCallQAResults, insertCallDisposition, ensureCallBarriersTable, ensureCallQATable, getCallBarriers, getCallInfoList, getCallDetail, getCallStatsByDay, queryBlandCalls, loadBlandCallsToBatch, fetchAwellContextForCareFlows, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, resetFailedBatchItems, deletePendingBatchItems, recreateBatch, getDistinctTags, upsertCallReviews, getCallReviews, upsertCallReviewStatus, getCallReviewStatusesBulk, ensureCallReviewStatusesTable } from "./bigquery";
+import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBarriers, insertCallQAResults, insertCallDisposition, ensureCallBarriersTable, ensureCallQATable, getCallBarriers, getCallInfoList, getCallDetail, getCallStatsByDay, queryBlandCalls, loadBlandCallsToBatch, fetchAwellContextForCareFlows, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, resetFailedBatchItems, deletePendingBatchItems, recreateBatch, getDistinctTags, upsertCallReviews, getCallReviews, upsertCallReviewStatus, upsertCallReviewMeta, getCallReviewStatusesBulk, ensureCallReviewStatusesTable } from "./bigquery";
 import { randomUUID, createHash } from "crypto";
 import { storage } from "./storage";
 import { insertObservationSchema, enumValueSchema, insertContextParameterSchema, insertCallQAPromptSchema, insertDispositionCategorySchema, insertDispositionDetailSchema, insertCallReviewItemSchema } from "@shared/schema";
@@ -894,6 +894,28 @@ export async function registerRoutes(
       }
       await upsertCallReviewStatus(req.params.callId, reviewStatus);
       res.json({ success: true, reviewStatus });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.put("/api/calls/:callId/review-meta", async (req, res) => {
+    try {
+      const { reviewStatus, tags, notes } = req.body;
+      if (reviewStatus) {
+        const validStatuses = ["not_reviewed", "in_progress", "reviewed", "flagged"];
+        if (!validStatuses.includes(reviewStatus)) {
+          return res.status(400).json({ message: `Invalid status. Must be one of: ${validStatuses.join(", ")}` });
+        }
+      }
+      if (tags !== undefined && (!Array.isArray(tags) || !tags.every((t: unknown) => typeof t === "string"))) {
+        return res.status(400).json({ message: "tags must be an array of strings" });
+      }
+      if (notes !== undefined && typeof notes !== "string") {
+        return res.status(400).json({ message: "notes must be a string" });
+      }
+      await upsertCallReviewMeta(req.params.callId, { reviewStatus, tags, notes });
+      res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
