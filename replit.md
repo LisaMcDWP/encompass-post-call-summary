@@ -59,6 +59,7 @@ Gemini 2.5 Flash can produce duplicate items. Post-processing dedup applied to:
 - `client/src/pages/BarriersPrompt.tsx` — Barriers prompt guidance UI (scoped by selected CP)
 - `client/src/pages/CallQA.tsx` — Call QA prompt management UI (scoped by selected CP)
 - `client/src/pages/Dispositions.tsx` — Call Dispositions management UI (scoped by selected CP)
+- `client/src/pages/ReviewItems.tsx` — Call Review Items management UI (scoped by selected CP)
 - `client/src/pages/GeneratedPrompt.tsx` — Read-only generated prompt viewer (scoped by selected CP)
 - `client/src/components/AppLayout.tsx` — Layout with sidebar navigation and CP selector dropdown
 - `client/src/pages/Reference.tsx` — API reference documentation
@@ -76,6 +77,15 @@ Configurable input parameters stored in BigQuery (`call_information.context_para
   - `data_point` — Resolves from Awell data points via `data_points_realtime` / `data_point_definitions_realtime` tables using the `awell_data_point_key`
   - `patient_profile` — Resolves from Awell patient profile via care flow → patient → `patient_profiles_realtime` join using the `awell_patient_profile_field` (e.g. `first_name`, `last_name`, `phone`, `birth_date`, etc.)
 - Management UI at `/context-parameters` in the Setup sidebar section
+
+## Call Review Items
+Configurable checklist items for human reviewers to evaluate processed calls. Scoped by `client_pathway_id`.
+- **Config table**: `call_review_items` (id, name, displayName, description, category, displayOrder, isActive, clientPathwayId)
+- **Results table**: `call_reviews` (id, source_id, review_item_id, review_item_name, review_item_display_name, status, notes, reviewed_by, reviewed_at)
+- **Statuses**: `unchecked` → `checked` → `flagged` → `na` (cycled by clicking)
+- **API endpoints**: CRUD at `/api/call-review-items`; per-call reviews at `GET/POST /api/calls/:callId/reviews`
+- **Admin UI**: `/review-items` page with category-grouped list, add/edit/delete dialogs
+- **Call detail integration**: Review checklist card in `CallDetailPanel` (CallHistory.tsx) with status cycling, notes, and save to BigQuery
 
 ## Call Dispositions
 Two-level configurable taxonomy (Category → Detail) for classifying call outcomes. Stored in BigQuery config tables scoped by `client_pathway_id`.

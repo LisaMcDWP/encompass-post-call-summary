@@ -10,6 +10,7 @@ const BATCH_PROCESSING_TABLE_ID = "batch_processing";
 const CALL_QA_TABLE_ID = "call_qa_results";
 const KNOWN_CONTEXT_TABLE_ID = "known_context_details";
 const CALL_DISPOSITIONS_TABLE_ID = "call_dispositions";
+const CALL_REVIEWS_TABLE_ID = "call_reviews";
 
 export interface CallInfoRow {
   call_id: string;
@@ -655,6 +656,93 @@ export async function insertCallDisposition(callId: string, disposition: CallDis
     console.log(`BigQuery call_disposition inserted for call ${callId}: ${disposition.disposition_category} / ${disposition.disposition_detail}`);
   } catch (error: any) {
     console.error("Failed to insert call disposition:", error.message);
+  }
+}
+
+export async function ensureCallReviewsTable(): Promise<void> {
+  try {
+    const client = getBigQueryClient();
+    const dataset = client.dataset(DATASET_ID);
+    const table = dataset.table(CALL_REVIEWS_TABLE_ID);
+    const [exists] = await table.exists();
+    if (!exists) {
+      await dataset.createTable(CALL_REVIEWS_TABLE_ID, {
+        schema: {
+          fields: [
+            { name: "id", type: "STRING", mode: "REQUIRED" },
+            { name: "source_id", type: "STRING", mode: "REQUIRED" },
+            { name: "review_item_id", type: "INTEGER", mode: "REQUIRED" },
+            { name: "review_item_name", type: "STRING", mode: "REQUIRED" },
+            { name: "review_item_display_name", type: "STRING", mode: "NULLABLE" },
+            { name: "status", type: "STRING", mode: "REQUIRED" },
+            { name: "notes", type: "STRING", mode: "NULLABLE" },
+            { name: "reviewed_by", type: "STRING", mode: "NULLABLE" },
+            { name: "reviewed_at", type: "TIMESTAMP", mode: "REQUIRED" },
+          ],
+        },
+      });
+      console.log("Created call_reviews table");
+    }
+  } catch (error: any) {
+    console.error("Failed to ensure call_reviews table:", error.message);
+  }
+}
+
+export interface CallReviewEntry {
+  reviewItemId: number;
+  reviewItemName: string;
+  reviewItemDisplayName: string;
+  status: "checked" | "flagged" | "na" | "unchecked";
+  notes: string;
+  reviewedBy: string;
+}
+
+export async function upsertCallReviews(sourceId: string, reviews: CallReviewEntry[]): Promise<void> {
+  try {
+    await ensureCallReviewsTable();
+    const client = getBigQueryClient();
+    const projectId = process.env.GCP_PROJECT_ID;
+    const fullTable = `\`${projectId}.${DATASET_ID}.${CALL_REVIEWS_TABLE_ID}\``;
+    try {
+      await client.query({ query: `DELETE FROM ${fullTable} WHERE source_id = @sourceId`, params: { sourceId } });
+    } catch (e: any) {
+      console.warn(`Could not delete existing reviews for ${sourceId}: ${e.message}`);
+    }
+    if (!reviews || reviews.length === 0) return;
+    const now = new Date().toISOString();
+    const rows = reviews.map((r) => ({
+      id: `${sourceId}_${r.reviewItemId}`,
+      source_id: sourceId,
+      review_item_id: r.reviewItemId,
+      review_item_name: r.reviewItemName,
+      review_item_display_name: r.reviewItemDisplayName || null,
+      status: r.status,
+      notes: r.notes || null,
+      reviewed_by: r.reviewedBy || null,
+      reviewed_at: now,
+    }));
+    await client.dataset(DATASET_ID).table(CALL_REVIEWS_TABLE_ID).insert(rows);
+    console.log(`BigQuery call_reviews upserted ${rows.length} items for ${sourceId}`);
+  } catch (error: any) {
+    console.error("Failed to upsert call reviews:", error.message);
+    throw error;
+  }
+}
+
+export async function getCallReviews(sourceId: string): Promise<any[]> {
+  try {
+    await ensureCallReviewsTable();
+    const client = getBigQueryClient();
+    const projectId = process.env.GCP_PROJECT_ID;
+    const fullTable = `\`${projectId}.${DATASET_ID}.${CALL_REVIEWS_TABLE_ID}\``;
+    const [rows] = await client.query({
+      query: `SELECT * FROM ${fullTable} WHERE source_id = @sourceId ORDER BY review_item_id`,
+      params: { sourceId },
+    });
+    return rows;
+  } catch (error: any) {
+    console.error("Failed to get call reviews:", error.message);
+    return [];
   }
 }
 

@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Phone, Clock, Coins, ChevronRight, ChevronLeft, X, FileText, Activity, ListChecks, ClipboardList, AlertCircle, MessageSquare, ShieldAlert, ClipboardCheck, RefreshCw, Download, History, Tag } from "lucide-react";
+import { Loader2, Phone, Clock, Coins, ChevronRight, ChevronLeft, X, FileText, Activity, ListChecks, ClipboardList, AlertCircle, MessageSquare, ShieldAlert, ClipboardCheck, RefreshCw, Download, History, Tag, CheckCircle2, Flag, MinusCircle, Circle, Save } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
 import { exportCallDetailPdf } from "@/lib/exportPdf";
+import { useClientPathway } from "@/contexts/ClientPathwayContext";
 
 interface CallInfo {
   call_id: string;
@@ -97,8 +100,126 @@ function formatDate(dateStr: string | null): string {
   }
 }
 
+interface ReviewItemConfig {
+  id: number;
+  name: string;
+  displayName: string;
+  description: string;
+  category: string;
+  isActive: boolean;
+}
+
+interface ReviewState {
+  reviewItemId: number;
+  reviewItemName: string;
+  reviewItemDisplayName: string;
+  status: "checked" | "flagged" | "na" | "unchecked";
+  notes: string;
+  reviewedBy: string;
+}
+
+const STATUS_CYCLE: ReviewState["status"][] = ["unchecked", "checked", "flagged", "na"];
+
+function StatusIcon({ status }: { status: ReviewState["status"] }) {
+  switch (status) {
+    case "checked": return <CheckCircle2 className="h-5 w-5 text-green-600" />;
+    case "flagged": return <Flag className="h-5 w-5 text-red-500" />;
+    case "na": return <MinusCircle className="h-5 w-5 text-gray-400" />;
+    default: return <Circle className="h-5 w-5 text-gray-300" />;
+  }
+}
+
+function statusLabel(status: ReviewState["status"]): string {
+  switch (status) {
+    case "checked": return "Checked";
+    case "flagged": return "Flagged";
+    case "na": return "N/A";
+    default: return "Unchecked";
+  }
+}
+
 function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => void }) {
   const [selectedRun, setSelectedRun] = useState<number | undefined>(undefined);
+  const { toast } = useToast();
+  const { selectedCPId } = useClientPathway();
+  const [reviewStates, setReviewStates] = useState<ReviewState[]>([]);
+  const [reviewDirty, setReviewDirty] = useState(false);
+  const [reviewSaving, setReviewSaving] = useState(false);
+  const [expandedNotes, setExpandedNotes] = useState<Set<number>>(new Set());
+
+  const { data: reviewItems } = useQuery<ReviewItemConfig[]>({
+    queryKey: ["/api/call-review-items-for-call", selectedCPId],
+    queryFn: async () => {
+      if (!selectedCPId) return [];
+      const res = await fetch(`/api/call-review-items?clientPathwayId=${selectedCPId}`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!selectedCPId,
+  });
+
+  const { data: savedReviews } = useQuery<any[]>({
+    queryKey: ["/api/calls/reviews", callId],
+    queryFn: async () => {
+      const res = await fetch(`/api/calls/${callId}/reviews`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  useEffect(() => {
+    if (!reviewItems) return;
+    const activeItems = reviewItems.filter((i) => i.isActive);
+    const states: ReviewState[] = activeItems.map((item) => {
+      const saved = savedReviews?.find((r: any) => r.review_item_id === item.id);
+      return {
+        reviewItemId: item.id,
+        reviewItemName: item.name,
+        reviewItemDisplayName: item.displayName,
+        status: (saved?.status as ReviewState["status"]) || "unchecked",
+        notes: saved?.notes || "",
+        reviewedBy: saved?.reviewed_by || "",
+      };
+    });
+    setReviewStates(states);
+    setReviewDirty(false);
+  }, [reviewItems, savedReviews]);
+
+  const cycleStatus = useCallback((itemId: number) => {
+    setReviewStates((prev) =>
+      prev.map((r) => {
+        if (r.reviewItemId !== itemId) return r;
+        const idx = STATUS_CYCLE.indexOf(r.status);
+        return { ...r, status: STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length] };
+      })
+    );
+    setReviewDirty(true);
+  }, []);
+
+  const updateNotes = useCallback((itemId: number, notes: string) => {
+    setReviewStates((prev) =>
+      prev.map((r) => (r.reviewItemId === itemId ? { ...r, notes } : r))
+    );
+    setReviewDirty(true);
+  }, []);
+
+  const saveReviews = async () => {
+    setReviewSaving(true);
+    try {
+      const res = await fetch(`/api/calls/${callId}/reviews`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviews: reviewStates }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      setReviewDirty(false);
+      toast({ title: "Reviews saved" });
+    } catch {
+      toast({ title: "Error", description: "Failed to save reviews", variant: "destructive" });
+    } finally {
+      setReviewSaving(false);
+    }
+  };
 
   const { data, isLoading, isError } = useQuery<CallDetail>({
     queryKey: ["/api/calls", callId, selectedRun],
@@ -723,6 +844,115 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
                   data-testid="detail-follow-up"
                   dangerouslySetInnerHTML={{ __html: info.follow_up_areas }}
                 />
+              </CardContent>
+            </Card>
+          )}
+
+          {reviewStates.length > 0 && (
+            <Card className="border-border/60 bg-card shadow-sm" data-testid="card-call-review">
+              <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2 text-secondary">
+                    <ClipboardCheck className="h-4 w-4 text-[#0098db]" />
+                    Call Review
+                    <Badge variant="outline" className="text-xs ml-2">
+                      {reviewStates.filter((r) => r.status !== "unchecked").length}/{reviewStates.length} reviewed
+                    </Badge>
+                  </CardTitle>
+                  <Button
+                    size="sm"
+                    disabled={!reviewDirty || reviewSaving}
+                    onClick={saveReviews}
+                    className="bg-[#0098db] hover:bg-[#0086c3] h-7 text-xs"
+                    data-testid="button-save-reviews"
+                  >
+                    {reviewSaving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
+                    {reviewSaving ? "Saving..." : "Save"}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="space-y-2">
+                  {(() => {
+                    const grouped = reviewStates.reduce<Record<string, ReviewState[]>>((acc, r) => {
+                      const item = reviewItems?.find((i) => i.id === r.reviewItemId);
+                      const cat = item?.category || "General";
+                      if (!acc[cat]) acc[cat] = [];
+                      acc[cat].push(r);
+                      return acc;
+                    }, {});
+                    return Object.entries(grouped).map(([cat, items]) => (
+                      <div key={cat}>
+                        {Object.keys(grouped).length > 1 && (
+                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mt-2 mb-1">{cat}</p>
+                        )}
+                        {items.map((r) => {
+                          const config = reviewItems?.find((i) => i.id === r.reviewItemId);
+                          const notesOpen = expandedNotes.has(r.reviewItemId);
+                          return (
+                            <div
+                              key={r.reviewItemId}
+                              className={`p-2.5 rounded-lg border transition-colors ${
+                                r.status === "flagged" ? "border-red-200 bg-red-50/50" :
+                                r.status === "checked" ? "border-green-200 bg-green-50/30" :
+                                "border-border/50 bg-muted/10"
+                              }`}
+                              data-testid={`review-item-row-${r.reviewItemId}`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => cycleStatus(r.reviewItemId)}
+                                  className="shrink-0 hover:scale-110 transition-transform"
+                                  title={`Status: ${statusLabel(r.status)} (click to cycle)`}
+                                  data-testid={`button-review-status-${r.reviewItemId}`}
+                                >
+                                  <StatusIcon status={r.status} />
+                                </button>
+                                <div className="flex-1 min-w-0">
+                                  <span className="text-sm font-medium text-foreground">{r.reviewItemDisplayName}</span>
+                                  {config?.description && (
+                                    <p className="text-[11px] text-muted-foreground truncate">{config.description}</p>
+                                  )}
+                                </div>
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[10px] px-1.5 py-0 shrink-0 ${
+                                    r.status === "checked" ? "bg-green-50 text-green-700 border-green-200" :
+                                    r.status === "flagged" ? "bg-red-50 text-red-700 border-red-200" :
+                                    r.status === "na" ? "bg-gray-50 text-gray-500 border-gray-200" :
+                                    "text-gray-400"
+                                  }`}
+                                >
+                                  {statusLabel(r.status)}
+                                </Badge>
+                                <button
+                                  onClick={() => {
+                                    const next = new Set(expandedNotes);
+                                    notesOpen ? next.delete(r.reviewItemId) : next.add(r.reviewItemId);
+                                    setExpandedNotes(next);
+                                  }}
+                                  className="text-xs text-muted-foreground hover:text-foreground shrink-0"
+                                  data-testid={`button-toggle-notes-${r.reviewItemId}`}
+                                >
+                                  {r.notes ? <FileText className="h-3.5 w-3.5 text-[#0098db]" /> : <FileText className="h-3.5 w-3.5" />}
+                                </button>
+                              </div>
+                              {notesOpen && (
+                                <Textarea
+                                  value={r.notes}
+                                  onChange={(e) => updateNotes(r.reviewItemId, e.target.value)}
+                                  placeholder="Add notes..."
+                                  className="mt-2 text-xs min-h-[50px] resize-none"
+                                  data-testid={`textarea-notes-${r.reviewItemId}`}
+                                />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ));
+                  })()}
+                </div>
               </CardContent>
             </Card>
           )}

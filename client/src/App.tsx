@@ -22,6 +22,7 @@ import CallQA from "@/pages/CallQA";
 import ClientPathway from "@/pages/ClientPathway";
 import CallStats from "@/pages/CallStats";
 import Dispositions from "@/pages/Dispositions";
+import ReviewItems from "@/pages/ReviewItems";
 
 function Router() {
   return (
@@ -32,6 +33,7 @@ function Router() {
         <Route path="/overview" component={ProjectOverview} />
         <Route path="/observations" component={Observations} />
         <Route path="/dispositions" component={Dispositions} />
+        <Route path="/review-items" component={ReviewItems} />
         <Route path="/summary-prompt" component={SummaryPrompt} />
         <Route path="/barriers-prompt" component={BarriersPrompt} />
         <Route path="/call-qa" component={CallQA} />

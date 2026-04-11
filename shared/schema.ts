@@ -157,3 +157,36 @@ export interface DispositionDetail {
   displayOrder: number;
   isActive: boolean;
 }
+
+export const insertCallReviewItemSchema = z.object({
+  name: z.string(),
+  displayName: z.string(),
+  description: z.string().default(""),
+  category: z.string().default("General"),
+  displayOrder: z.number().int().default(0),
+  isActive: z.boolean().default(true),
+});
+
+export type InsertCallReviewItem = z.infer<typeof insertCallReviewItemSchema>;
+
+export interface CallReviewItem {
+  id: number;
+  name: string;
+  displayName: string;
+  description: string;
+  category: string;
+  displayOrder: number;
+  isActive: boolean;
+}
+
+export interface CallReview {
+  id: string;
+  sourceId: string;
+  reviewItemId: number;
+  reviewItemName: string;
+  reviewItemDisplayName: string;
+  status: "checked" | "flagged" | "na" | "unchecked";
+  notes: string;
+  reviewedBy: string;
+  reviewedAt: string;
+}

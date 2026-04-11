@@ -1,5 +1,5 @@
 import { BigQuery } from "@google-cloud/bigquery";
-import type { Observation, InsertObservation, EnumValue, ContextParameter, InsertContextParameter, CallQAPrompt, InsertCallQAPrompt, ClientPathway, InsertClientPathway, DispositionCategory, InsertDispositionCategory, DispositionDetail, InsertDispositionDetail } from "@shared/schema";
+import type { Observation, InsertObservation, EnumValue, ContextParameter, InsertContextParameter, CallQAPrompt, InsertCallQAPrompt, ClientPathway, InsertClientPathway, DispositionCategory, InsertDispositionCategory, DispositionDetail, InsertDispositionDetail, CallReviewItem, InsertCallReviewItem } from "@shared/schema";
 
 const DATASET_ID = "call_information";
 const TABLE_ID = "observations";
@@ -9,6 +9,7 @@ const CALL_QA_PROMPTS_TABLE_ID = "call_qa_prompts";
 const CLIENT_PATHWAY_TABLE_ID = "client_pathway";
 const DISPOSITION_CATEGORIES_TABLE_ID = "disposition_categories";
 const DISPOSITION_DETAILS_TABLE_ID = "disposition_details";
+const CALL_REVIEW_ITEMS_TABLE_ID = "call_review_items";
 
 let bigquery: BigQuery | null = null;
 
@@ -284,6 +285,46 @@ async function ensureDispositionDetailsTable(): Promise<void> {
   dispositionDetailsTableInitialized = true;
 }
 
+let callReviewItemsTableInitialized = false;
+export async function ensureCallReviewItemsTable(): Promise<void> {
+  if (callReviewItemsTableInitialized) return;
+  const client = getBigQueryClient();
+  const projectId = process.env.GCP_PROJECT_ID;
+  const fullTable = `${projectId}.${DATASET_ID}.${CALL_REVIEW_ITEMS_TABLE_ID}`;
+  try {
+    await client.query({
+      query: `CREATE TABLE IF NOT EXISTS \`${fullTable}\` (
+        id INT64 NOT NULL,
+        name STRING NOT NULL,
+        display_name STRING NOT NULL,
+        description STRING DEFAULT '',
+        category STRING DEFAULT 'General',
+        display_order INT64 DEFAULT 0,
+        is_active BOOL DEFAULT TRUE,
+        client_pathway_id INT64
+      )`,
+    });
+    console.log(`BigQuery table ${DATASET_ID}.${CALL_REVIEW_ITEMS_TABLE_ID} ready.`);
+  } catch (err: any) {
+    if (err.message?.includes("Already Exists")) {
+      console.log(`BigQuery table ${DATASET_ID}.${CALL_REVIEW_ITEMS_TABLE_ID} already exists.`);
+    } else { throw err; }
+  }
+  callReviewItemsTableInitialized = true;
+}
+
+function rowToCallReviewItem(row: any): CallReviewItem {
+  return {
+    id: row.id,
+    name: row.name,
+    displayName: row.display_name,
+    description: row.description || "",
+    category: row.category || "General",
+    displayOrder: row.display_order ?? 0,
+    isActive: row.is_active,
+  };
+}
+
 function rowToDispositionCategory(row: any): DispositionCategory {
   return {
     id: row.id,
@@ -369,6 +410,13 @@ export interface IStorage {
   createDispositionDetail(clientPathwayId: number, data: InsertDispositionDetail): Promise<DispositionDetail>;
   updateDispositionDetail(id: number, data: Partial<InsertDispositionDetail>, clientPathwayId?: number): Promise<DispositionDetail | undefined>;
   deleteDispositionDetail(id: number, clientPathwayId?: number): Promise<boolean>;
+
+  getCallReviewItems(clientPathwayId: number): Promise<CallReviewItem[]>;
+  getActiveCallReviewItems(clientPathwayId: number): Promise<CallReviewItem[]>;
+  getCallReviewItem(id: number, clientPathwayId?: number): Promise<CallReviewItem | undefined>;
+  createCallReviewItem(clientPathwayId: number, data: InsertCallReviewItem): Promise<CallReviewItem>;
+  updateCallReviewItem(id: number, data: Partial<InsertCallReviewItem>, clientPathwayId?: number): Promise<CallReviewItem | undefined>;
+  deleteCallReviewItem(id: number, clientPathwayId?: number): Promise<boolean>;
 }
 
 export class BigQueryStorage implements IStorage {
@@ -970,6 +1018,87 @@ export class BigQueryStorage implements IStorage {
     await ensureDispositionDetailsTable();
     const client = getBigQueryClient();
     const table = this.getDispositionDetailsTable();
+    const cpFilter = clientPathwayId ? " AND client_pathway_id = @cpId" : "";
+    const params: any = { id };
+    if (clientPathwayId) params.cpId = clientPathwayId;
+    await client.query({ query: `DELETE FROM ${table} WHERE id = @id${cpFilter}`, params });
+    return true;
+  }
+
+  private getCallReviewItemsTable(): string {
+    const projectId = process.env.GCP_PROJECT_ID;
+    return `\`${projectId}.${DATASET_ID}.${CALL_REVIEW_ITEMS_TABLE_ID}\``;
+  }
+
+  async getCallReviewItems(clientPathwayId: number): Promise<CallReviewItem[]> {
+    await ensureCallReviewItemsTable();
+    const client = getBigQueryClient();
+    const table = this.getCallReviewItemsTable();
+    const [rows] = await client.query({
+      query: `SELECT * FROM ${table} WHERE client_pathway_id = @cpId ORDER BY display_order, id`,
+      params: { cpId: clientPathwayId },
+    });
+    return rows.map(rowToCallReviewItem);
+  }
+
+  async getActiveCallReviewItems(clientPathwayId: number): Promise<CallReviewItem[]> {
+    await ensureCallReviewItemsTable();
+    const client = getBigQueryClient();
+    const table = this.getCallReviewItemsTable();
+    const [rows] = await client.query({
+      query: `SELECT * FROM ${table} WHERE client_pathway_id = @cpId AND is_active = TRUE ORDER BY display_order, id`,
+      params: { cpId: clientPathwayId },
+    });
+    return rows.map(rowToCallReviewItem);
+  }
+
+  async getCallReviewItem(id: number, clientPathwayId?: number): Promise<CallReviewItem | undefined> {
+    await ensureCallReviewItemsTable();
+    const client = getBigQueryClient();
+    const table = this.getCallReviewItemsTable();
+    const cpFilter = clientPathwayId ? " AND client_pathway_id = @cpId" : "";
+    const params: any = { id };
+    if (clientPathwayId) params.cpId = clientPathwayId;
+    const [rows] = await client.query({ query: `SELECT * FROM ${table} WHERE id = @id${cpFilter}`, params });
+    return rows.length > 0 ? rowToCallReviewItem(rows[0]) : undefined;
+  }
+
+  async createCallReviewItem(clientPathwayId: number, data: InsertCallReviewItem): Promise<CallReviewItem> {
+    await ensureCallReviewItemsTable();
+    const client = getBigQueryClient();
+    const table = this.getCallReviewItemsTable();
+    const [maxRows] = await client.query({ query: `SELECT COALESCE(MAX(id), 0) as maxId FROM ${table}` });
+    const newId = (maxRows[0]?.maxId || 0) + 1;
+    await client.query({
+      query: `INSERT INTO ${table} (id, name, display_name, description, category, display_order, is_active, client_pathway_id) VALUES (@id, @name, @displayName, @description, @category, @displayOrder, @isActive, @cpId)`,
+      params: { id: newId, name: data.name, displayName: data.displayName, description: data.description || "", category: data.category || "General", displayOrder: data.displayOrder ?? 0, isActive: data.isActive ?? true, cpId: clientPathwayId },
+    });
+    return { id: newId, name: data.name, displayName: data.displayName, description: data.description || "", category: data.category || "General", displayOrder: data.displayOrder ?? 0, isActive: data.isActive ?? true };
+  }
+
+  async updateCallReviewItem(id: number, data: Partial<InsertCallReviewItem>, clientPathwayId?: number): Promise<CallReviewItem | undefined> {
+    await ensureCallReviewItemsTable();
+    const client = getBigQueryClient();
+    const table = this.getCallReviewItemsTable();
+    const sets: string[] = [];
+    const params: any = { id };
+    if (clientPathwayId) params.cpId = clientPathwayId;
+    if (data.name !== undefined) { sets.push("name = @name"); params.name = data.name; }
+    if (data.displayName !== undefined) { sets.push("display_name = @displayName"); params.displayName = data.displayName; }
+    if (data.description !== undefined) { sets.push("description = @description"); params.description = data.description; }
+    if (data.category !== undefined) { sets.push("category = @category"); params.category = data.category; }
+    if (data.displayOrder !== undefined) { sets.push("display_order = @displayOrder"); params.displayOrder = data.displayOrder; }
+    if (data.isActive !== undefined) { sets.push("is_active = @isActive"); params.isActive = data.isActive; }
+    if (sets.length === 0) return this.getCallReviewItem(id, clientPathwayId);
+    const cpFilter = clientPathwayId ? " AND client_pathway_id = @cpId" : "";
+    await client.query({ query: `UPDATE ${table} SET ${sets.join(", ")} WHERE id = @id${cpFilter}`, params });
+    return this.getCallReviewItem(id, clientPathwayId);
+  }
+
+  async deleteCallReviewItem(id: number, clientPathwayId?: number): Promise<boolean> {
+    await ensureCallReviewItemsTable();
+    const client = getBigQueryClient();
+    const table = this.getCallReviewItemsTable();
     const cpFilter = clientPathwayId ? " AND client_pathway_id = @cpId" : "";
     const params: any = { id };
     if (clientPathwayId) params.cpId = clientPathwayId;

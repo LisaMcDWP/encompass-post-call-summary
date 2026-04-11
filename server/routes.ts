@@ -1,10 +1,10 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { analyzeTranscript, analyzeTranscriptFast, analyzeTranscriptBackground, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, aiObservationAssistant, type DispositionConfig } from "./gemini";
-import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBarriers, insertCallQAResults, insertCallDisposition, ensureCallBarriersTable, ensureCallQATable, getCallBarriers, getCallInfoList, getCallDetail, getCallStatsByDay, queryBlandCalls, loadBlandCallsToBatch, fetchAwellContextForCareFlows, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, resetFailedBatchItems, deletePendingBatchItems, recreateBatch, getDistinctTags } from "./bigquery";
+import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBarriers, insertCallQAResults, insertCallDisposition, ensureCallBarriersTable, ensureCallQATable, getCallBarriers, getCallInfoList, getCallDetail, getCallStatsByDay, queryBlandCalls, loadBlandCallsToBatch, fetchAwellContextForCareFlows, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, resetFailedBatchItems, deletePendingBatchItems, recreateBatch, getDistinctTags, upsertCallReviews, getCallReviews } from "./bigquery";
 import { randomUUID, createHash } from "crypto";
 import { storage } from "./storage";
-import { insertObservationSchema, enumValueSchema, insertContextParameterSchema, insertCallQAPromptSchema, insertDispositionCategorySchema, insertDispositionDetailSchema } from "@shared/schema";
+import { insertObservationSchema, enumValueSchema, insertContextParameterSchema, insertCallQAPromptSchema, insertDispositionCategorySchema, insertDispositionDetailSchema, insertCallReviewItemSchema } from "@shared/schema";
 import { z } from "zod";
 
 async function getPromptWithVersion(clientPathwayId: number) {
@@ -808,6 +808,78 @@ export async function registerRoutes(
     const deleted = await storage.deleteDispositionDetail(id, cpId);
     if (!deleted) return res.status(404).json({ message: "Detail not found" });
     res.json({ success: true });
+  });
+
+  app.get("/api/call-review-items", async (req, res) => {
+    try {
+      const cpId = Number(req.query.clientPathwayId);
+      if (!cpId) return res.status(400).json({ message: "clientPathwayId required" });
+      const items = await storage.getCallReviewItems(cpId);
+      res.json(items);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/call-review-items", async (req, res) => {
+    try {
+      const cpId = Number(req.body.clientPathwayId);
+      if (!cpId) return res.status(400).json({ message: "clientPathwayId required" });
+      const parsed = insertCallReviewItemSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      const item = await storage.createCallReviewItem(cpId, parsed.data);
+      res.status(201).json(item);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.put("/api/call-review-items/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+      const cpId = Number(req.body.clientPathwayId) || undefined;
+      const parsed = insertCallReviewItemSchema.partial().safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      const item = await storage.updateCallReviewItem(id, parsed.data, cpId);
+      if (!item) return res.status(404).json({ message: "Review item not found" });
+      res.json(item);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/call-review-items/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+      const cpId = Number(req.query.clientPathwayId) || undefined;
+      const deleted = await storage.deleteCallReviewItem(id, cpId);
+      if (!deleted) return res.status(404).json({ message: "Review item not found" });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/calls/:callId/reviews", async (req, res) => {
+    try {
+      const reviews = await getCallReviews(req.params.callId);
+      res.json(reviews);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/calls/:callId/reviews", async (req, res) => {
+    try {
+      const { reviews } = req.body;
+      if (!Array.isArray(reviews)) return res.status(400).json({ message: "reviews array required" });
+      await upsertCallReviews(req.params.callId, reviews);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
   });
 
   app.get("/api/context-parameters", async (req, res) => {
