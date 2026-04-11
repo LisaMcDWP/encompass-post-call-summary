@@ -667,6 +667,224 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
             </Card>
           )}
 
+          {(reviewStates.length > 0 || true) && (
+            <Card className="border-border/60 bg-card shadow-sm" data-testid="card-call-review">
+              <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2 text-secondary">
+                    <ClipboardCheck className="h-4 w-4 text-[#0098db]" />
+                    Call Review
+                    {reviewStates.length > 0 && (
+                      <Badge variant="outline" className="text-xs ml-2">
+                        {reviewStates.filter((r) => r.status !== "unchecked").length}/{reviewStates.length} reviewed
+                      </Badge>
+                    )}
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    {reviewStates.length > 0 && (
+                      <Button
+                        size="sm"
+                        disabled={!reviewDirty || reviewSaving}
+                        onClick={saveReviews}
+                        className="bg-[#0098db] hover:bg-[#0086c3] h-7 text-xs"
+                        data-testid="button-save-reviews"
+                      >
+                        {reviewSaving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
+                        {reviewSaving ? "Saving..." : "Save"}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 mt-3" data-testid="review-status-selector">
+                  <span className="text-xs text-muted-foreground mr-1">Status:</span>
+                  {REVIEW_STATUS_OPTIONS.map((opt) => {
+                    const isActive = callReviewStatus === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        onClick={() => updateReviewStatus(opt.value)}
+                        disabled={reviewStatusSaving}
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-medium border transition-all ${
+                          isActive
+                            ? `${opt.bgColor} ${opt.color} ${opt.borderColor} ring-1 ring-offset-1 ring-current/20`
+                            : "bg-white text-gray-400 border-gray-200 hover:bg-gray-50"
+                        }`}
+                        data-testid={`button-review-status-${opt.value}`}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </CardHeader>
+              <CardContent className="pt-4 space-y-4">
+                <div className="space-y-3" data-testid="review-tags-notes">
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-xs font-medium text-muted-foreground">Tags</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {reviewTags.map((tag) => (
+                        <Badge
+                          key={tag}
+                          variant="secondary"
+                          className="text-[11px] px-2 py-0.5 bg-[#0098db]/10 text-[#0098db] border border-[#0098db]/20 gap-1"
+                        >
+                          {tag}
+                          <button
+                            onClick={() => removeTag(tag)}
+                            className="hover:text-red-500 transition-colors ml-0.5"
+                            data-testid={`button-remove-tag-${tag}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                      {reviewTags.length === 0 && (
+                        <span className="text-[11px] text-muted-foreground/50 italic">No tags</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        value={tagInput}
+                        onChange={(e) => setTagInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            addTag(tagInput);
+                          }
+                        }}
+                        placeholder="Add a tag..."
+                        className="h-7 text-xs flex-1"
+                        data-testid="input-add-tag"
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2"
+                        onClick={() => addTag(tagInput)}
+                        disabled={!tagInput.trim()}
+                        data-testid="button-add-tag"
+                      >
+                        <Plus className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-xs font-medium text-muted-foreground">Review Notes</span>
+                    </div>
+                    <Textarea
+                      value={reviewNotesText}
+                      onChange={(e) => { setReviewNotesText(e.target.value); setMetaDirty(true); }}
+                      placeholder="Add review notes for this call..."
+                      className="text-xs min-h-[60px] resize-none"
+                      data-testid="textarea-review-notes"
+                    />
+                  </div>
+                  <div className="flex justify-end">
+                    <Button
+                      size="sm"
+                      disabled={!metaDirty || metaSaving}
+                      onClick={saveReviewMeta}
+                      className="bg-[#0098db] hover:bg-[#0086c3] h-7 text-xs"
+                      data-testid="button-save-review-meta"
+                    >
+                      {metaSaving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
+                      {metaSaving ? "Saving..." : "Save Tags & Notes"}
+                    </Button>
+                  </div>
+                </div>
+
+                {reviewStates.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">No review checklist items configured. Add them in the Review Items setup page.</p>
+                ) : (<div className="space-y-2">
+                  {(() => {
+                    const grouped = reviewStates.reduce<Record<string, ReviewState[]>>((acc, r) => {
+                      const item = reviewItems?.find((i) => i.id === r.reviewItemId);
+                      const cat = item?.category || "General";
+                      if (!acc[cat]) acc[cat] = [];
+                      acc[cat].push(r);
+                      return acc;
+                    }, {});
+                    return Object.entries(grouped).map(([cat, items]) => (
+                      <div key={cat}>
+                        {Object.keys(grouped).length > 1 && (
+                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mt-2 mb-1">{cat}</p>
+                        )}
+                        {items.map((r) => {
+                          const config = reviewItems?.find((i) => i.id === r.reviewItemId);
+                          const notesOpen = expandedNotes.has(r.reviewItemId);
+                          return (
+                            <div
+                              key={r.reviewItemId}
+                              className={`p-2.5 rounded-lg border transition-colors ${
+                                r.status === "flagged" ? "border-red-200 bg-red-50/50" :
+                                r.status === "checked" ? "border-green-200 bg-green-50/30" :
+                                "border-border/50 bg-muted/10"
+                              }`}
+                              data-testid={`review-item-row-${r.reviewItemId}`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => cycleStatus(r.reviewItemId)}
+                                  className="shrink-0 hover:scale-110 transition-transform"
+                                  title={`Status: ${statusLabel(r.status)} (click to cycle)`}
+                                  data-testid={`button-review-status-${r.reviewItemId}`}
+                                >
+                                  <StatusIcon status={r.status} />
+                                </button>
+                                <div className="flex-1 min-w-0">
+                                  <span className="text-sm font-medium text-foreground">{r.reviewItemDisplayName}</span>
+                                  {config?.description && (
+                                    <p className="text-[11px] text-muted-foreground truncate">{config.description}</p>
+                                  )}
+                                </div>
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[10px] px-1.5 py-0 shrink-0 ${
+                                    r.status === "checked" ? "bg-green-50 text-green-700 border-green-200" :
+                                    r.status === "flagged" ? "bg-red-50 text-red-700 border-red-200" :
+                                    r.status === "na" ? "bg-gray-50 text-gray-500 border-gray-200" :
+                                    "text-gray-400"
+                                  }`}
+                                >
+                                  {statusLabel(r.status)}
+                                </Badge>
+                                <button
+                                  onClick={() => {
+                                    const next = new Set(expandedNotes);
+                                    notesOpen ? next.delete(r.reviewItemId) : next.add(r.reviewItemId);
+                                    setExpandedNotes(next);
+                                  }}
+                                  className="text-xs text-muted-foreground hover:text-foreground shrink-0"
+                                  data-testid={`button-toggle-notes-${r.reviewItemId}`}
+                                >
+                                  {r.notes ? <FileText className="h-3.5 w-3.5 text-[#0098db]" /> : <FileText className="h-3.5 w-3.5" />}
+                                </button>
+                              </div>
+                              {notesOpen && (
+                                <Textarea
+                                  value={r.notes}
+                                  onChange={(e) => updateNotes(r.reviewItemId, e.target.value)}
+                                  placeholder="Add notes..."
+                                  className="mt-2 text-xs min-h-[50px] resize-none"
+                                  data-testid={`textarea-notes-${r.reviewItemId}`}
+                                />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ));
+                  })()}
+                </div>)}
+              </CardContent>
+            </Card>
+          )}
+
           {info.summary && (
             <Card className="border-border/60 bg-card shadow-sm">
               <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
@@ -962,224 +1180,6 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
                   data-testid="detail-follow-up"
                   dangerouslySetInnerHTML={{ __html: info.follow_up_areas }}
                 />
-              </CardContent>
-            </Card>
-          )}
-
-          {(reviewStates.length > 0 || true) && (
-            <Card className="border-border/60 bg-card shadow-sm" data-testid="card-call-review">
-              <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base flex items-center gap-2 text-secondary">
-                    <ClipboardCheck className="h-4 w-4 text-[#0098db]" />
-                    Call Review
-                    {reviewStates.length > 0 && (
-                      <Badge variant="outline" className="text-xs ml-2">
-                        {reviewStates.filter((r) => r.status !== "unchecked").length}/{reviewStates.length} reviewed
-                      </Badge>
-                    )}
-                  </CardTitle>
-                  <div className="flex items-center gap-2">
-                    {reviewStates.length > 0 && (
-                      <Button
-                        size="sm"
-                        disabled={!reviewDirty || reviewSaving}
-                        onClick={saveReviews}
-                        className="bg-[#0098db] hover:bg-[#0086c3] h-7 text-xs"
-                        data-testid="button-save-reviews"
-                      >
-                        {reviewSaving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
-                        {reviewSaving ? "Saving..." : "Save"}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5 mt-3" data-testid="review-status-selector">
-                  <span className="text-xs text-muted-foreground mr-1">Status:</span>
-                  {REVIEW_STATUS_OPTIONS.map((opt) => {
-                    const isActive = callReviewStatus === opt.value;
-                    return (
-                      <button
-                        key={opt.value}
-                        onClick={() => updateReviewStatus(opt.value)}
-                        disabled={reviewStatusSaving}
-                        className={`px-2.5 py-1 rounded-md text-[11px] font-medium border transition-all ${
-                          isActive
-                            ? `${opt.bgColor} ${opt.color} ${opt.borderColor} ring-1 ring-offset-1 ring-current/20`
-                            : "bg-white text-gray-400 border-gray-200 hover:bg-gray-50"
-                        }`}
-                        data-testid={`button-review-status-${opt.value}`}
-                      >
-                        {opt.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </CardHeader>
-              <CardContent className="pt-4 space-y-4">
-                <div className="space-y-3" data-testid="review-tags-notes">
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Tag className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="text-xs font-medium text-muted-foreground">Tags</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 mb-2">
-                      {reviewTags.map((tag) => (
-                        <Badge
-                          key={tag}
-                          variant="secondary"
-                          className="text-[11px] px-2 py-0.5 bg-[#0098db]/10 text-[#0098db] border border-[#0098db]/20 gap-1"
-                        >
-                          {tag}
-                          <button
-                            onClick={() => removeTag(tag)}
-                            className="hover:text-red-500 transition-colors ml-0.5"
-                            data-testid={`button-remove-tag-${tag}`}
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </Badge>
-                      ))}
-                      {reviewTags.length === 0 && (
-                        <span className="text-[11px] text-muted-foreground/50 italic">No tags</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Input
-                        value={tagInput}
-                        onChange={(e) => setTagInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            addTag(tagInput);
-                          }
-                        }}
-                        placeholder="Add a tag..."
-                        className="h-7 text-xs flex-1"
-                        data-testid="input-add-tag"
-                      />
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 px-2"
-                        onClick={() => addTag(tagInput)}
-                        disabled={!tagInput.trim()}
-                        data-testid="button-add-tag"
-                      >
-                        <Plus className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="text-xs font-medium text-muted-foreground">Review Notes</span>
-                    </div>
-                    <Textarea
-                      value={reviewNotesText}
-                      onChange={(e) => { setReviewNotesText(e.target.value); setMetaDirty(true); }}
-                      placeholder="Add review notes for this call..."
-                      className="text-xs min-h-[60px] resize-none"
-                      data-testid="textarea-review-notes"
-                    />
-                  </div>
-                  <div className="flex justify-end">
-                    <Button
-                      size="sm"
-                      disabled={!metaDirty || metaSaving}
-                      onClick={saveReviewMeta}
-                      className="bg-[#0098db] hover:bg-[#0086c3] h-7 text-xs"
-                      data-testid="button-save-review-meta"
-                    >
-                      {metaSaving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
-                      {metaSaving ? "Saving..." : "Save Tags & Notes"}
-                    </Button>
-                  </div>
-                </div>
-
-                {reviewStates.length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic">No review checklist items configured. Add them in the Review Items setup page.</p>
-                ) : (<div className="space-y-2">
-                  {(() => {
-                    const grouped = reviewStates.reduce<Record<string, ReviewState[]>>((acc, r) => {
-                      const item = reviewItems?.find((i) => i.id === r.reviewItemId);
-                      const cat = item?.category || "General";
-                      if (!acc[cat]) acc[cat] = [];
-                      acc[cat].push(r);
-                      return acc;
-                    }, {});
-                    return Object.entries(grouped).map(([cat, items]) => (
-                      <div key={cat}>
-                        {Object.keys(grouped).length > 1 && (
-                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mt-2 mb-1">{cat}</p>
-                        )}
-                        {items.map((r) => {
-                          const config = reviewItems?.find((i) => i.id === r.reviewItemId);
-                          const notesOpen = expandedNotes.has(r.reviewItemId);
-                          return (
-                            <div
-                              key={r.reviewItemId}
-                              className={`p-2.5 rounded-lg border transition-colors ${
-                                r.status === "flagged" ? "border-red-200 bg-red-50/50" :
-                                r.status === "checked" ? "border-green-200 bg-green-50/30" :
-                                "border-border/50 bg-muted/10"
-                              }`}
-                              data-testid={`review-item-row-${r.reviewItemId}`}
-                            >
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => cycleStatus(r.reviewItemId)}
-                                  className="shrink-0 hover:scale-110 transition-transform"
-                                  title={`Status: ${statusLabel(r.status)} (click to cycle)`}
-                                  data-testid={`button-review-status-${r.reviewItemId}`}
-                                >
-                                  <StatusIcon status={r.status} />
-                                </button>
-                                <div className="flex-1 min-w-0">
-                                  <span className="text-sm font-medium text-foreground">{r.reviewItemDisplayName}</span>
-                                  {config?.description && (
-                                    <p className="text-[11px] text-muted-foreground truncate">{config.description}</p>
-                                  )}
-                                </div>
-                                <Badge
-                                  variant="outline"
-                                  className={`text-[10px] px-1.5 py-0 shrink-0 ${
-                                    r.status === "checked" ? "bg-green-50 text-green-700 border-green-200" :
-                                    r.status === "flagged" ? "bg-red-50 text-red-700 border-red-200" :
-                                    r.status === "na" ? "bg-gray-50 text-gray-500 border-gray-200" :
-                                    "text-gray-400"
-                                  }`}
-                                >
-                                  {statusLabel(r.status)}
-                                </Badge>
-                                <button
-                                  onClick={() => {
-                                    const next = new Set(expandedNotes);
-                                    notesOpen ? next.delete(r.reviewItemId) : next.add(r.reviewItemId);
-                                    setExpandedNotes(next);
-                                  }}
-                                  className="text-xs text-muted-foreground hover:text-foreground shrink-0"
-                                  data-testid={`button-toggle-notes-${r.reviewItemId}`}
-                                >
-                                  {r.notes ? <FileText className="h-3.5 w-3.5 text-[#0098db]" /> : <FileText className="h-3.5 w-3.5" />}
-                                </button>
-                              </div>
-                              {notesOpen && (
-                                <Textarea
-                                  value={r.notes}
-                                  onChange={(e) => updateNotes(r.reviewItemId, e.target.value)}
-                                  placeholder="Add notes..."
-                                  className="mt-2 text-xs min-h-[50px] resize-none"
-                                  data-testid={`textarea-notes-${r.reviewItemId}`}
-                                />
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ));
-                  })()}
-                </div>)}
               </CardContent>
             </Card>
           )}
