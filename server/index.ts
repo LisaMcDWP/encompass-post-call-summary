@@ -3,7 +3,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedObservations, seedDispositions } from "./seed";
-import { initializeCallTables, ensureCallDispositionsTable, ensureCallReviewsTable } from "./bigquery";
+import { initializeCallTables, ensureCallDispositionsTable, ensureCallReviewsTable, ensureCallReviewStatusesTable } from "./bigquery";
 
 const app = express();
 const httpServer = createServer(app);
@@ -67,6 +67,7 @@ app.use((req, res, next) => {
   await seedDispositions();
   await ensureCallDispositionsTable();
   await ensureCallReviewsTable();
+  await ensureCallReviewStatusesTable();
   initializeCallTables();
   await registerRoutes(httpServer, app);
 

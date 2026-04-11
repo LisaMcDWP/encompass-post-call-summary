@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { analyzeTranscript, analyzeTranscriptFast, analyzeTranscriptBackground, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, aiObservationAssistant, type DispositionConfig } from "./gemini";
-import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBarriers, insertCallQAResults, insertCallDisposition, ensureCallBarriersTable, ensureCallQATable, getCallBarriers, getCallInfoList, getCallDetail, getCallStatsByDay, queryBlandCalls, loadBlandCallsToBatch, fetchAwellContextForCareFlows, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, resetFailedBatchItems, deletePendingBatchItems, recreateBatch, getDistinctTags, upsertCallReviews, getCallReviews } from "./bigquery";
+import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBarriers, insertCallQAResults, insertCallDisposition, ensureCallBarriersTable, ensureCallQATable, getCallBarriers, getCallInfoList, getCallDetail, getCallStatsByDay, queryBlandCalls, loadBlandCallsToBatch, fetchAwellContextForCareFlows, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, resetFailedBatchItems, deletePendingBatchItems, recreateBatch, getDistinctTags, upsertCallReviews, getCallReviews, upsertCallReviewStatus, getCallReviewStatusesBulk, ensureCallReviewStatusesTable } from "./bigquery";
 import { randomUUID, createHash } from "crypto";
 import { storage } from "./storage";
 import { insertObservationSchema, enumValueSchema, insertContextParameterSchema, insertCallQAPromptSchema, insertDispositionCategorySchema, insertDispositionDetailSchema, insertCallReviewItemSchema } from "@shared/schema";
@@ -877,6 +877,73 @@ export async function registerRoutes(
       if (!Array.isArray(reviews)) return res.status(400).json({ message: "reviews array required" });
       await upsertCallReviews(req.params.callId, reviews);
       res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.put("/api/calls/:callId/review-status", async (req, res) => {
+    try {
+      const { reviewStatus } = req.body;
+      if (!reviewStatus || typeof reviewStatus !== "string") {
+        return res.status(400).json({ message: "reviewStatus string required" });
+      }
+      const validStatuses = ["not_reviewed", "in_progress", "reviewed", "flagged"];
+      if (!validStatuses.includes(reviewStatus)) {
+        return res.status(400).json({ message: `Invalid status. Must be one of: ${validStatuses.join(", ")}` });
+      }
+      await upsertCallReviewStatus(req.params.callId, reviewStatus);
+      res.json({ success: true, reviewStatus });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/calls/review-statuses", async (req, res) => {
+    try {
+      const callIds = req.query.callIds ? (req.query.callIds as string).split(",") : [];
+      const statuses = await getCallReviewStatusesBulk(callIds);
+      res.json(statuses);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/calls/:callId/reprocess", async (req, res) => {
+    try {
+      const callId = req.params.callId;
+      const detail = await getCallDetail(callId);
+      if (!detail.callInfo) {
+        return res.status(404).json({ message: "Call not found" });
+      }
+      if (!detail.transcript) {
+        return res.status(400).json({ message: "No transcript available for this call. Cannot reprocess." });
+      }
+
+      const originalBody = detail.callInfo.request_body || {};
+      const reprocessBody = {
+        ...originalBody,
+        source_text: detail.transcript,
+        source_id: callId,
+        care_flow_id: detail.callInfo.care_flow_id || originalBody.care_flow_id || undefined,
+        source_type: detail.callInfo.source_type || originalBody.source_type || undefined,
+        client: detail.callInfo.client || originalBody.client || undefined,
+        pathway: detail.callInfo.pathway || originalBody.pathway || undefined,
+      };
+
+      const fakeReq = {
+        body: reprocessBody,
+        headers: { "x-gwc-reprocess": "true" },
+      };
+      const fakeRes = {
+        statusCode: 200,
+        _body: null as any,
+        status(code: number) { this.statusCode = code; return this; },
+        json(body: any) { this._body = body; return this; },
+      };
+
+      await handleAnalyze(fakeReq, fakeRes);
+      res.status(fakeRes.statusCode).json(fakeRes._body);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

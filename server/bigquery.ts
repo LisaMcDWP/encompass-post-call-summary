@@ -11,6 +11,7 @@ const CALL_QA_TABLE_ID = "call_qa_results";
 const KNOWN_CONTEXT_TABLE_ID = "known_context_details";
 const CALL_DISPOSITIONS_TABLE_ID = "call_dispositions";
 const CALL_REVIEWS_TABLE_ID = "call_reviews";
+const CALL_REVIEW_STATUSES_TABLE_ID = "call_review_statuses";
 
 export interface CallInfoRow {
   call_id: string;
@@ -743,6 +744,91 @@ export async function getCallReviews(sourceId: string): Promise<any[]> {
   } catch (error: any) {
     console.error("Failed to get call reviews:", error.message);
     return [];
+  }
+}
+
+export async function ensureCallReviewStatusesTable(): Promise<void> {
+  try {
+    const client = getBigQueryClient();
+    const dataset = client.dataset(DATASET_ID);
+    const table = dataset.table(CALL_REVIEW_STATUSES_TABLE_ID);
+    const [exists] = await table.exists();
+    if (!exists) {
+      await dataset.createTable(CALL_REVIEW_STATUSES_TABLE_ID, {
+        schema: {
+          fields: [
+            { name: "call_id", type: "STRING", mode: "REQUIRED" },
+            { name: "review_status", type: "STRING", mode: "REQUIRED" },
+            { name: "updated_at", type: "TIMESTAMP", mode: "REQUIRED" },
+          ],
+        },
+      });
+      console.log("Created call_review_statuses table");
+    }
+  } catch (error: any) {
+    console.error("Failed to ensure call_review_statuses table:", error.message);
+  }
+}
+
+export async function upsertCallReviewStatus(callId: string, reviewStatus: string): Promise<void> {
+  try {
+    await ensureCallReviewStatusesTable();
+    const client = getBigQueryClient();
+    const projectId = process.env.GCP_PROJECT_ID;
+    const fullTable = `\`${projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\``;
+    try {
+      await client.query({ query: `DELETE FROM ${fullTable} WHERE call_id = @callId`, params: { callId } });
+    } catch (e: any) {
+      console.warn(`Could not delete existing review status for ${callId}: ${e.message}`);
+    }
+    const now = new Date().toISOString();
+    await client.dataset(DATASET_ID).table(CALL_REVIEW_STATUSES_TABLE_ID).insert([{
+      call_id: callId,
+      review_status: reviewStatus,
+      updated_at: now,
+    }]);
+    console.log(`BigQuery call_review_status set for ${callId}: ${reviewStatus}`);
+  } catch (error: any) {
+    console.error("Failed to upsert call review status:", error.message);
+    throw error;
+  }
+}
+
+export async function getCallReviewStatus(callId: string): Promise<string | null> {
+  try {
+    await ensureCallReviewStatusesTable();
+    const client = getBigQueryClient();
+    const projectId = process.env.GCP_PROJECT_ID;
+    const fullTable = `\`${projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\``;
+    const [rows] = await client.query({
+      query: `SELECT review_status FROM ${fullTable} WHERE call_id = @callId ORDER BY updated_at DESC LIMIT 1`,
+      params: { callId },
+    });
+    if ((rows as any[]).length > 0) return (rows as any[])[0].review_status;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getCallReviewStatusesBulk(callIds: string[]): Promise<Record<string, string>> {
+  try {
+    if (callIds.length === 0) return {};
+    await ensureCallReviewStatusesTable();
+    const client = getBigQueryClient();
+    const projectId = process.env.GCP_PROJECT_ID;
+    const fullTable = `\`${projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\``;
+    const [rows] = await client.query({
+      query: `SELECT call_id, review_status FROM ${fullTable} WHERE call_id IN UNNEST(@callIds) QUALIFY ROW_NUMBER() OVER (PARTITION BY call_id ORDER BY updated_at DESC) = 1`,
+      params: { callIds },
+    });
+    const result: Record<string, string> = {};
+    for (const row of rows as any[]) {
+      result[row.call_id] = row.review_status;
+    }
+    return result;
+  } catch {
+    return {};
   }
 }
 
@@ -1754,5 +1840,12 @@ export async function getCallDetail(callId: string, runIndex?: number): Promise<
     console.warn("Disposition fetch failed:", err.message);
   }
 
-  return { callInfo, observations: obsRows as CallObservationRow[], qaPairs: qaRows, barriers: barrierRows, callQA: callQARows, disposition, transcript, totalRuns, currentRun };
+  let reviewStatus: string | null = null;
+  try {
+    reviewStatus = await getCallReviewStatus(callId);
+  } catch (err: any) {
+    console.warn("Review status fetch failed:", err.message);
+  }
+
+  return { callInfo, observations: obsRows as CallObservationRow[], qaPairs: qaRows, barriers: barrierRows, callQA: callQARows, disposition, transcript, totalRuns, currentRun, reviewStatus };
 }

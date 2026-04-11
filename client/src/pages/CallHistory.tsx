@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Phone, Clock, Coins, ChevronRight, ChevronLeft, X, FileText, Activity, ListChecks, ClipboardList, AlertCircle, MessageSquare, ShieldAlert, ClipboardCheck, RefreshCw, Download, History, Tag, CheckCircle2, Flag, MinusCircle, Circle, Save } from "lucide-react";
+import { Loader2, Phone, Clock, Coins, ChevronRight, ChevronLeft, X, FileText, Activity, ListChecks, ClipboardList, AlertCircle, MessageSquare, ShieldAlert, ClipboardCheck, RefreshCw, Download, History, Tag, CheckCircle2, Flag, MinusCircle, Circle, Save, RotateCcw } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { exportCallDetailPdf } from "@/lib/exportPdf";
@@ -89,7 +89,17 @@ interface CallDetail {
   transcript: string | null;
   totalRuns: number;
   currentRun: number;
+  reviewStatus: string | null;
 }
+
+type CallReviewStatus = "not_reviewed" | "in_progress" | "reviewed" | "flagged";
+
+const REVIEW_STATUS_OPTIONS: { value: CallReviewStatus; label: string; color: string; bgColor: string; borderColor: string }[] = [
+  { value: "not_reviewed", label: "Not Reviewed", color: "text-gray-500", bgColor: "bg-gray-50", borderColor: "border-gray-200" },
+  { value: "in_progress", label: "In Progress", color: "text-amber-600", bgColor: "bg-amber-50", borderColor: "border-amber-200" },
+  { value: "reviewed", label: "Reviewed", color: "text-green-600", bgColor: "bg-green-50", borderColor: "border-green-200" },
+  { value: "flagged", label: "Flagged", color: "text-red-600", bgColor: "bg-red-50", borderColor: "border-red-200" },
+];
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "—";
@@ -141,11 +151,15 @@ function statusLabel(status: ReviewState["status"]): string {
 function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => void }) {
   const [selectedRun, setSelectedRun] = useState<number | undefined>(undefined);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { selectedCPId } = useClientPathway();
   const [reviewStates, setReviewStates] = useState<ReviewState[]>([]);
   const [reviewDirty, setReviewDirty] = useState(false);
   const [reviewSaving, setReviewSaving] = useState(false);
   const [expandedNotes, setExpandedNotes] = useState<Set<number>>(new Set());
+  const [callReviewStatus, setCallReviewStatus] = useState<CallReviewStatus>("not_reviewed");
+  const [reviewStatusSaving, setReviewStatusSaving] = useState(false);
+  const [reprocessing, setReprocessing] = useState(false);
 
   const { data: reviewItems } = useQuery<ReviewItemConfig[]>({
     queryKey: ["/api/call-review-items-for-call", selectedCPId],
@@ -221,6 +235,47 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
     }
   };
 
+  const updateReviewStatus = async (newStatus: CallReviewStatus) => {
+    setReviewStatusSaving(true);
+    try {
+      const res = await fetch(`/api/calls/${callId}/review-status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviewStatus: newStatus }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      setCallReviewStatus(newStatus);
+      queryClient.invalidateQueries({ queryKey: ["/api/calls"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/calls/review-statuses"] });
+      toast({ title: "Review status updated" });
+    } catch {
+      toast({ title: "Error", description: "Failed to update review status", variant: "destructive" });
+    } finally {
+      setReviewStatusSaving(false);
+    }
+  };
+
+  const reprocessCall = async () => {
+    setReprocessing(true);
+    try {
+      const res = await fetch(`/api/calls/${callId}/reprocess`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Reprocess failed");
+      }
+      toast({ title: "Call reprocessed", description: "The call has been re-analyzed. Refresh to see the new run." });
+      queryClient.invalidateQueries({ queryKey: ["/api/calls", callId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/calls"] });
+    } catch (err: any) {
+      toast({ title: "Reprocess failed", description: err.message, variant: "destructive" });
+    } finally {
+      setReprocessing(false);
+    }
+  };
+
   const { data, isLoading, isError } = useQuery<CallDetail>({
     queryKey: ["/api/calls", callId, selectedRun],
     queryFn: async () => {
@@ -230,6 +285,14 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
       return res.json();
     },
   });
+
+  useEffect(() => {
+    if (data?.reviewStatus) {
+      setCallReviewStatus(data.reviewStatus as CallReviewStatus);
+    } else {
+      setCallReviewStatus("not_reviewed");
+    }
+  }, [data?.reviewStatus]);
 
   const { data: obsConfig } = useQuery<{ name: string; display_order: number }[]>({
     queryKey: ["/api/observations-order"],
@@ -337,6 +400,17 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
                 )}
               </div>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={reprocessing || !transcript}
+              onClick={reprocessCall}
+              data-testid="button-reprocess-call"
+              title={!transcript ? "No transcript available" : "Re-run Gemini analysis on this call"}
+            >
+              {reprocessing ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5 mr-1.5" />}
+              {reprocessing ? "Reprocessing..." : "Reprocess"}
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -848,31 +922,60 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
             </Card>
           )}
 
-          {reviewStates.length > 0 && (
+          {(reviewStates.length > 0 || true) && (
             <Card className="border-border/60 bg-card shadow-sm" data-testid="card-call-review">
               <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base flex items-center gap-2 text-secondary">
                     <ClipboardCheck className="h-4 w-4 text-[#0098db]" />
                     Call Review
-                    <Badge variant="outline" className="text-xs ml-2">
-                      {reviewStates.filter((r) => r.status !== "unchecked").length}/{reviewStates.length} reviewed
-                    </Badge>
+                    {reviewStates.length > 0 && (
+                      <Badge variant="outline" className="text-xs ml-2">
+                        {reviewStates.filter((r) => r.status !== "unchecked").length}/{reviewStates.length} reviewed
+                      </Badge>
+                    )}
                   </CardTitle>
-                  <Button
-                    size="sm"
-                    disabled={!reviewDirty || reviewSaving}
-                    onClick={saveReviews}
-                    className="bg-[#0098db] hover:bg-[#0086c3] h-7 text-xs"
-                    data-testid="button-save-reviews"
-                  >
-                    {reviewSaving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
-                    {reviewSaving ? "Saving..." : "Save"}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {reviewStates.length > 0 && (
+                      <Button
+                        size="sm"
+                        disabled={!reviewDirty || reviewSaving}
+                        onClick={saveReviews}
+                        className="bg-[#0098db] hover:bg-[#0086c3] h-7 text-xs"
+                        data-testid="button-save-reviews"
+                      >
+                        {reviewSaving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
+                        {reviewSaving ? "Saving..." : "Save"}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 mt-3" data-testid="review-status-selector">
+                  <span className="text-xs text-muted-foreground mr-1">Status:</span>
+                  {REVIEW_STATUS_OPTIONS.map((opt) => {
+                    const isActive = callReviewStatus === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        onClick={() => updateReviewStatus(opt.value)}
+                        disabled={reviewStatusSaving}
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-medium border transition-all ${
+                          isActive
+                            ? `${opt.bgColor} ${opt.color} ${opt.borderColor} ring-1 ring-offset-1 ring-current/20`
+                            : "bg-white text-gray-400 border-gray-200 hover:bg-gray-50"
+                        }`}
+                        data-testid={`button-review-status-${opt.value}`}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </CardHeader>
               <CardContent className="pt-4">
-                <div className="space-y-2">
+                {reviewStates.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">No review checklist items configured. Add them in the Review Items setup page.</p>
+                ) : (<div className="space-y-2">
                   {(() => {
                     const grouped = reviewStates.reduce<Record<string, ReviewState[]>>((acc, r) => {
                       const item = reviewItems?.find((i) => i.id === r.reviewItemId);
@@ -952,7 +1055,7 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
                       </div>
                     ));
                   })()}
-                </div>
+                </div>)}
               </CardContent>
             </Card>
           )}
@@ -973,6 +1076,18 @@ export default function CallHistory() {
       if (!res.ok) throw new Error("Failed to load calls");
       return res.json();
     },
+  });
+
+  const callIds = calls?.map(c => c.call_id) || [];
+  const { data: reviewStatuses } = useQuery<Record<string, string>>({
+    queryKey: ["/api/calls/review-statuses", callIds.join(",")],
+    queryFn: async () => {
+      if (callIds.length === 0) return {};
+      const res = await fetch(`/api/calls/review-statuses?callIds=${callIds.join(",")}`);
+      if (!res.ok) return {};
+      return res.json();
+    },
+    enabled: callIds.length > 0,
   });
 
   return (
@@ -1019,7 +1134,7 @@ export default function CallHistory() {
 
       {calls && calls.length > 0 && (
         <div className="space-y-2" data-testid="list-calls">
-          <div className="grid grid-cols-[1fr_1fr_1fr_1fr_120px_120px_100px_90px_80px_32px] gap-3 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+          <div className="grid grid-cols-[1fr_1fr_1fr_1fr_120px_120px_100px_90px_80px_90px_32px] gap-3 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
             <span>Call ID</span>
             <span>Source ID</span>
             <span>Client / Pathway</span>
@@ -1029,12 +1144,16 @@ export default function CallHistory() {
             <span>Status</span>
             <span>Tokens</span>
             <span>Cost</span>
+            <span>Review</span>
             <span></span>
           </div>
-          {calls.map((call) => (
+          {calls.map((call) => {
+            const rs = reviewStatuses?.[call.call_id];
+            const rsOpt = REVIEW_STATUS_OPTIONS.find(o => o.value === rs);
+            return (
             <div
               key={call.call_id}
-              className="grid grid-cols-[1fr_1fr_1fr_1fr_120px_120px_100px_90px_80px_32px] gap-3 items-center px-4 py-3 rounded-lg border border-border/50 bg-card hover:bg-muted/30 cursor-pointer transition-colors shadow-sm"
+              className="grid grid-cols-[1fr_1fr_1fr_1fr_120px_120px_100px_90px_80px_90px_32px] gap-3 items-center px-4 py-3 rounded-lg border border-border/50 bg-card hover:bg-muted/30 cursor-pointer transition-colors shadow-sm"
               onClick={() => setSelectedCallId(call.call_id)}
               data-testid={`row-call-${call.call_id}`}
             >
@@ -1088,9 +1207,19 @@ export default function CallHistory() {
               <div className="text-xs font-mono text-primary" data-testid={`text-cost-${call.call_id}`}>
                 {call.estimated_cost != null ? `$${call.estimated_cost.toFixed(4)}` : "—"}
               </div>
+              <div data-testid={`badge-review-${call.call_id}`}>
+                {rsOpt ? (
+                  <Badge variant="outline" className={`text-[10px] ${rsOpt.bgColor} ${rsOpt.color} ${rsOpt.borderColor}`}>
+                    {rsOpt.label}
+                  </Badge>
+                ) : (
+                  <span className="text-[10px] text-gray-400">—</span>
+                )}
+              </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground/40" />
             </div>
-          ))}
+          );
+          })}
         </div>
       )}
 

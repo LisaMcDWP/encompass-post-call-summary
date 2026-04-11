@@ -82,10 +82,13 @@ Configurable input parameters stored in BigQuery (`call_information.context_para
 Configurable checklist items for human reviewers to evaluate processed calls. Scoped by `client_pathway_id`.
 - **Config table**: `call_review_items` (id, name, displayName, description, category, displayOrder, isActive, clientPathwayId)
 - **Results table**: `call_reviews` (id, source_id, review_item_id, review_item_name, review_item_display_name, status, notes, reviewed_by, reviewed_at)
-- **Statuses**: `unchecked` → `checked` → `flagged` → `na` (cycled by clicking)
-- **API endpoints**: CRUD at `/api/call-review-items`; per-call reviews at `GET/POST /api/calls/:callId/reviews`
+- **Review statuses table**: `call_review_statuses` (call_id, review_status, updated_at) — per-call status: `not_reviewed`, `in_progress`, `reviewed`, `flagged`
+- **Checklist statuses**: `unchecked` → `checked` → `flagged` → `na` (cycled by clicking)
+- **API endpoints**: CRUD at `/api/call-review-items`; per-call reviews at `GET/POST /api/calls/:callId/reviews`; review status at `PUT /api/calls/:callId/review-status` and `GET /api/calls/review-statuses?callIds=...`
+- **Reprocess**: `POST /api/calls/:callId/reprocess` — re-runs Gemini analysis on the same transcript using original call metadata; creates a new run visible in the run history
 - **Admin UI**: `/review-items` page with category-grouped list, add/edit/delete dialogs
-- **Call detail integration**: Review checklist card in `CallDetailPanel` (CallHistory.tsx) with status cycling, notes, and save to BigQuery
+- **Call detail integration**: Review checklist card in `CallDetailPanel` (CallHistory.tsx) with status cycling, notes, save to BigQuery, per-call review status selector, and reprocess button
+- **Call list integration**: Review status badge shown per call in the Processed Calls list
 
 ## Call Dispositions
 Two-level configurable taxonomy (Category → Detail) for classifying call outcomes. Stored in BigQuery config tables scoped by `client_pathway_id`.
