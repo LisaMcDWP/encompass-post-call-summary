@@ -1068,6 +1068,7 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
 export default function CallHistory() {
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const { data: calls, isLoading, isFetching, refetch } = useQuery<CallInfo[]>({
     queryKey: ["/api/calls"],
@@ -1089,6 +1090,25 @@ export default function CallHistory() {
     },
     enabled: callIds.length > 0,
   });
+
+  const cycleCallReviewStatus = async (callId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const current = reviewStatuses?.[callId] || "not_reviewed";
+    const cycle: CallReviewStatus[] = ["not_reviewed", "in_progress", "reviewed", "flagged"];
+    const idx = cycle.indexOf(current as CallReviewStatus);
+    const next = cycle[(idx + 1) % cycle.length];
+    try {
+      const res = await fetch(`/api/calls/${callId}/review-status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviewStatus: next }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      queryClient.invalidateQueries({ queryKey: ["/api/calls/review-statuses"] });
+    } catch {
+      toast({ title: "Error", description: "Failed to update review status", variant: "destructive" });
+    }
+  };
 
   return (
     <div className="p-8 max-w-6xl mx-auto">
@@ -1208,13 +1228,22 @@ export default function CallHistory() {
                 {call.estimated_cost != null ? `$${call.estimated_cost.toFixed(4)}` : "—"}
               </div>
               <div data-testid={`badge-review-${call.call_id}`}>
-                {rsOpt ? (
-                  <Badge variant="outline" className={`text-[10px] ${rsOpt.bgColor} ${rsOpt.color} ${rsOpt.borderColor}`}>
-                    {rsOpt.label}
-                  </Badge>
-                ) : (
-                  <span className="text-[10px] text-gray-400">—</span>
-                )}
+                <button
+                  onClick={(e) => cycleCallReviewStatus(call.call_id, e)}
+                  className="hover:scale-105 transition-transform"
+                  title={`Review: ${rsOpt?.label || "Not Reviewed"} (click to change)`}
+                  data-testid={`button-cycle-review-${call.call_id}`}
+                >
+                  {rsOpt ? (
+                    <Badge variant="outline" className={`text-[10px] cursor-pointer ${rsOpt.bgColor} ${rsOpt.color} ${rsOpt.borderColor}`}>
+                      {rsOpt.label}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px] cursor-pointer bg-gray-50 text-gray-400 border-gray-200">
+                      Not Reviewed
+                    </Badge>
+                  )}
+                </button>
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground/40" />
             </div>
