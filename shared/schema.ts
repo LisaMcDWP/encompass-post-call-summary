@@ -124,6 +124,7 @@ export const insertDispositionCategorySchema = z.object({
   description: z.string().default(""),
   displayOrder: z.number().int().default(0),
   isActive: z.boolean().default(true),
+  isGlobal: z.boolean().default(false),
 });
 
 export type InsertDispositionCategory = z.infer<typeof insertDispositionCategorySchema>;
@@ -135,6 +136,7 @@ export interface DispositionCategory {
   description: string;
   displayOrder: number;
   isActive: boolean;
+  isGlobal: boolean;
 }
 
 export const insertDispositionDetailSchema = z.object({
@@ -144,6 +146,7 @@ export const insertDispositionDetailSchema = z.object({
   description: z.string().default(""),
   displayOrder: z.number().int().default(0),
   isActive: z.boolean().default(true),
+  isGlobal: z.boolean().default(false),
 });
 
 export type InsertDispositionDetail = z.infer<typeof insertDispositionDetailSchema>;
@@ -156,6 +159,7 @@ export interface DispositionDetail {
   description: string;
   displayOrder: number;
   isActive: boolean;
+  isGlobal: boolean;
 }
 
 export const insertCallReviewItemSchema = z.object({

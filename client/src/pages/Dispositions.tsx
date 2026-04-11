@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, ChevronDown, ChevronRight, Loader2, Globe, Building2 } from "lucide-react";
 import { useClientPathway } from "@/contexts/ClientPathwayContext";
 
 interface DispositionCategory {
@@ -18,6 +18,7 @@ interface DispositionCategory {
   description: string;
   displayOrder: number;
   isActive: boolean;
+  isGlobal: boolean;
 }
 
 interface DispositionDetail {
@@ -28,10 +29,11 @@ interface DispositionDetail {
   description: string;
   displayOrder: number;
   isActive: boolean;
+  isGlobal: boolean;
 }
 
-const emptyCategoryForm = { name: "", displayName: "", description: "", displayOrder: 0, isActive: true };
-const emptyDetailForm = { categoryId: 0, name: "", displayName: "", description: "", displayOrder: 0, isActive: true };
+const emptyCategoryForm = { name: "", displayName: "", description: "", displayOrder: 0, isActive: true, isGlobal: false };
+const emptyDetailForm = { categoryId: 0, name: "", displayName: "", description: "", displayOrder: 0, isActive: true, isGlobal: false };
 
 export default function Dispositions() {
   const { selectedCPId } = useClientPathway();
@@ -77,7 +79,7 @@ export default function Dispositions() {
 
   const openEditCategory = (cat: DispositionCategory) => {
     setEditingCatId(cat.id);
-    setCatForm({ name: cat.name, displayName: cat.displayName, description: cat.description, displayOrder: cat.displayOrder, isActive: cat.isActive });
+    setCatForm({ name: cat.name, displayName: cat.displayName, description: cat.description, displayOrder: cat.displayOrder, isActive: cat.isActive, isGlobal: cat.isGlobal });
     setCatDialogOpen(true);
   };
 
@@ -120,7 +122,7 @@ export default function Dispositions() {
 
   const openEditDetail = (det: DispositionDetail) => {
     setEditingDetId(det.id);
-    setDetForm({ categoryId: det.categoryId, name: det.name, displayName: det.displayName, description: det.description, displayOrder: det.displayOrder, isActive: det.isActive });
+    setDetForm({ categoryId: det.categoryId, name: det.name, displayName: det.displayName, description: det.description, displayOrder: det.displayOrder, isActive: det.isActive, isGlobal: det.isGlobal });
     setDetDialogOpen(true);
   };
 
@@ -201,6 +203,11 @@ export default function Dispositions() {
                       <div>
                         <span className="font-semibold" data-testid={`text-category-name-${cat.id}`}>{cat.displayName}</span>
                         <span className="text-xs text-gray-400 ml-2">({cat.name})</span>
+                        {cat.isGlobal && (
+                          <Badge className="ml-2 text-[10px] px-1.5 py-0 bg-[#0098db]/10 text-[#0098db] border border-[#0098db]/20" variant="outline">
+                            <Globe className="h-3 w-3 mr-0.5" />All Clients
+                          </Badge>
+                        )}
                         {!cat.isActive && <Badge variant="outline" className="ml-2 text-xs">Inactive</Badge>}
                       </div>
                     </div>
@@ -219,6 +226,11 @@ export default function Dispositions() {
                             <div>
                               <span className="text-sm font-medium" data-testid={`text-detail-name-${det.id}`}>{det.displayName}</span>
                               <span className="text-xs text-gray-400 ml-2">({det.name})</span>
+                              {det.isGlobal && (
+                                <Badge className="ml-2 text-[10px] px-1.5 py-0 bg-[#0098db]/10 text-[#0098db] border border-[#0098db]/20" variant="outline">
+                                  <Globe className="h-2.5 w-2.5 mr-0.5" />All Clients
+                                </Badge>
+                              )}
                               {!det.isActive && <Badge variant="outline" className="ml-2 text-xs">Inactive</Badge>}
                               {det.description && <p className="text-xs text-gray-500 mt-0.5">{det.description}</p>}
                             </div>
@@ -265,6 +277,16 @@ export default function Dispositions() {
               <Switch checked={catForm.isActive} onCheckedChange={(v) => setCatForm({ ...catForm, isActive: v })} data-testid="switch-category-active" />
               <Label>Active</Label>
             </div>
+            <div className="flex items-center gap-2 p-3 rounded-lg border bg-muted/20">
+              <Switch checked={catForm.isGlobal} onCheckedChange={(v) => setCatForm({ ...catForm, isGlobal: v })} data-testid="switch-category-global" />
+              <div className="flex items-center gap-1.5">
+                {catForm.isGlobal ? <Globe className="h-4 w-4 text-[#0098db]" /> : <Building2 className="h-4 w-4 text-gray-400" />}
+                <Label className="cursor-pointer">{catForm.isGlobal ? "All Clients" : "Client-Specific"}</Label>
+              </div>
+              <span className="text-[11px] text-muted-foreground ml-auto">
+                {catForm.isGlobal ? "This category will appear for every client/pathway" : "Only for the currently selected client/pathway"}
+              </span>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCatDialogOpen(false)}>Cancel</Button>
@@ -296,6 +318,16 @@ export default function Dispositions() {
             <div className="flex items-center gap-2">
               <Switch checked={detForm.isActive} onCheckedChange={(v) => setDetForm({ ...detForm, isActive: v })} data-testid="switch-detail-active" />
               <Label>Active</Label>
+            </div>
+            <div className="flex items-center gap-2 p-3 rounded-lg border bg-muted/20">
+              <Switch checked={detForm.isGlobal} onCheckedChange={(v) => setDetForm({ ...detForm, isGlobal: v })} data-testid="switch-detail-global" />
+              <div className="flex items-center gap-1.5">
+                {detForm.isGlobal ? <Globe className="h-4 w-4 text-[#0098db]" /> : <Building2 className="h-4 w-4 text-gray-400" />}
+                <Label className="cursor-pointer">{detForm.isGlobal ? "All Clients" : "Client-Specific"}</Label>
+              </div>
+              <span className="text-[11px] text-muted-foreground ml-auto">
+                {detForm.isGlobal ? "This detail will appear for every client/pathway" : "Only for the currently selected client/pathway"}
+              </span>
             </div>
           </div>
           <DialogFooter>

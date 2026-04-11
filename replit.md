@@ -93,7 +93,8 @@ Configurable checklist items for human reviewers to evaluate processed calls. Sc
 
 ## Call Dispositions
 Two-level configurable taxonomy (Category → Detail) for classifying call outcomes. Stored in BigQuery config tables scoped by `client_pathway_id`.
-- **Config tables**: `disposition_categories` (id, name, displayName, description, displayOrder, isActive, clientPathwayId) and `disposition_details` (id, categoryId, name, displayName, description, displayOrder, isActive, clientPathwayId)
+- **Config tables**: `disposition_categories` (id, name, displayName, description, displayOrder, isActive, isGlobal, clientPathwayId) and `disposition_details` (id, categoryId, name, displayName, description, displayOrder, isActive, isGlobal, clientPathwayId)
+- **Global dispositions**: Categories and details with `is_global = TRUE` appear for all client/pathways regardless of which CP created them. Toggle via "All Clients" / "Client-Specific" switch in the create/edit dialogs. Global items show an "All Clients" badge in the list. Update/delete operations work across client pathways for global items.
 - **Results table**: `call_dispositions` (source_id, category_name, category_display_name, detail_name, detail_display_name, confidence, evidence, inserted_at)
 - **Prompt integration**: `DispositionConfig` (categories + details) is injected into all Gemini analysis paths (webhook sync/async, /api/analyze, batch API, batch job). Gemini returns a `disposition` object with category, detail, confidence, and evidence.
 - **API endpoints**: Full CRUD at `/api/disposition-categories` and `/api/disposition-details`, plus seed endpoint at `/api/disposition-categories/seed`

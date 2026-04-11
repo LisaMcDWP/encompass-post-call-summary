@@ -232,6 +232,26 @@ function rowToCallQAPrompt(row: any): CallQAPrompt {
   };
 }
 
+async function addIsGlobalColumn(client: any, fullTable: string, label: string): Promise<void> {
+  try {
+    await client.query({ query: `ALTER TABLE \`${fullTable}\` ADD COLUMN is_global BOOL` });
+  } catch (err: any) {
+    if (!err.message?.includes("already exists") && !err.message?.includes("Duplicate")) {
+      console.warn(`${label} ADD COLUMN is_global:`, err.message);
+    }
+  }
+  try {
+    await client.query({ query: `ALTER TABLE \`${fullTable}\` ALTER COLUMN is_global SET DEFAULT FALSE` });
+  } catch (err: any) {
+    console.warn(`${label} SET DEFAULT:`, err.message);
+  }
+  try {
+    await client.query({ query: `UPDATE \`${fullTable}\` SET is_global = FALSE WHERE is_global IS NULL` });
+  } catch (err: any) {
+    console.warn(`${label} backfill nulls:`, err.message);
+  }
+}
+
 async function ensureDispositionCategoriesTable(): Promise<void> {
   if (dispositionCategoriesTableInitialized) return;
   const client = getBigQueryClient();
@@ -246,12 +266,15 @@ async function ensureDispositionCategoriesTable(): Promise<void> {
         description STRING DEFAULT '',
         display_order INT64 DEFAULT 0,
         is_active BOOL DEFAULT TRUE,
+        is_global BOOL DEFAULT FALSE,
         client_pathway_id INT64
       )`,
     });
+    await addIsGlobalColumn(client, fullTable, "categories");
     console.log(`BigQuery table ${DATASET_ID}.${DISPOSITION_CATEGORIES_TABLE_ID} ready.`);
   } catch (err: any) {
     if (err.message?.includes("Already Exists")) {
+      await addIsGlobalColumn(client, fullTable, "categories");
       console.log(`BigQuery table ${DATASET_ID}.${DISPOSITION_CATEGORIES_TABLE_ID} already exists.`);
     } else { throw err; }
   }
@@ -273,12 +296,15 @@ async function ensureDispositionDetailsTable(): Promise<void> {
         description STRING DEFAULT '',
         display_order INT64 DEFAULT 0,
         is_active BOOL DEFAULT TRUE,
+        is_global BOOL DEFAULT FALSE,
         client_pathway_id INT64
       )`,
     });
+    await addIsGlobalColumn(client, fullTable, "details");
     console.log(`BigQuery table ${DATASET_ID}.${DISPOSITION_DETAILS_TABLE_ID} ready.`);
   } catch (err: any) {
     if (err.message?.includes("Already Exists")) {
+      await addIsGlobalColumn(client, fullTable, "details");
       console.log(`BigQuery table ${DATASET_ID}.${DISPOSITION_DETAILS_TABLE_ID} already exists.`);
     } else { throw err; }
   }
@@ -333,6 +359,7 @@ function rowToDispositionCategory(row: any): DispositionCategory {
     description: row.description || "",
     displayOrder: row.display_order ?? 0,
     isActive: row.is_active,
+    isGlobal: row.is_global ?? false,
   };
 }
 
@@ -345,6 +372,7 @@ function rowToDispositionDetail(row: any): DispositionDetail {
     description: row.description || "",
     displayOrder: row.display_order ?? 0,
     isActive: row.is_active,
+    isGlobal: row.is_global ?? false,
   };
 }
 
@@ -870,7 +898,7 @@ export class BigQueryStorage implements IStorage {
     const client = getBigQueryClient();
     const table = this.getDispositionCategoriesTable();
     const [rows] = await client.query({
-      query: `SELECT * FROM ${table} WHERE client_pathway_id = @cpId ORDER BY display_order, id`,
+      query: `SELECT * FROM ${table} WHERE client_pathway_id = @cpId OR is_global = TRUE ORDER BY is_global DESC, display_order, id`,
       params: { cpId: clientPathwayId },
     });
     return rows.map(rowToDispositionCategory);
@@ -881,7 +909,7 @@ export class BigQueryStorage implements IStorage {
     const client = getBigQueryClient();
     const table = this.getDispositionCategoriesTable();
     const [rows] = await client.query({
-      query: `SELECT * FROM ${table} WHERE client_pathway_id = @cpId AND is_active = TRUE ORDER BY display_order, id`,
+      query: `SELECT * FROM ${table} WHERE (client_pathway_id = @cpId OR is_global = TRUE) AND is_active = TRUE ORDER BY is_global DESC, display_order, id`,
       params: { cpId: clientPathwayId },
     });
     return rows.map(rowToDispositionCategory);
@@ -891,7 +919,7 @@ export class BigQueryStorage implements IStorage {
     await ensureDispositionCategoriesTable();
     const client = getBigQueryClient();
     const table = this.getDispositionCategoriesTable();
-    const cpFilter = clientPathwayId ? " AND client_pathway_id = @cpId" : "";
+    const cpFilter = clientPathwayId ? " AND (client_pathway_id = @cpId OR is_global = TRUE)" : "";
     const params: any = { id };
     if (clientPathwayId) params.cpId = clientPathwayId;
     const [rows] = await client.query({ query: `SELECT * FROM ${table} WHERE id = @id${cpFilter}`, params });
@@ -905,10 +933,10 @@ export class BigQueryStorage implements IStorage {
     const [maxRows] = await client.query({ query: `SELECT COALESCE(MAX(id), 0) as maxId FROM ${table}` });
     const newId = (maxRows[0]?.maxId || 0) + 1;
     await client.query({
-      query: `INSERT INTO ${table} (id, name, display_name, description, display_order, is_active, client_pathway_id) VALUES (@id, @name, @displayName, @description, @displayOrder, @isActive, @cpId)`,
-      params: { id: newId, name: data.name, displayName: data.displayName, description: data.description || "", displayOrder: data.displayOrder ?? 0, isActive: data.isActive ?? true, cpId: clientPathwayId },
+      query: `INSERT INTO ${table} (id, name, display_name, description, display_order, is_active, is_global, client_pathway_id) VALUES (@id, @name, @displayName, @description, @displayOrder, @isActive, @isGlobal, @cpId)`,
+      params: { id: newId, name: data.name, displayName: data.displayName, description: data.description || "", displayOrder: data.displayOrder ?? 0, isActive: data.isActive ?? true, isGlobal: data.isGlobal ?? false, cpId: clientPathwayId },
     });
-    return { id: newId, name: data.name, displayName: data.displayName, description: data.description || "", displayOrder: data.displayOrder ?? 0, isActive: data.isActive ?? true };
+    return { id: newId, name: data.name, displayName: data.displayName, description: data.description || "", displayOrder: data.displayOrder ?? 0, isActive: data.isActive ?? true, isGlobal: data.isGlobal ?? false };
   }
 
   async updateDispositionCategory(id: number, data: Partial<InsertDispositionCategory>, clientPathwayId?: number): Promise<DispositionCategory | undefined> {
@@ -923,8 +951,9 @@ export class BigQueryStorage implements IStorage {
     if (data.description !== undefined) { sets.push("description = @description"); params.description = data.description; }
     if (data.displayOrder !== undefined) { sets.push("display_order = @displayOrder"); params.displayOrder = data.displayOrder; }
     if (data.isActive !== undefined) { sets.push("is_active = @isActive"); params.isActive = data.isActive; }
+    if (data.isGlobal !== undefined) { sets.push("is_global = @isGlobal"); params.isGlobal = data.isGlobal; }
     if (sets.length === 0) return this.getDispositionCategory(id, clientPathwayId);
-    const cpFilter = clientPathwayId ? " AND client_pathway_id = @cpId" : "";
+    const cpFilter = clientPathwayId ? " AND (client_pathway_id = @cpId OR is_global = TRUE)" : "";
     await client.query({ query: `UPDATE ${table} SET ${sets.join(", ")} WHERE id = @id${cpFilter}`, params });
     return this.getDispositionCategory(id, clientPathwayId);
   }
@@ -935,7 +964,7 @@ export class BigQueryStorage implements IStorage {
     const client = getBigQueryClient();
     const catTable = this.getDispositionCategoriesTable();
     const detTable = this.getDispositionDetailsTable();
-    const cpFilter = clientPathwayId ? " AND client_pathway_id = @cpId" : "";
+    const cpFilter = clientPathwayId ? " AND (client_pathway_id = @cpId OR is_global = TRUE)" : "";
     const params: any = { id };
     if (clientPathwayId) params.cpId = clientPathwayId;
     await client.query({ query: `DELETE FROM ${detTable} WHERE category_id = @id${cpFilter}`, params });
@@ -951,7 +980,7 @@ export class BigQueryStorage implements IStorage {
     const params: any = { cpId: clientPathwayId };
     if (categoryId) params.catId = categoryId;
     const [rows] = await client.query({
-      query: `SELECT * FROM ${table} WHERE client_pathway_id = @cpId${catFilter} ORDER BY display_order, id`,
+      query: `SELECT * FROM ${table} WHERE (client_pathway_id = @cpId OR is_global = TRUE)${catFilter} ORDER BY is_global DESC, display_order, id`,
       params,
     });
     return rows.map(rowToDispositionDetail);
@@ -965,7 +994,7 @@ export class BigQueryStorage implements IStorage {
     const params: any = { cpId: clientPathwayId };
     if (categoryId) params.catId = categoryId;
     const [rows] = await client.query({
-      query: `SELECT * FROM ${table} WHERE client_pathway_id = @cpId AND is_active = TRUE${catFilter} ORDER BY display_order, id`,
+      query: `SELECT * FROM ${table} WHERE (client_pathway_id = @cpId OR is_global = TRUE) AND is_active = TRUE${catFilter} ORDER BY is_global DESC, display_order, id`,
       params,
     });
     return rows.map(rowToDispositionDetail);
@@ -975,7 +1004,7 @@ export class BigQueryStorage implements IStorage {
     await ensureDispositionDetailsTable();
     const client = getBigQueryClient();
     const table = this.getDispositionDetailsTable();
-    const cpFilter = clientPathwayId ? " AND client_pathway_id = @cpId" : "";
+    const cpFilter = clientPathwayId ? " AND (client_pathway_id = @cpId OR is_global = TRUE)" : "";
     const params: any = { id };
     if (clientPathwayId) params.cpId = clientPathwayId;
     const [rows] = await client.query({ query: `SELECT * FROM ${table} WHERE id = @id${cpFilter}`, params });
@@ -989,10 +1018,10 @@ export class BigQueryStorage implements IStorage {
     const [maxRows] = await client.query({ query: `SELECT COALESCE(MAX(id), 0) as maxId FROM ${table}` });
     const newId = (maxRows[0]?.maxId || 0) + 1;
     await client.query({
-      query: `INSERT INTO ${table} (id, category_id, name, display_name, description, display_order, is_active, client_pathway_id) VALUES (@id, @categoryId, @name, @displayName, @description, @displayOrder, @isActive, @cpId)`,
-      params: { id: newId, categoryId: data.categoryId, name: data.name, displayName: data.displayName, description: data.description || "", displayOrder: data.displayOrder ?? 0, isActive: data.isActive ?? true, cpId: clientPathwayId },
+      query: `INSERT INTO ${table} (id, category_id, name, display_name, description, display_order, is_active, is_global, client_pathway_id) VALUES (@id, @categoryId, @name, @displayName, @description, @displayOrder, @isActive, @isGlobal, @cpId)`,
+      params: { id: newId, categoryId: data.categoryId, name: data.name, displayName: data.displayName, description: data.description || "", displayOrder: data.displayOrder ?? 0, isActive: data.isActive ?? true, isGlobal: data.isGlobal ?? false, cpId: clientPathwayId },
     });
-    return { id: newId, categoryId: data.categoryId, name: data.name, displayName: data.displayName, description: data.description || "", displayOrder: data.displayOrder ?? 0, isActive: data.isActive ?? true };
+    return { id: newId, categoryId: data.categoryId, name: data.name, displayName: data.displayName, description: data.description || "", displayOrder: data.displayOrder ?? 0, isActive: data.isActive ?? true, isGlobal: data.isGlobal ?? false };
   }
 
   async updateDispositionDetail(id: number, data: Partial<InsertDispositionDetail>, clientPathwayId?: number): Promise<DispositionDetail | undefined> {
@@ -1008,8 +1037,9 @@ export class BigQueryStorage implements IStorage {
     if (data.description !== undefined) { sets.push("description = @description"); params.description = data.description; }
     if (data.displayOrder !== undefined) { sets.push("display_order = @displayOrder"); params.displayOrder = data.displayOrder; }
     if (data.isActive !== undefined) { sets.push("is_active = @isActive"); params.isActive = data.isActive; }
+    if (data.isGlobal !== undefined) { sets.push("is_global = @isGlobal"); params.isGlobal = data.isGlobal; }
     if (sets.length === 0) return this.getDispositionDetail(id, clientPathwayId);
-    const cpFilter = clientPathwayId ? " AND client_pathway_id = @cpId" : "";
+    const cpFilter = clientPathwayId ? " AND (client_pathway_id = @cpId OR is_global = TRUE)" : "";
     await client.query({ query: `UPDATE ${table} SET ${sets.join(", ")} WHERE id = @id${cpFilter}`, params });
     return this.getDispositionDetail(id, clientPathwayId);
   }
@@ -1018,7 +1048,7 @@ export class BigQueryStorage implements IStorage {
     await ensureDispositionDetailsTable();
     const client = getBigQueryClient();
     const table = this.getDispositionDetailsTable();
-    const cpFilter = clientPathwayId ? " AND client_pathway_id = @cpId" : "";
+    const cpFilter = clientPathwayId ? " AND (client_pathway_id = @cpId OR is_global = TRUE)" : "";
     const params: any = { id };
     if (clientPathwayId) params.cpId = clientPathwayId;
     await client.query({ query: `DELETE FROM ${table} WHERE id = @id${cpFilter}`, params });
