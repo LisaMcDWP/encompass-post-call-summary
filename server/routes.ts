@@ -1532,13 +1532,22 @@ export async function registerRoutes(
 
       const CONCURRENCY = 5;
 
-      async function processOneItem(item: any) {
-        const claimed = await updateBatchItemStatus(item.bland_call_id, "processing");
-        if (claimed === 0) {
-          jobState.skipped++;
-          return;
+      async function bqUpdateWithRetry(callId: string, status: string, resultCallId?: string, errorMessage?: string, retries = 3): Promise<number> {
+        for (let attempt = 0; attempt < retries; attempt++) {
+          try {
+            return await updateBatchItemStatus(callId, status, resultCallId, errorMessage);
+          } catch (err: any) {
+            if (attempt < retries - 1 && err.message?.includes("concurrent")) {
+              await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+              continue;
+            }
+            throw err;
+          }
         }
+        return 0;
+      }
 
+      async function processOneItem(item: any) {
         try {
           const callId = item.bland_call_id;
           const startTime = Date.now();
@@ -1597,20 +1606,37 @@ export async function registerRoutes(
           if (analysis.disposition) {
             await insertCallDisposition(callId, analysis.disposition);
           }
-          await updateBatchItemStatus(item.bland_call_id, "completed", callId);
-          jobState.completed++;
+          return { callId, success: true };
         } catch (err: any) {
-          await updateBatchItemStatus(item.bland_call_id, "failed", undefined, err.message);
-          jobState.failed++;
-          jobState.errors.push({ callId: item.bland_call_id, error: err.message });
+          return { callId: item.bland_call_id, success: false, error: err.message };
         }
       }
 
       (async () => {
         try {
+          for (const item of pendingItems) {
+            try {
+              await bqUpdateWithRetry(item.bland_call_id, "processing");
+            } catch (err: any) {
+              jobState.skipped++;
+              continue;
+            }
+          }
+
           for (let i = 0; i < pendingItems.length; i += CONCURRENCY) {
             const chunk = pendingItems.slice(i, i + CONCURRENCY);
-            await Promise.all(chunk.map(processOneItem));
+            const results = await Promise.all(chunk.map(processOneItem));
+
+            for (const result of results) {
+              if (result.success) {
+                await bqUpdateWithRetry(result.callId, "completed", result.callId);
+                jobState.completed++;
+              } else {
+                await bqUpdateWithRetry(result.callId, "failed", undefined, result.error);
+                jobState.failed++;
+                jobState.errors.push({ callId: result.callId, error: result.error });
+              }
+            }
           }
           jobState.status = "completed";
         } catch (err: any) {
