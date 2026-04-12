@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -109,7 +109,7 @@ export default function BatchProcessing() {
 
   const summaryQuery = useQuery<BatchSummary>({
     queryKey: ["/api/batch/summary"],
-    refetchInterval: 10000,
+    refetchInterval: activeJobId ? 5000 : 10000,
   });
 
   const [searchResults, setSearchResults] = useState<BlandCall[]>([]);
@@ -189,6 +189,8 @@ export default function BatchProcessing() {
     },
   });
 
+  const jobCompletedRef = useRef<string | null>(null);
+
   const jobStatusQuery = useQuery<any>({
     queryKey: ["/api/batch/job-status", activeJobId],
     queryFn: async () => {
@@ -202,39 +204,81 @@ export default function BatchProcessing() {
   });
 
   const jobStatus = jobStatusQuery.data;
-  if (jobStatus && (jobStatus.status === "completed" || jobStatus.status === "failed") && activeJobId) {
-    const finalStatus = jobStatus;
-    setTimeout(() => {
-      setActiveJobId(null);
+
+  useEffect(() => {
+    if (!jobStatus || !activeJobId) return;
+    if ((jobStatus.status === "completed" || jobStatus.status === "failed") && jobCompletedRef.current !== activeJobId) {
+      jobCompletedRef.current = activeJobId;
       queryClient.invalidateQueries({ queryKey: ["/api/batch/summary"] });
       queryClient.invalidateQueries({ queryKey: ["/api/batch/items"] });
       toast({
-        title: finalStatus.status === "completed" ? "Batch complete" : "Batch finished with errors",
-        description: `${finalStatus.completed} completed, ${finalStatus.failed} failed out of ${finalStatus.total}`,
-        variant: finalStatus.failed > 0 ? "destructive" : "default",
+        title: jobStatus.status === "completed" ? "Batch complete" : "Batch finished with errors",
+        description: `${jobStatus.completed} completed, ${jobStatus.failed} failed out of ${jobStatus.total}`,
+        variant: jobStatus.failed > 0 ? "destructive" : "default",
       });
-    }, 0);
-  }
+      setTimeout(() => setActiveJobId(null), 5000);
+    }
+  }, [jobStatus, activeJobId]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/batch/job-status");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.running?.length > 0) {
+          setActiveJobId(data.running[0].jobId);
+        }
+      } catch {}
+    })();
+  }, []);
+
+  const startProcessing = useCallback(async (limit: string) => {
+    const params = new URLSearchParams({ limit });
+    const batches = summaryQuery.data?.batches;
+    const newest = batches?.sort((a: any, b: any) => b.batch_id.localeCompare(a.batch_id))?.[0]?.batch_id;
+    if (newest) params.set("batchId", newest);
+    if (selectedCPId) params.set("clientPathwayId", String(selectedCPId));
+    const res = await fetch(`/api/batch/process?${params}`, { method: "POST" });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.message || "Failed to process batch");
+    }
+    return res.json();
+  }, [summaryQuery.data, selectedCPId]);
 
   const processMutation = useMutation({
-    mutationFn: async () => {
-      const params = new URLSearchParams({ limit: processLimit });
-      const batches = summaryQuery.data?.batches;
-      const newest = batches?.sort((a: any, b: any) => b.batch_id.localeCompare(a.batch_id))?.[0]?.batch_id;
-      if (newest) params.set("batchId", newest);
-      if (selectedCPId) params.set("clientPathwayId", String(selectedCPId));
-      const res = await fetch(`/api/batch/process?${params}`, { method: "POST" });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Failed to process batch");
-      }
-      return res.json();
-    },
+    mutationFn: () => startProcessing(processLimit),
     onSuccess: (data) => {
       if (data.background && data.jobId) {
+        jobCompletedRef.current = null;
         setActiveJobId(data.jobId);
         toast({
           title: "Processing started",
+          description: `${data.total} calls processing in the background`,
+        });
+      } else {
+        toast({
+          title: "Batch processed",
+          description: data.message || `${data.processed} items processed`,
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/batch/summary"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/batch/items"] });
+      }
+    },
+    onError: (err: any) => {
+      toast({ title: "Process failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const processAllMutation = useMutation({
+    mutationFn: () => startProcessing(String(summary?.pending ?? 0)),
+    onSuccess: (data) => {
+      if (data.background && data.jobId) {
+        jobCompletedRef.current = null;
+        setActiveJobId(data.jobId);
+        toast({
+          title: "Processing all pending calls",
           description: `${data.total} calls processing in the background`,
         });
       } else {
@@ -414,17 +458,27 @@ export default function BatchProcessing() {
         </div>
         <Button
           onClick={() => processMutation.mutate()}
-          disabled={processMutation.isPending || !!activeJobId || (summary?.pending ?? 0) === 0}
+          disabled={processMutation.isPending || processAllMutation.isPending || !!activeJobId || (summary?.pending ?? 0) === 0}
           variant="outline"
           data-testid="button-process-batch"
         >
-          {(processMutation.isPending || !!activeJobId) ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Play className="h-4 w-4 mr-1" />}
-          {activeJobId ? "Processing..." : "Process Here"}
+          {(processMutation.isPending) ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Play className="h-4 w-4 mr-1" />}
+          Process {processLimit}
+        </Button>
+        <Button
+          onClick={() => processAllMutation.mutate()}
+          disabled={processMutation.isPending || processAllMutation.isPending || !!activeJobId || (summary?.pending ?? 0) === 0}
+          className="bg-[#0098db] hover:bg-[#0098db]/90"
+          data-testid="button-process-all"
+        >
+          {processAllMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Play className="h-4 w-4 mr-1" />}
+          Process All ({summary?.pending ?? 0})
         </Button>
         <Button
           onClick={() => triggerJobMutation.mutate()}
           disabled={triggerJobMutation.isPending || !!activeJobId || (summary?.pending ?? 0) === 0}
-          className="bg-[#0098db] hover:bg-[#0098db]/90"
+          variant="outline"
+          className="text-muted-foreground"
           data-testid="button-trigger-gcp-job"
         >
           {triggerJobMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Cloud className="h-4 w-4 mr-1" />}
@@ -483,41 +537,105 @@ export default function BatchProcessing() {
         )}
       </div>
 
-      {activeJobId && jobStatus && (
-        <Card className="border-[#0098db]/30 bg-[#0098db]/5" data-testid="card-batch-progress">
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin text-[#0098db]" />
-                <span className="text-sm font-semibold text-[#172938]">
-                  Processing {jobStatus.total} calls...
-                </span>
+      {activeJobId && jobStatus && (() => {
+        const done = jobStatus.completed + jobStatus.failed + jobStatus.skipped;
+        const pct = jobStatus.total > 0 ? Math.round((done / jobStatus.total) * 100) : 0;
+        const isFinished = jobStatus.status === "completed" || jobStatus.status === "failed";
+        const elapsedMs = Date.now() - new Date(jobStatus.startedAt).getTime();
+        const elapsedSec = Math.floor(elapsedMs / 1000);
+        const elapsedMin = Math.floor(elapsedSec / 60);
+        const elapsedStr = elapsedMin > 0 ? `${elapsedMin}m ${elapsedSec % 60}s` : `${elapsedSec}s`;
+        const rate = done > 0 ? elapsedMs / done : 0;
+        const remaining = jobStatus.total - done;
+        const etaMs = rate > 0 ? remaining * rate : 0;
+        const etaSec = Math.floor(etaMs / 1000);
+        const etaMin = Math.floor(etaSec / 60);
+        const etaStr = remaining > 0 && rate > 0 ? (etaMin > 0 ? `~${etaMin}m ${etaSec % 60}s remaining` : `~${etaSec}s remaining`) : "";
+
+        return (
+          <Card className={`${isFinished ? (jobStatus.failed > 0 ? "border-red-300 bg-red-50/50" : "border-green-300 bg-green-50/50") : "border-[#0098db]/30 bg-[#0098db]/5"}`} data-testid="card-batch-progress">
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  {isFinished ? (
+                    jobStatus.failed > 0
+                      ? <AlertCircle className="h-5 w-5 text-red-500" />
+                      : <CheckCircle2 className="h-5 w-5 text-green-500" />
+                  ) : (
+                    <Loader2 className="h-5 w-5 animate-spin text-[#0098db]" />
+                  )}
+                  <span className="text-sm font-semibold text-[#172938] font-[Montserrat]">
+                    {isFinished
+                      ? (jobStatus.failed > 0 ? "Batch finished with errors" : "Batch complete!")
+                      : `Processing ${jobStatus.total} calls...`
+                    }
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-lg font-bold text-[#172938]">{pct}%</span>
+                  <span className="text-sm text-muted-foreground">
+                    {done} / {jobStatus.total}
+                  </span>
+                </div>
               </div>
-              <span className="text-sm text-muted-foreground">
-                {jobStatus.completed + jobStatus.failed} / {jobStatus.total}
-                {jobStatus.failed > 0 && <span className="text-red-500 ml-1">({jobStatus.failed} failed)</span>}
-              </span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all duration-500 ease-out"
-                style={{
-                  width: `${Math.round(((jobStatus.completed + jobStatus.failed) / jobStatus.total) * 100)}%`,
-                  background: jobStatus.failed > 0
-                    ? `linear-gradient(to right, #0098db ${(jobStatus.completed / (jobStatus.completed + jobStatus.failed)) * 100}%, #ef4444 ${(jobStatus.completed / (jobStatus.completed + jobStatus.failed)) * 100}%)`
-                    : "#0098db",
-                }}
-              />
-            </div>
-            <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-              <span className="text-green-600">{jobStatus.completed} completed</span>
-              {jobStatus.failed > 0 && <span className="text-red-500">{jobStatus.failed} failed</span>}
-              {jobStatus.skipped > 0 && <span>{jobStatus.skipped} skipped</span>}
-              <span className="ml-auto">Started {new Date(jobStatus.startedAt).toLocaleTimeString()}</span>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+              <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                <div className="h-full flex rounded-full transition-all duration-500 ease-out" style={{ width: `${pct}%` }}>
+                  {jobStatus.completed > 0 && (
+                    <div
+                      className="h-full bg-[#0098db] transition-all duration-500"
+                      style={{ width: `${done > 0 ? (jobStatus.completed / done) * 100 : 100}%` }}
+                    />
+                  )}
+                  {jobStatus.failed > 0 && (
+                    <div
+                      className="h-full bg-red-500 transition-all duration-500"
+                      style={{ width: `${(jobStatus.failed / done) * 100}%` }}
+                    />
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
+                <div className="flex items-center gap-4">
+                  <span className="flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3 text-green-500" />
+                    <span className="text-green-600 font-medium">{jobStatus.completed} completed</span>
+                  </span>
+                  {jobStatus.failed > 0 && (
+                    <span className="flex items-center gap-1">
+                      <XCircle className="h-3 w-3 text-red-500" />
+                      <span className="text-red-500 font-medium">{jobStatus.failed} failed</span>
+                    </span>
+                  )}
+                  {jobStatus.skipped > 0 && <span>{jobStatus.skipped} skipped</span>}
+                </div>
+                <div className="flex items-center gap-3">
+                  {!isFinished && etaStr && <span className="text-[#0098db] font-medium">{etaStr}</span>}
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {elapsedStr} elapsed
+                  </span>
+                </div>
+              </div>
+              {isFinished && jobStatus.errors?.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-red-200">
+                  <p className="text-xs font-medium text-red-600 mb-1">Failed calls:</p>
+                  <div className="space-y-1 max-h-24 overflow-y-auto">
+                    {jobStatus.errors.slice(0, 10).map((err: any, i: number) => (
+                      <div key={i} className="text-[11px] text-red-500 flex gap-2">
+                        <span className="font-mono shrink-0">{err.callId?.slice(0, 16)}...</span>
+                        <span className="truncate">{err.error}</span>
+                      </div>
+                    ))}
+                    {jobStatus.errors.length > 10 && (
+                      <p className="text-[11px] text-red-400">...and {jobStatus.errors.length - 10} more</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       <Card>
         <CardHeader
