@@ -1640,7 +1640,8 @@ export async function registerRoutes(
           jobState.status = "completed";
         } catch (err: any) {
           jobState.status = "failed";
-          console.error("Batch job failed:", err.message);
+          console.error("Batch job failed:", err.message || err);
+          console.error("Batch job stack:", err.stack);
         }
         jobState.finishedAt = new Date().toISOString();
         console.log(`Batch job ${jobId} finished: ${jobState.completed} completed, ${jobState.failed} failed, ${jobState.skipped} skipped out of ${jobState.total}`);
