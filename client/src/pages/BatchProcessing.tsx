@@ -272,7 +272,11 @@ export default function BatchProcessing() {
   });
 
   const processAllMutation = useMutation({
-    mutationFn: () => startProcessing(String(summary?.pending ?? 0)),
+    mutationFn: () => {
+      const pending = summary?.pending ?? 0;
+      if (pending === 0) throw new Error("No pending items to process");
+      return startProcessing(String(Math.max(pending, 500)));
+    },
     onSuccess: (data) => {
       if (data.background && data.jobId) {
         jobCompletedRef.current = null;
