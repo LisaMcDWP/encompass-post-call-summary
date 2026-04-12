@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, ClipboardCheck, Search, Filter, Tag, FileText, ChevronRight, AlertCircle, CheckCircle2, Clock, Flag, Circle, Eye } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2, ClipboardCheck, Search, Filter, Tag, FileText, ChevronRight, AlertCircle, CheckCircle2, Clock, Flag, Circle, Eye, X } from "lucide-react";
 import { useLocation } from "wouter";
 
 interface CallReviewItem {
@@ -175,35 +176,88 @@ export default function CallReviews() {
             data-testid="input-search"
           />
         </div>
-        {allTags.length > 0 && (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            {allTags.map(tag => (
-              <button
-                key={tag}
-                onClick={() => setTagFilter(tagFilter === tag ? null : tag)}
-                className={`px-2 py-0.5 rounded-full text-[11px] font-medium border transition-all ${
-                  tagFilter === tag
-                    ? "bg-[#0098db]/10 text-[#0098db] border-[#0098db]/30"
-                    : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
-                }`}
-                data-testid={`button-tag-filter-${tag}`}
-              >
-                {tag}
-              </button>
-            ))}
-            {tagFilter && (
-              <button
-                onClick={() => setTagFilter(null)}
-                className="text-[11px] text-muted-foreground hover:text-foreground underline ml-1"
-                data-testid="button-clear-tag-filter"
-              >
-                clear
-              </button>
-            )}
-          </div>
-        )}
+        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as ReviewStatusFilter)}>
+          <SelectTrigger className="w-[180px] h-9" data-testid="select-status-filter">
+            <div className="flex items-center gap-2">
+              {statusFilter !== "all" && REVIEW_STATUS_CONFIG[statusFilter]?.icon}
+              <SelectValue placeholder="All Statuses" />
+            </div>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            {(["not_reviewed", "in_progress", "reviewed", "flagged"] as const).map(s => {
+              const cfg = REVIEW_STATUS_CONFIG[s];
+              return (
+                <SelectItem key={s} value={s}>
+                  <div className="flex items-center gap-2">
+                    {cfg.icon}
+                    <span>{cfg.label}</span>
+                    <span className="text-muted-foreground ml-auto">({statusCounts[s]})</span>
+                  </div>
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
       </div>
+
+      {(tagFilter || statusFilter !== "all") && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-muted-foreground">Active filters:</span>
+          {statusFilter !== "all" && (
+            <Badge
+              variant="outline"
+              className={`text-xs cursor-pointer ${REVIEW_STATUS_CONFIG[statusFilter]?.bgColor} ${REVIEW_STATUS_CONFIG[statusFilter]?.color} ${REVIEW_STATUS_CONFIG[statusFilter]?.borderColor}`}
+              onClick={() => setStatusFilter("all")}
+              data-testid="badge-active-status-filter"
+            >
+              {REVIEW_STATUS_CONFIG[statusFilter]?.icon}
+              <span className="ml-1">{REVIEW_STATUS_CONFIG[statusFilter]?.label}</span>
+              <X className="h-3 w-3 ml-1" />
+            </Badge>
+          )}
+          {tagFilter && (
+            <Badge
+              variant="outline"
+              className="text-xs cursor-pointer bg-[#0098db]/10 text-[#0098db] border-[#0098db]/20"
+              onClick={() => setTagFilter(null)}
+              data-testid="badge-active-tag-filter"
+            >
+              <Tag className="h-3 w-3 mr-1" />
+              {tagFilter}
+              <X className="h-3 w-3 ml-1" />
+            </Badge>
+          )}
+          <button
+            onClick={() => { setStatusFilter("all"); setTagFilter(null); }}
+            className="text-[11px] text-muted-foreground hover:text-foreground underline ml-1"
+            data-testid="button-clear-all-filters"
+          >
+            Clear all
+          </button>
+        </div>
+      )}
+
+      {allTags.length > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <span className="text-xs text-muted-foreground mr-1">Tags:</span>
+          {allTags.map(tag => (
+            <button
+              key={tag}
+              onClick={() => setTagFilter(tagFilter === tag ? null : tag)}
+              className={`px-2 py-0.5 rounded-full text-[11px] font-medium border transition-all ${
+                tagFilter === tag
+                  ? "bg-[#0098db]/10 text-[#0098db] border-[#0098db]/30"
+                  : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
+              }`}
+              data-testid={`button-tag-filter-${tag}`}
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="space-y-2" data-testid="review-list">
         {filtered.length === 0 ? (
