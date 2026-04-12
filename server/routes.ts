@@ -1530,111 +1530,85 @@ export async function registerRoutes(
         message: `Processing ${pendingItems.length} calls in the background`,
       });
 
-      const CONCURRENCY = 5;
-
-      async function processOneItem(item: any) {
-        try {
-          const callId = item.bland_call_id;
-          const startTime = Date.now();
-          let batchContext: Record<string, string> = {};
-          if (item.context_values) {
-            try { batchContext = JSON.parse(item.context_values); } catch {}
-          }
-          const { analysis, tokenUsage } = await analyzeTranscript(
-            callId,
-            item.transcript.trim(),
-            activeObs,
-            undefined,
-            summaryInstruction || undefined,
-            contextParams,
-            batchContext,
-            observationsGuidance || undefined,
-            barriersGuidance || undefined,
-            callQAPromptsForBatch,
-            batchDispConfig,
-          );
-          const processingTimeMs = Date.now() - startTime;
-
-          const processedAt = new Date().toISOString();
-          const blandTs = item.bland_created_at?.value || item.bland_created_at || null;
-          const callDate = blandTs ? new Date(blandTs).toISOString() : null;
-          await insertCallInfo({
-            callId: callId,
-            careFlowId: item.care_flow_id || null,
-            callDate,
-            sourceType: item.source_type || "bland_call",
-            sourceId: callId,
-            processedAt,
-            processingTimeMs,
-            promptVersion,
-            promptVersionDate,
-            contextValues: Object.keys(batchContext).length > 0 ? batchContext : undefined,
-            transcriptLength: item.transcript.length,
-            summary: analysis.summary,
-            followUpAreas: analysis.follow_up_areas,
-            transitionStatus: analysis.transition_status,
-            promptTokens: tokenUsage.promptTokens,
-            completionTokens: tokenUsage.completionTokens,
-            totalTokens: tokenUsage.totalTokens,
-            estimatedCost: tokenUsage.estimatedCost,
-            status: "success",
-            requestBody: JSON.stringify({ batch_id: item.batch_id, bland_call_id: item.bland_call_id }),
-            responseJson: JSON.stringify(analysis),
-            client: batchCPRecord?.client || null,
-            pathway: batchCPRecord?.pathway || null,
-          });
-
-          await insertCallObservations(callId, analysis.observations);
-          await insertCallQAPairs(callId, analysis.qa_pairs);
-          await insertCallBarriers(callId, analysis.barriers);
-          await insertCallQAResults(callId, analysis.call_qa || []);
-          if (analysis.disposition) {
-            await insertCallDisposition(callId, analysis.disposition);
-          }
-          return { callId, success: true, resultCallId: callId };
-        } catch (err: any) {
-          return { callId: item.bland_call_id, success: false, error: err.message };
-        }
-      }
-
       (async () => {
         try {
-          const allCallIds = pendingItems.map((item: any) => item.bland_call_id);
-          await bulkUpdateBatchItemStatus(allCallIds, "processing");
-          console.log(`Batch job ${jobId}: marked ${allCallIds.length} items as processing`);
+          for (let idx = 0; idx < pendingItems.length; idx++) {
+            const item = pendingItems[idx];
+            const callId = item.bland_call_id;
 
-          for (let i = 0; i < pendingItems.length; i += CONCURRENCY) {
-            const chunk = pendingItems.slice(i, i + CONCURRENCY);
-            const results = await Promise.all(chunk.map(processOneItem));
-
-            const chunkResults: Array<{ callId: string; success: boolean; resultCallId?: string; error?: string }> = [];
-            for (const result of results) {
-              chunkResults.push(result);
-              if (result.success) {
-                jobState.completed++;
-              } else {
-                jobState.failed++;
-                jobState.errors.push({ callId: result.callId, error: result.error || "Unknown" });
-              }
+            try {
+              await updateBatchItemStatus(callId, "processing");
+            } catch (claimErr: any) {
+              console.error(`Batch job ${jobId}: failed to claim ${callId}: ${claimErr.message}`);
+              jobState.skipped++;
+              continue;
             }
 
             try {
-              await bulkUpdateBatchResults(chunkResults);
-            } catch (bqErr: any) {
-              console.error(`Batch job ${jobId}: bulk result update failed, retrying individually:`, bqErr.message);
-              await new Promise(r => setTimeout(r, 2000));
-              for (const result of chunkResults) {
-                try {
-                  if (result.success) {
-                    await updateBatchItemStatus(result.callId, "completed", result.resultCallId);
-                  } else {
-                    await updateBatchItemStatus(result.callId, "failed", undefined, result.error);
-                  }
-                  await new Promise(r => setTimeout(r, 500));
-                } catch (e: any) {
-                  console.error(`Batch job ${jobId}: individual update failed for ${result.callId}:`, e.message);
-                }
+              const startTime = Date.now();
+              let batchContext: Record<string, string> = {};
+              if (item.context_values) {
+                try { batchContext = JSON.parse(item.context_values); } catch {}
               }
+              const { analysis, tokenUsage } = await analyzeTranscript(
+                callId,
+                item.transcript.trim(),
+                activeObs,
+                undefined,
+                summaryInstruction || undefined,
+                contextParams,
+                batchContext,
+                observationsGuidance || undefined,
+                barriersGuidance || undefined,
+                callQAPromptsForBatch,
+                batchDispConfig,
+              );
+              const processingTimeMs = Date.now() - startTime;
+
+              const processedAt = new Date().toISOString();
+              const blandTs = item.bland_created_at?.value || item.bland_created_at || null;
+              const callDate = blandTs ? new Date(blandTs).toISOString() : null;
+              await insertCallInfo({
+                callId,
+                careFlowId: item.care_flow_id || null,
+                callDate,
+                sourceType: item.source_type || "bland_call",
+                sourceId: callId,
+                processedAt,
+                processingTimeMs,
+                promptVersion,
+                promptVersionDate,
+                contextValues: Object.keys(batchContext).length > 0 ? batchContext : undefined,
+                transcriptLength: item.transcript.length,
+                summary: analysis.summary,
+                followUpAreas: analysis.follow_up_areas,
+                transitionStatus: analysis.transition_status,
+                promptTokens: tokenUsage.promptTokens,
+                completionTokens: tokenUsage.completionTokens,
+                totalTokens: tokenUsage.totalTokens,
+                estimatedCost: tokenUsage.estimatedCost,
+                status: "success",
+                requestBody: JSON.stringify({ batch_id: item.batch_id, bland_call_id: callId }),
+                responseJson: JSON.stringify(analysis),
+                client: batchCPRecord?.client || null,
+                pathway: batchCPRecord?.pathway || null,
+              });
+
+              await insertCallObservations(callId, analysis.observations);
+              await insertCallQAPairs(callId, analysis.qa_pairs);
+              await insertCallBarriers(callId, analysis.barriers);
+              await insertCallQAResults(callId, analysis.call_qa || []);
+              if (analysis.disposition) {
+                await insertCallDisposition(callId, analysis.disposition);
+              }
+              await updateBatchItemStatus(callId, "completed", callId);
+              jobState.completed++;
+              console.log(`Batch job ${jobId}: [${idx + 1}/${pendingItems.length}] ${callId} completed (${processingTimeMs}ms)`);
+            } catch (err: any) {
+              try { await updateBatchItemStatus(callId, "failed", undefined, err.message); } catch {}
+              jobState.failed++;
+              jobState.errors.push({ callId, error: err.message });
+              console.error(`Batch job ${jobId}: [${idx + 1}/${pendingItems.length}] ${callId} failed: ${err.message}`);
             }
           }
           jobState.status = "completed";
