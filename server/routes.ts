@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { analyzeTranscript, analyzeTranscriptFast, analyzeTranscriptBackground, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, aiObservationAssistant, type DispositionConfig } from "./gemini";
-import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBarriers, insertCallQAResults, insertCallDisposition, ensureCallBarriersTable, ensureCallQATable, getCallBarriers, getCallInfoList, getCallDetail, getCallStatsByDay, queryBlandCalls, loadBlandCallsToBatch, fetchAwellContextForCareFlows, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, resetFailedBatchItems, deletePendingBatchItems, recreateBatch, getDistinctTags, upsertCallReviews, getCallReviews, upsertCallReviewStatus, upsertCallReviewMeta, getCallReviewStatusesBulk, ensureCallReviewStatusesTable, getCallReviewList } from "./bigquery";
+import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBarriers, insertCallQAResults, insertCallDisposition, ensureCallBarriersTable, ensureCallQATable, getCallBarriers, getCallInfoList, getCallDetail, getCallStatsByDay, queryBlandCalls, loadBlandCallsToBatch, fetchAwellContextForCareFlows, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, bulkUpdateBatchItemStatus, bulkUpdateBatchResults, resetFailedBatchItems, deletePendingBatchItems, recreateBatch, getDistinctTags, upsertCallReviews, getCallReviews, upsertCallReviewStatus, upsertCallReviewMeta, getCallReviewStatusesBulk, ensureCallReviewStatusesTable, getCallReviewList } from "./bigquery";
 import { randomUUID, createHash } from "crypto";
 import { storage } from "./storage";
 import { insertObservationSchema, enumValueSchema, insertContextParameterSchema, insertCallQAPromptSchema, insertDispositionCategorySchema, insertDispositionDetailSchema, insertCallReviewItemSchema } from "@shared/schema";
@@ -1532,21 +1532,6 @@ export async function registerRoutes(
 
       const CONCURRENCY = 5;
 
-      async function bqUpdateWithRetry(callId: string, status: string, resultCallId?: string, errorMessage?: string, retries = 3): Promise<number> {
-        for (let attempt = 0; attempt < retries; attempt++) {
-          try {
-            return await updateBatchItemStatus(callId, status, resultCallId, errorMessage);
-          } catch (err: any) {
-            if (attempt < retries - 1 && err.message?.includes("concurrent")) {
-              await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
-              continue;
-            }
-            throw err;
-          }
-        }
-        return 0;
-      }
-
       async function processOneItem(item: any) {
         try {
           const callId = item.bland_call_id;
@@ -1606,7 +1591,7 @@ export async function registerRoutes(
           if (analysis.disposition) {
             await insertCallDisposition(callId, analysis.disposition);
           }
-          return { callId, success: true };
+          return { callId, success: true, resultCallId: callId };
         } catch (err: any) {
           return { callId: item.bland_call_id, success: false, error: err.message };
         }
@@ -1614,27 +1599,41 @@ export async function registerRoutes(
 
       (async () => {
         try {
-          for (const item of pendingItems) {
-            try {
-              await bqUpdateWithRetry(item.bland_call_id, "processing");
-            } catch (err: any) {
-              jobState.skipped++;
-              continue;
-            }
-          }
+          const allCallIds = pendingItems.map((item: any) => item.bland_call_id);
+          await bulkUpdateBatchItemStatus(allCallIds, "processing");
+          console.log(`Batch job ${jobId}: marked ${allCallIds.length} items as processing`);
 
           for (let i = 0; i < pendingItems.length; i += CONCURRENCY) {
             const chunk = pendingItems.slice(i, i + CONCURRENCY);
             const results = await Promise.all(chunk.map(processOneItem));
 
+            const chunkResults: Array<{ callId: string; success: boolean; resultCallId?: string; error?: string }> = [];
             for (const result of results) {
+              chunkResults.push(result);
               if (result.success) {
-                await bqUpdateWithRetry(result.callId, "completed", result.callId);
                 jobState.completed++;
               } else {
-                await bqUpdateWithRetry(result.callId, "failed", undefined, result.error);
                 jobState.failed++;
-                jobState.errors.push({ callId: result.callId, error: result.error });
+                jobState.errors.push({ callId: result.callId, error: result.error || "Unknown" });
+              }
+            }
+
+            try {
+              await bulkUpdateBatchResults(chunkResults);
+            } catch (bqErr: any) {
+              console.error(`Batch job ${jobId}: bulk result update failed, retrying individually:`, bqErr.message);
+              await new Promise(r => setTimeout(r, 2000));
+              for (const result of chunkResults) {
+                try {
+                  if (result.success) {
+                    await updateBatchItemStatus(result.callId, "completed", result.resultCallId);
+                  } else {
+                    await updateBatchItemStatus(result.callId, "failed", undefined, result.error);
+                  }
+                  await new Promise(r => setTimeout(r, 500));
+                } catch (e: any) {
+                  console.error(`Batch job ${jobId}: individual update failed for ${result.callId}:`, e.message);
+                }
               }
             }
           }

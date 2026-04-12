@@ -1688,6 +1688,65 @@ export async function updateBatchItemStatus(
   return affected;
 }
 
+export async function bulkUpdateBatchItemStatus(
+  callIds: string[],
+  status: string,
+): Promise<number> {
+  if (!VALID_BATCH_STATUSES.has(status) || callIds.length === 0) return 0;
+  const client = getBigQueryClient();
+  const fromStatus = status === "processing" ? "'pending'" : "'pending', 'processing'";
+  const idList = callIds.map(id => `'${id.replace(/'/g, "\\'")}'`).join(",");
+  const setProcessedAt = (status === "completed" || status === "failed")
+    ? ", processed_at = CURRENT_TIMESTAMP()" : "";
+  const query = `
+    UPDATE \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
+    SET status = '${status}' ${setProcessedAt}
+    WHERE bland_call_id IN (${idList}) AND status IN (${fromStatus})
+  `;
+  const result = await client.query({ query, location: "US" });
+  const metadata = (result as any)[2] || {};
+  return Number(metadata?.dmlStats?.updatedRowCount || metadata?.numDmlAffectedRows || 0);
+}
+
+export async function bulkUpdateBatchResults(
+  results: Array<{ callId: string; success: boolean; resultCallId?: string; error?: string }>
+): Promise<void> {
+  if (results.length === 0) return;
+  const client = getBigQueryClient();
+  const succeeded = results.filter(r => r.success);
+  const failed = results.filter(r => !r.success);
+
+  if (succeeded.length > 0) {
+    const idList = succeeded.map(r => `'${r.callId.replace(/'/g, "\\'")}'`).join(",");
+    const whenClauses = succeeded.map(r =>
+      `WHEN bland_call_id = '${r.callId.replace(/'/g, "\\'")}' THEN '${(r.resultCallId || r.callId).replace(/'/g, "\\'")}'`
+    ).join("\n        ");
+    const query = `
+      UPDATE \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
+      SET status = 'completed',
+          result_call_id = CASE ${whenClauses} END,
+          processed_at = CURRENT_TIMESTAMP()
+      WHERE bland_call_id IN (${idList}) AND status IN ('pending', 'processing')
+    `;
+    await client.query({ query, location: "US" });
+  }
+
+  if (failed.length > 0) {
+    const idList = failed.map(r => `'${r.callId.replace(/'/g, "\\'")}'`).join(",");
+    const whenClauses = failed.map(r =>
+      `WHEN bland_call_id = '${r.callId.replace(/'/g, "\\'")}' THEN '${(r.error || "Unknown error").substring(0, 1000).replace(/'/g, "\\'")}'`
+    ).join("\n        ");
+    const query = `
+      UPDATE \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
+      SET status = 'failed',
+          error_message = CASE ${whenClauses} END,
+          processed_at = CURRENT_TIMESTAMP()
+      WHERE bland_call_id IN (${idList}) AND status IN ('pending', 'processing')
+    `;
+    await client.query({ query, location: "US" });
+  }
+}
+
 export async function recreateBatch(oldBatchId: string): Promise<{ newBatchId: string; count: number }> {
   const client = getBigQueryClient();
   const readQuery = `
