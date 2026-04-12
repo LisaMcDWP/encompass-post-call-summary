@@ -94,6 +94,7 @@ export default function BatchProcessing() {
   const [showSearch, setShowSearch] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [processLimit, setProcessLimit] = useState("100");
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [answeredBy, setAnsweredBy] = useState("human");
   const [minDuration, setMinDuration] = useState("0.01");
   const [maxDuration, setMaxDuration] = useState("");
@@ -188,6 +189,33 @@ export default function BatchProcessing() {
     },
   });
 
+  const jobStatusQuery = useQuery<any>({
+    queryKey: ["/api/batch/job-status", activeJobId],
+    queryFn: async () => {
+      if (!activeJobId) return null;
+      const res = await fetch(`/api/batch/job-status?jobId=${activeJobId}`);
+      if (!res.ok) { setActiveJobId(null); return null; }
+      return res.json();
+    },
+    enabled: !!activeJobId,
+    refetchInterval: activeJobId ? 2000 : false,
+  });
+
+  const jobStatus = jobStatusQuery.data;
+  if (jobStatus && (jobStatus.status === "completed" || jobStatus.status === "failed") && activeJobId) {
+    const finalStatus = jobStatus;
+    setTimeout(() => {
+      setActiveJobId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/batch/summary"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/batch/items"] });
+      toast({
+        title: finalStatus.status === "completed" ? "Batch complete" : "Batch finished with errors",
+        description: `${finalStatus.completed} completed, ${finalStatus.failed} failed out of ${finalStatus.total}`,
+        variant: finalStatus.failed > 0 ? "destructive" : "default",
+      });
+    }, 0);
+  }
+
   const processMutation = useMutation({
     mutationFn: async () => {
       const params = new URLSearchParams({ limit: processLimit });
@@ -203,12 +231,20 @@ export default function BatchProcessing() {
       return res.json();
     },
     onSuccess: (data) => {
-      toast({
-        title: "Batch processed",
-        description: `${data.processed} items processed`,
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/batch/summary"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/batch/items"] });
+      if (data.background && data.jobId) {
+        setActiveJobId(data.jobId);
+        toast({
+          title: "Processing started",
+          description: `${data.total} calls processing in the background`,
+        });
+      } else {
+        toast({
+          title: "Batch processed",
+          description: data.message || `${data.processed} items processed`,
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/batch/summary"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/batch/items"] });
+      }
     },
     onError: (err: any) => {
       toast({ title: "Process failed", description: err.message, variant: "destructive" });
@@ -372,22 +408,22 @@ export default function BatchProcessing() {
             onChange={(e) => setProcessLimit(e.target.value)}
             className="w-20"
             min="1"
-            max="50"
+            max="500"
             data-testid="input-process-limit"
           />
         </div>
         <Button
           onClick={() => processMutation.mutate()}
-          disabled={processMutation.isPending || (summary?.pending ?? 0) === 0}
+          disabled={processMutation.isPending || !!activeJobId || (summary?.pending ?? 0) === 0}
           variant="outline"
           data-testid="button-process-batch"
         >
-          {processMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Play className="h-4 w-4 mr-1" />}
-          Process Here
+          {(processMutation.isPending || !!activeJobId) ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Play className="h-4 w-4 mr-1" />}
+          {activeJobId ? "Processing..." : "Process Here"}
         </Button>
         <Button
           onClick={() => triggerJobMutation.mutate()}
-          disabled={triggerJobMutation.isPending || (summary?.pending ?? 0) === 0}
+          disabled={triggerJobMutation.isPending || !!activeJobId || (summary?.pending ?? 0) === 0}
           className="bg-[#0098db] hover:bg-[#0098db]/90"
           data-testid="button-trigger-gcp-job"
         >
@@ -446,6 +482,42 @@ export default function BatchProcessing() {
           </Button>
         )}
       </div>
+
+      {activeJobId && jobStatus && (
+        <Card className="border-[#0098db]/30 bg-[#0098db]/5" data-testid="card-batch-progress">
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-[#0098db]" />
+                <span className="text-sm font-semibold text-[#172938]">
+                  Processing {jobStatus.total} calls...
+                </span>
+              </div>
+              <span className="text-sm text-muted-foreground">
+                {jobStatus.completed + jobStatus.failed} / {jobStatus.total}
+                {jobStatus.failed > 0 && <span className="text-red-500 ml-1">({jobStatus.failed} failed)</span>}
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-500 ease-out"
+                style={{
+                  width: `${Math.round(((jobStatus.completed + jobStatus.failed) / jobStatus.total) * 100)}%`,
+                  background: jobStatus.failed > 0
+                    ? `linear-gradient(to right, #0098db ${(jobStatus.completed / (jobStatus.completed + jobStatus.failed)) * 100}%, #ef4444 ${(jobStatus.completed / (jobStatus.completed + jobStatus.failed)) * 100}%)`
+                    : "#0098db",
+                }}
+              />
+            </div>
+            <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+              <span className="text-green-600">{jobStatus.completed} completed</span>
+              {jobStatus.failed > 0 && <span className="text-red-500">{jobStatus.failed} failed</span>}
+              {jobStatus.skipped > 0 && <span>{jobStatus.skipped} skipped</span>}
+              <span className="ml-auto">Started {new Date(jobStatus.startedAt).toLocaleTimeString()}</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader

@@ -1451,6 +1451,33 @@ export async function registerRoutes(
     }
   });
 
+  interface BatchJobState {
+    jobId: string;
+    status: "running" | "completed" | "failed";
+    total: number;
+    completed: number;
+    failed: number;
+    skipped: number;
+    startedAt: string;
+    finishedAt?: string;
+    errors: { callId: string; error: string }[];
+  }
+  const activeBatchJobs = new Map<string, BatchJobState>();
+
+  app.get("/api/batch/job-status", (req, res) => {
+    const jobId = req.query.jobId as string;
+    if (jobId) {
+      const job = activeBatchJobs.get(jobId);
+      if (!job) return res.status(404).json({ message: "Job not found" });
+      return res.json(job);
+    }
+    const running = Array.from(activeBatchJobs.values()).filter(j => j.status === "running");
+    const recent = Array.from(activeBatchJobs.values())
+      .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
+      .slice(0, 5);
+    res.json({ running, recent });
+  });
+
   app.post("/api/batch/process", async (req, res) => {
     try {
       const batchSize = parseInt(req.query.limit as string) || 5;
@@ -1458,10 +1485,9 @@ export async function registerRoutes(
       const pendingItems = await getPendingBatchItems(batchSize, batchId);
 
       if (pendingItems.length === 0) {
-        return res.json({ processed: 0, message: "No pending items" });
+        return res.json({ processed: 0, message: "No pending items", background: false });
       }
 
-      const results: { callId: string; status: string; error?: string }[] = [];
       const batchCpId = Number(req.query.clientPathwayId) || null;
       let resolvedBatchCpId = batchCpId;
       if (!resolvedBatchCpId) {
@@ -1484,12 +1510,32 @@ export async function registerRoutes(
       const batchDispConfig: DispositionConfig = { categories: batchDispCats, details: batchDispDets };
       const { prompt: _p, promptVersion, promptVersionDate } = await getPromptWithVersion(resolvedBatchCpId);
 
+      const jobId = `batch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const jobState: BatchJobState = {
+        jobId,
+        status: "running",
+        total: pendingItems.length,
+        completed: 0,
+        failed: 0,
+        skipped: 0,
+        startedAt: new Date().toISOString(),
+        errors: [],
+      };
+      activeBatchJobs.set(jobId, jobState);
+
+      res.json({
+        background: true,
+        jobId,
+        total: pendingItems.length,
+        message: `Processing ${pendingItems.length} calls in the background`,
+      });
+
       const CONCURRENCY = 5;
 
       async function processOneItem(item: any) {
         const claimed = await updateBatchItemStatus(item.bland_call_id, "processing");
         if (claimed === 0) {
-          results.push({ callId: item.bland_call_id, status: "skipped" });
+          jobState.skipped++;
           return;
         }
 
@@ -1552,19 +1598,29 @@ export async function registerRoutes(
             await insertCallDisposition(callId, analysis.disposition);
           }
           await updateBatchItemStatus(item.bland_call_id, "completed", callId);
-          results.push({ callId: item.bland_call_id, status: "completed" });
+          jobState.completed++;
         } catch (err: any) {
           await updateBatchItemStatus(item.bland_call_id, "failed", undefined, err.message);
-          results.push({ callId: item.bland_call_id, status: "failed", error: err.message });
+          jobState.failed++;
+          jobState.errors.push({ callId: item.bland_call_id, error: err.message });
         }
       }
 
-      for (let i = 0; i < pendingItems.length; i += CONCURRENCY) {
-        const chunk = pendingItems.slice(i, i + CONCURRENCY);
-        await Promise.all(chunk.map(processOneItem));
-      }
-
-      res.json({ processed: results.length, results });
+      (async () => {
+        try {
+          for (let i = 0; i < pendingItems.length; i += CONCURRENCY) {
+            const chunk = pendingItems.slice(i, i + CONCURRENCY);
+            await Promise.all(chunk.map(processOneItem));
+          }
+          jobState.status = "completed";
+        } catch (err: any) {
+          jobState.status = "failed";
+          console.error("Batch job failed:", err.message);
+        }
+        jobState.finishedAt = new Date().toISOString();
+        console.log(`Batch job ${jobId} finished: ${jobState.completed} completed, ${jobState.failed} failed, ${jobState.skipped} skipped out of ${jobState.total}`);
+        setTimeout(() => activeBatchJobs.delete(jobId), 30 * 60 * 1000);
+      })();
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

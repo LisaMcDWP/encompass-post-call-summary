@@ -171,7 +171,8 @@ Returns service connectivity status.
   - Fields: batch_id, bland_call_id, transcript, source_type, created_at, status (pending/processing/completed/failed), error_message, result_call_id, processed_at, batch_label
 - **Source data**: `Bland.calls` table (historical call transcripts)
 - **Flow**: Search Bland calls → select → load to batch table (optionally fetching Awell known context per care flow) → process (runs each through extraction API with current prompt/observations/context)
-- **API endpoints**: `GET /api/batch/bland-calls`, `POST /api/batch/load`, `GET /api/batch/items`, `GET /api/batch/summary`, `POST /api/batch/process`, `POST /api/batch/reset-failed`
+- **API endpoints**: `GET /api/batch/bland-calls`, `POST /api/batch/load`, `GET /api/batch/items`, `GET /api/batch/summary`, `POST /api/batch/process`, `GET /api/batch/job-status`, `POST /api/batch/reset-failed`
+- **Background processing**: `POST /api/batch/process` responds immediately with a `jobId` and processes all requested calls in the background (5 concurrent). Frontend polls `GET /api/batch/job-status?jobId=...` every 2s for live progress (completed/failed/total counts). Progress bar shown in UI. Job state kept in memory for 30min after completion.
 - **Cloud Run Job**: `server/batch-job.ts` + `Dockerfile.batch` — standalone job that processes pending batch items
 - **UI**: `/batch` page in Analytics section
 - **Safety**: Parameterized SQL, atomic claim semantics (pending→processing prevents duplicate work), status validation
