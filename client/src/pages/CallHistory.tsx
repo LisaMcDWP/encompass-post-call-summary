@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Phone, Clock, Coins, ChevronRight, ChevronLeft, X, FileText, Activity, ListChecks, ClipboardList, AlertCircle, MessageSquare, ShieldAlert, ClipboardCheck, RefreshCw, Download, History, Tag, CheckCircle2, Flag, MinusCircle, Circle, Save, RotateCcw, Plus } from "lucide-react";
+import { Loader2, Phone, Clock, Coins, ChevronRight, ChevronLeft, X, FileText, Activity, ListChecks, ClipboardList, AlertCircle, MessageSquare, ShieldAlert, ClipboardCheck, RefreshCw, Download, History, Tag, CheckCircle2, Flag, MinusCircle, Circle, Save, RotateCcw, Plus, ExternalLink } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -402,7 +402,19 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
               <Phone className="h-5 w-5 text-primary" />
               Call Detail
             </h2>
-            <p className="text-xs text-muted-foreground font-mono mt-0.5" data-testid="text-call-id">{info.call_id}</p>
+            <p className="text-xs text-muted-foreground font-mono mt-0.5 flex items-center gap-2" data-testid="text-call-id">
+              {info.call_id}
+              <a
+                href={`https://app.bland.ai/dashboard/call-logs/${info.call_id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[#0098db] hover:text-[#0098db]/80 text-[11px] font-sans font-medium"
+                data-testid="link-bland-call"
+              >
+                <ExternalLink className="h-3 w-3" />
+                View in Bland
+              </a>
+            </p>
           </div>
           <div className="flex items-center gap-2">
             {totalRuns > 1 && (
