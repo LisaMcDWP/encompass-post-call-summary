@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-PROJECT_ID="${GCP_PROJECT_ID:-encompass-476415}"
+PROJECT_ID="${GCP_PROJECT_ID:-guidewaycare-476802}"
 REGION="us-central1"
 JOB_NAME="guideway-batch-job"
 IMAGE="gcr.io/${PROJECT_ID}/${JOB_NAME}"

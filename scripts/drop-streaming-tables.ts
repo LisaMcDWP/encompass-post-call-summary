@@ -2,7 +2,7 @@ import { BigQuery } from "@google-cloud/bigquery";
 
 async function main() {
   const creds = JSON.parse(process.env.GCP_SERVICE_ACCOUNT_KEY!);
-  const bq = new BigQuery({ projectId: "encompass-476415", credentials: creds });
+  const bq = new BigQuery({ projectId: process.env.GCP_PROJECT_ID || "guidewaycare-476802", credentials: creds });
   const ds = "call_information";
   const tables = ["call_info", "call_observations", "call_qa_results"];
 

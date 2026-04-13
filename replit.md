@@ -109,10 +109,10 @@ Observations are dynamic topics stored in BigQuery (`call_information.observatio
 - Colors: GREEN, YELLOW, RED, BLUE, GRAY — mapped to inline HTML styles
 - The prompt is dynamically built from active observations at analysis time
 - Default seed: 11 post-discharge topics (Overall Feeling, Disposition Change, Prescription Pickup, etc.)
-- Service account: `encompass-dashboard-app@encompass-476415.iam.gserviceaccount.com`
+- Service account: configured via `GCP_SERVICE_ACCOUNT_KEY` env var
 
 ## Environment Variables (Secrets)
-- `GCP_PROJECT_ID` — Google Cloud project ID (`encompass-476415`)
+- `GCP_PROJECT_ID` — Central Google Cloud project ID (`guidewaycare-476802`)
 - `GCP_SERVICE_ACCOUNT_KEY` — Full JSON service account key (needs Vertex AI User, BigQuery Data Editor, BigQuery Job User roles)
 - `GWC_OBSERVATION_SUMMARIZATION_API_KEY` — GCP API key for authenticating POST /api/analyze requests (managed via GCP Console → APIs & Services → Credentials). Passed as `X-API-Key` header. If not set, the endpoint is open.
 

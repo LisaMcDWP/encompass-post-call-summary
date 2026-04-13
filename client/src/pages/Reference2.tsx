@@ -296,7 +296,7 @@ export default function Reference2() {
               <p className="text-foreground"><span className="text-primary font-semibold">Platform:</span> Google Cloud Run</p>
               <p className="text-foreground"><span className="text-primary font-semibold">Region:</span> us-central1</p>
               <p className="text-foreground"><span className="text-primary font-semibold">Service Name:</span> guideway-care-api</p>
-              <p className="text-foreground"><span className="text-primary font-semibold">GCP Project:</span> encompass-476415</p>
+              <p className="text-foreground"><span className="text-primary font-semibold">GCP Project:</span> guidewaycare-476802</p>
               <p className="text-foreground"><span className="text-primary font-semibold">Port:</span> 8080 (Cloud Run default)</p>
             </div>
           </div>
@@ -359,7 +359,7 @@ gcloud builds submit --config cloudbuild.yaml`}
             <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-2">
               <div>
                 <p className="text-foreground"><span className="text-primary font-semibold">GCP_PROJECT_ID</span></p>
-                <p className="text-muted-foreground text-xs">Google Cloud project ID (e.g., "encompass-476415")</p>
+                <p className="text-muted-foreground text-xs">Google Cloud project ID (e.g., "guidewaycare-476802")</p>
               </div>
               <div>
                 <p className="text-foreground"><span className="text-primary font-semibold">GCP_SERVICE_ACCOUNT_KEY</span></p>
@@ -420,7 +420,7 @@ gcloud builds submit --config cloudbuild.yaml`}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          <p className="text-muted-foreground">All data is stored in Google BigQuery under the <code className="text-primary">call_information</code> dataset. <strong className="text-foreground">Config tables</strong> always live in the central project (<code className="text-primary">encompass-476415</code>). <strong className="text-foreground">Output tables</strong> are routed to the client's own GCP project when <code className="text-primary">gcp_project_id</code> is set on the client/pathway record, otherwise they fall back to the central project. Tables are auto-created on first use with idempotent schema migrations.</p>
+          <p className="text-muted-foreground">All data is stored in Google BigQuery under the <code className="text-primary">call_information</code> dataset. <strong className="text-foreground">Config tables</strong> always live in the central project (<code className="text-primary">guidewaycare-476802</code>). <strong className="text-foreground">Output tables</strong> are routed to the client's own GCP project when <code className="text-primary">gcp_project_id</code> is set on the client/pathway record, otherwise they fall back to the central project. Tables are auto-created on first use with idempotent schema migrations.</p>
 
           <Separator />
 

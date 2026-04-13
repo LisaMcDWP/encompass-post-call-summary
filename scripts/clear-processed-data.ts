@@ -1,6 +1,6 @@
 import { BigQuery } from "@google-cloud/bigquery";
 
-const PROJECT_ID = process.env.GCP_PROJECT_ID || "encompass-476415";
+const PROJECT_ID = process.env.GCP_PROJECT_ID || "guidewaycare-476802";
 const DATASET_ID = "call_information";
 
 const TABLES_TO_CLEAR = [

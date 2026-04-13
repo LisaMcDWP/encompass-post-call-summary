@@ -581,7 +581,7 @@ function exportReferencePdf() {
   heading("GCP Deployment");
   subheading("Production URL");
   para("https://guideway-care-api-855188300685.us-central1.run.app");
-  fieldDesc("GCP Project", "encompass-476415");
+  fieldDesc("GCP Project", "guidewaycare-476802");
   fieldDesc("Region", "us-central1");
   fieldDesc("Service", "guideway-care-api");
   fieldDesc("BigQuery Dataset", "call_information");
@@ -741,7 +741,7 @@ export default function Reference() {
     "client": "Encompass",
     "pathway": "Post-Discharge",
     "description": "Post-discharge follow-up calls",
-    "gcp_project_id": "encompass-476415",
+    "gcp_project_id": "guidewaycare-476802",
     "secret_key": "GWC_ENCOMPASS_API_KEY"
   }
 ]`}
@@ -758,7 +758,7 @@ export default function Reference() {
   "client": "Encompass",
   "pathway": "Post-Discharge",
   "description": "Post-discharge follow-up calls",
-  "gcp_project_id": "encompass-476415",
+  "gcp_project_id": "guidewaycare-476802",
   "secret_key": "GWC_ENCOMPASS_API_KEY"
 }`}
               </pre>
@@ -2416,7 +2416,7 @@ export default function Reference() {
 {`https://guideway-care-api-855188300685.us-central1.run.app`}
               </pre>
               <div className="bg-muted/30 border border-border/50 p-3 rounded-lg text-sm mt-3 space-y-1">
-                <p className="text-foreground"><span className="text-primary font-semibold">GCP Project:</span> encompass-476415</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">GCP Project:</span> guidewaycare-476802</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">Region:</span> us-central1</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">Service:</span> guideway-care-api</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">BigQuery Dataset:</span> call_information</p>
