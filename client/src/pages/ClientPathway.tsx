@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Route, Save, Trash2, Plus, Pencil, X, Check, Cloud } from "lucide-react";
+import { Building2, Route, Save, Trash2, Plus, Pencil, X, Check, Cloud, KeyRound } from "lucide-react";
 import { useClientPathway, type ClientPathway } from "@/contexts/ClientPathwayContext";
 
 export default function ClientPathwayPage() {
@@ -16,6 +16,7 @@ export default function ClientPathwayPage() {
   const [formPathway, setFormPathway] = useState("");
   const [formDescription, setFormDescription] = useState("");
   const [formGcpProjectId, setFormGcpProjectId] = useState("");
+  const [formSecretKey, setFormSecretKey] = useState("");
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
@@ -24,6 +25,7 @@ export default function ClientPathwayPage() {
     setFormPathway("");
     setFormDescription("");
     setFormGcpProjectId("");
+    setFormSecretKey("");
     setShowAdd(false);
     setEditingId(null);
   };
@@ -34,6 +36,7 @@ export default function ClientPathwayPage() {
     setFormPathway(cp.pathway);
     setFormDescription(cp.description || "");
     setFormGcpProjectId(cp.gcp_project_id || "");
+    setFormSecretKey(cp.secret_key || "");
     setShowAdd(false);
   };
 
@@ -48,7 +51,7 @@ export default function ClientPathwayPage() {
         const res = await fetch(`/api/client-pathways/${editingId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ client: formClient.trim(), pathway: formPathway.trim(), description: formDescription.trim(), gcp_project_id: formGcpProjectId.trim() }),
+          body: JSON.stringify({ client: formClient.trim(), pathway: formPathway.trim(), description: formDescription.trim(), gcp_project_id: formGcpProjectId.trim(), secret_key: formSecretKey.trim() }),
         });
         if (!res.ok) { const err = await res.json(); throw new Error(err.message); }
         toast({ title: "Updated", description: "Client & Pathway updated." });
@@ -56,7 +59,7 @@ export default function ClientPathwayPage() {
         const res = await fetch("/api/client-pathways", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ client: formClient.trim(), pathway: formPathway.trim(), description: formDescription.trim(), gcp_project_id: formGcpProjectId.trim() }),
+          body: JSON.stringify({ client: formClient.trim(), pathway: formPathway.trim(), description: formDescription.trim(), gcp_project_id: formGcpProjectId.trim(), secret_key: formSecretKey.trim() }),
         });
         if (!res.ok) { const err = await res.json(); throw new Error(err.message); }
         const created = await res.json();
@@ -128,12 +131,21 @@ export default function ClientPathwayPage() {
                 <Label className="text-xs font-semibold">Description (optional)</Label>
                 <Textarea placeholder="Brief description of this configuration..." value={formDescription} onChange={e => setFormDescription(e.target.value)} className="text-sm resize-none" rows={2} data-testid="input-form-description" />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold flex items-center gap-1.5">
-                  <Cloud className="h-3.5 w-3.5 text-muted-foreground" /> GCP Project ID
-                </Label>
-                <Input placeholder="e.g. my-client-project-123456" value={formGcpProjectId} onChange={e => setFormGcpProjectId(e.target.value)} className="text-sm font-mono" data-testid="input-form-gcp-project" />
-                <p className="text-[11px] text-muted-foreground">The Google Cloud project where this client's data is processed and stored.</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold flex items-center gap-1.5">
+                    <Cloud className="h-3.5 w-3.5 text-muted-foreground" /> GCP Project ID
+                  </Label>
+                  <Input placeholder="e.g. my-client-project-123456" value={formGcpProjectId} onChange={e => setFormGcpProjectId(e.target.value)} className="text-sm font-mono" data-testid="input-form-gcp-project" />
+                  <p className="text-[11px] text-muted-foreground">The Google Cloud project for this client's data.</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold flex items-center gap-1.5">
+                    <KeyRound className="h-3.5 w-3.5 text-muted-foreground" /> Secret Key Name
+                  </Label>
+                  <Input placeholder="e.g. GWC_CLIENT_API_KEY" value={formSecretKey} onChange={e => setFormSecretKey(e.target.value)} className="text-sm font-mono" data-testid="input-form-secret-key" />
+                  <p className="text-[11px] text-muted-foreground">The Secret Manager secret name for this config.</p>
+                </div>
               </div>
               <div className="flex items-center gap-2 pt-1">
                 <Button onClick={handleSave} disabled={saving || !formClient.trim() || !formPathway.trim()} className="bg-primary hover:bg-primary/90 text-white" data-testid="button-save-cp">
@@ -174,10 +186,19 @@ export default function ClientPathwayPage() {
                     {cp.description && (
                       <p className="text-xs text-muted-foreground/70 truncate">{cp.description}</p>
                     )}
-                    {cp.gcp_project_id && (
-                      <p className="text-[11px] text-muted-foreground/60 font-mono flex items-center gap-1 mt-0.5">
-                        <Cloud className="h-3 w-3" /> {cp.gcp_project_id}
-                      </p>
+                    {(cp.gcp_project_id || cp.secret_key) && (
+                      <div className="flex items-center gap-3 mt-0.5">
+                        {cp.gcp_project_id && (
+                          <p className="text-[11px] text-muted-foreground/60 font-mono flex items-center gap-1">
+                            <Cloud className="h-3 w-3" /> {cp.gcp_project_id}
+                          </p>
+                        )}
+                        {cp.secret_key && (
+                          <p className="text-[11px] text-muted-foreground/60 font-mono flex items-center gap-1">
+                            <KeyRound className="h-3 w-3" /> {cp.secret_key}
+                          </p>
+                        )}
+                      </div>
                     )}
                   </div>
                   {selectedCPId === cp.id && (

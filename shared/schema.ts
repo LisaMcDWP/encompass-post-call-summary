@@ -51,6 +51,7 @@ export const insertClientPathwaySchema = z.object({
   pathway: z.string().min(1),
   description: z.string().optional().default(""),
   gcp_project_id: z.string().optional().default(""),
+  secret_key: z.string().optional().default(""),
 });
 
 export type InsertClientPathway = z.infer<typeof insertClientPathwaySchema>;
@@ -61,6 +62,7 @@ export interface ClientPathway {
   pathway: string;
   description: string;
   gcp_project_id: string;
+  secret_key: string;
 }
 
 export const enumValueSchema = z.object({
