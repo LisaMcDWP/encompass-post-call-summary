@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import { BookOpen, Code2, Webhook, Server, Key, Activity, Database, Settings, Phone, Download, Layers, MessageSquare, ClipboardCheck, FileText, Users, BarChart3 } from "lucide-react";
+import { BookOpen, Code2, Webhook, Server, Key, Activity, Database, Settings, Phone, Download, Layers, MessageSquare, ClipboardCheck, FileText, Users, BarChart3, ListChecks, Star, RefreshCw, Cloud, KeyRound } from "lucide-react";
 import { useRef } from "react";
 import { jsPDF } from "jspdf";
 
@@ -176,15 +176,19 @@ function exportReferencePdf() {
   para("POST /gwc_observation_summarization requires an X-API-Key header (GWC_OBSERVATION_SUMMARIZATION_API_KEY).");
 
   heading("Multi-Tenant Architecture");
-  para("This API uses a Client & Pathway multi-tenant architecture. Each client/pathway has its own observations, context parameters, prompt settings, Call QA prompts, and barriers guidance.");
+  para("This API uses a Client & Pathway multi-tenant architecture. Each client/pathway has its own observations, context parameters, prompt settings, Call QA prompts, dispositions, and barriers guidance.");
   fieldDesc("clientPathwayId", "Required on all config endpoints (GET as query param, POST/PUT as body param).");
   fieldDesc("client + pathway", "On analyze endpoints, pass client and pathway to route to the correct tenant config.");
   divider();
   subheading("Client & Pathway CRUD");
-  para("GET /api/client-pathways — Returns all client/pathway definitions.");
-  para("POST /api/client-pathways — Create a new client/pathway (name, client, pathway, description).");
+  para("GET /api/client-pathways — Returns all client/pathway definitions (id, client, pathway, description, gcp_project_id, secret_key).");
+  para("POST /api/client-pathways — Create a new client/pathway.");
   para("PUT /api/client-pathways/:id — Update an existing client/pathway.");
   para("DELETE /api/client-pathways/:id — Delete a client/pathway.");
+  divider();
+  subheading("Client & Pathway Fields");
+  fieldDesc("gcp_project_id", "(string, optional) The Google Cloud project ID for this client's data.");
+  fieldDesc("secret_key", "(string, optional) The GCP Secret Manager secret name for this client's API key.");
 
   heading("POST /api/analyze");
   para("Accepts source text with contextual metadata, processes it through Gemini AI, and returns structured clinical analysis with HTML-formatted output.");
@@ -330,9 +334,47 @@ function exportReferencePdf() {
   fieldDesc("isActive", "(boolean) Whether included in analysis.");
   fieldDesc("displayOrder", "(integer) Sort order.");
 
+  heading("Call Dispositions CRUD");
+  para("Manage call disposition taxonomy — categories and details that classify call outcomes. Scoped by clientPathwayId.");
+  divider();
+  subheading("Disposition Categories");
+  para("GET /api/disposition-categories — Returns all disposition categories.");
+  para("POST /api/disposition-categories — Create a new disposition category (name, displayName, description).");
+  para("PUT /api/disposition-categories/:id — Update a disposition category.");
+  para("DELETE /api/disposition-categories/:id — Delete a disposition category.");
+  divider();
+  subheading("Disposition Details");
+  para("GET /api/disposition-details — Returns all disposition details.");
+  para("POST /api/disposition-details — Create a detail within a category (categoryId, name, displayName, description).");
+  para("PUT /api/disposition-details/:id — Update a disposition detail.");
+  para("DELETE /api/disposition-details/:id — Delete a disposition detail.");
+  divider();
+  subheading("Disposition in Analysis Response");
+  para("When disposition categories are configured, the analysis response includes a disposition field with: disposition_category, disposition_category_display, disposition_detail, disposition_detail_display, confidence, evidence, detail.");
+
+  heading("Call Reviews");
+  para("Review workflows for processed calls — configurable review items, per-call review submissions, review statuses, and review list analytics.");
+  divider();
+  subheading("Review Items CRUD");
+  para("GET /api/call-review-items — Returns all review items for the client/pathway.");
+  para("POST /api/call-review-items — Create a new review item (name, displayName, description, category, isActive, displayOrder).");
+  para("PUT /api/call-review-items/:id — Update a review item.");
+  para("DELETE /api/call-review-items/:id — Delete a review item.");
+  divider();
+  subheading("Per-Call Reviews");
+  para("GET /api/calls/:callId/reviews — Returns all review submissions for a call.");
+  para("POST /api/calls/:callId/reviews — Submit review scores for a call.");
+  para("PUT /api/calls/:callId/review-status — Set review status (not_reviewed, in_progress, reviewed, flagged). Body: { reviewStatus }.");
+  para("PUT /api/calls/:callId/review-meta — Update review metadata (notes, tags).");
+  para("GET /api/calls/review-statuses — Returns review statuses for multiple calls (callIds query param).");
+  para("GET /api/calls/review-list — Returns calls with review data for the review analytics dashboard.");
+
+  heading("Call Reprocessing");
+  para("POST /api/calls/:callId/reprocess — Reprocess an existing call through the current prompt configuration. Deletes existing analysis data and reprocesses from the stored transcript.");
+
   heading("PDF Export");
   para("Individual call details can be exported as PDF reports from the Call History page. Open any call detail panel and click the Export PDF button.");
-  para("Includes: branded header, call metadata, summary, observations, transition status, follow-up areas, barriers, call QA, Q&A pairs, and page numbers.");
+  para("Includes: branded header, call metadata, summary, observations, transition status, follow-up areas, barriers, call QA, Q&A pairs, disposition, and page numbers.");
 
   heading("Batch Processing");
   subheading("How Batch Processing Works");
@@ -365,6 +407,15 @@ function exportReferencePdf() {
   divider();
   subheading("POST /api/batch/reset-failed");
   para("Resets failed items back to pending for reprocessing.");
+  divider();
+  subheading("POST /api/batch/delete-pending");
+  para("Deletes all pending (unprocessed) batch items.");
+  divider();
+  subheading("POST /api/batch/trigger-job");
+  para("Triggers a background batch job that processes all pending items sequentially. Returns a jobId for progress tracking via GET /api/batch/job-status.");
+  divider();
+  subheading("GET /api/batch/job-status");
+  para("Returns live progress for a running batch job: status (running/completed/failed), total, completed, failed, currentCallId. Poll to track completion. 30-minute TTL on job state.");
 
   heading("POST /gwc_observation_summarization");
   para("Awell webhook endpoint for transcript analysis. Supports both synchronous and asynchronous processing modes. Requires X-API-Key header.");
@@ -551,10 +602,17 @@ function exportReferencePdf() {
   bulletPoint("call_qa_pairs — One row per Q&A exchange per call");
   bulletPoint("barriers — One row per identified barrier per call");
   bulletPoint("call_qa_results — One row per Call QA assessment per call");
+  bulletPoint("call_dispositions — One row per call with disposition classification");
+  bulletPoint("call_reviews — Review submissions per call");
+  bulletPoint("call_review_statuses — Review status tracking per call");
   bulletPoint("batch_processing — Batch processing tracker");
   bulletPoint("observations — Observation configuration");
   bulletPoint("context_parameters — Context parameter definitions");
   bulletPoint("call_qa_prompts — Call QA prompt configuration");
+  bulletPoint("disposition_categories — Disposition category taxonomy");
+  bulletPoint("disposition_details — Disposition detail taxonomy");
+  bulletPoint("call_review_items — Review item configuration");
+  bulletPoint("client_pathway — Client/pathway definitions with gcp_project_id and secret_key");
   bulletPoint("known_context_details — Known context per care flow");
   bulletPoint("settings — Key-value settings store");
 
@@ -671,7 +729,9 @@ export default function Reference() {
     "id": 1,
     "client": "Encompass",
     "pathway": "Post-Discharge",
-    "description": "Post-discharge follow-up calls"
+    "description": "Post-discharge follow-up calls",
+    "gcp_project_id": "encompass-476415",
+    "secret_key": "GWC_ENCOMPASS_API_KEY"
   }
 ]`}
               </pre>
@@ -686,7 +746,9 @@ export default function Reference() {
 {`{
   "client": "Encompass",
   "pathway": "Post-Discharge",
-  "description": "Post-discharge follow-up calls"
+  "description": "Post-discharge follow-up calls",
+  "gcp_project_id": "encompass-476415",
+  "secret_key": "GWC_ENCOMPASS_API_KEY"
 }`}
               </pre>
             </div>
@@ -703,6 +765,20 @@ export default function Reference() {
             <div>
               <h3 className="text-foreground font-semibold mb-2">DELETE /api/client-pathways/:id</h3>
               <p className="text-muted-foreground text-sm">Permanently deletes a client/pathway by ID.</p>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">Client & Pathway Fields</h3>
+              <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-2">
+                <p className="text-foreground"><span className="text-primary font-semibold">id</span> <span className="text-muted-foreground">(INT64)</span> — Auto-generated unique identifier.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">client</span> <span className="text-muted-foreground">(string, required)</span> — Client organization name (e.g. "Encompass Health").</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">pathway</span> <span className="text-muted-foreground">(string, required)</span> — Pathway or program label (e.g. "Post discharge follow-up day 4").</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">description</span> <span className="text-muted-foreground">(string, optional)</span> — Brief description of this configuration.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">gcp_project_id</span> <span className="text-muted-foreground">(string, optional)</span> — The Google Cloud project ID where this client's data is processed and stored.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">secret_key</span> <span className="text-muted-foreground">(string, optional)</span> — The GCP Secret Manager secret name for this client's API key configuration.</p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -840,7 +916,16 @@ export default function Reference() {
           "detail": "The care guide showed empathy throughout the call.",
           "evidence": "I'm sorry to hear you're having trouble with that."
         }
-      ]
+      ],
+      "disposition": {
+        "disposition_category": "connected",
+        "disposition_category_display": "Connected",
+        "disposition_detail": "completed_interaction",
+        "disposition_detail_display": "Completed Interaction",
+        "confidence": "high",
+        "evidence": "Patient answered and engaged in full conversation.",
+        "detail": "All assessment questions were addressed."
+      }
     },
     "tokenUsage": {
       "promptTokens": 2450,
@@ -885,6 +970,10 @@ export default function Reference() {
                 <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
                   <p className="text-primary font-mono text-sm">call_qa</p>
                   <p className="text-muted-foreground text-sm mt-1">Array of call quality assessment results based on configurable Call QA prompts. Each entry contains: <code className="text-primary">name</code> (prompt key), <code className="text-primary">display_name</code> (human-readable label), <code className="text-primary">value</code> (assessment result — enum choice, boolean, or text), <code className="text-primary">detail</code> (brief explanation of the assessment), and <code className="text-primary">evidence</code> (supporting transcript quote or null). Prompts are configured in the Call QA management page. Returns empty array if no Call QA prompts are active.</p>
+                </div>
+                <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
+                  <p className="text-primary font-mono text-sm">disposition</p>
+                  <p className="text-muted-foreground text-sm mt-1">Call outcome classification based on configured disposition taxonomy. Contains: <code className="text-primary">disposition_category</code> (category key), <code className="text-primary">disposition_category_display</code> (display label), <code className="text-primary">disposition_detail</code> (detail key within category), <code className="text-primary">disposition_detail_display</code> (detail label), <code className="text-primary">confidence</code> (high/medium/low), <code className="text-primary">evidence</code> (supporting transcript evidence), and <code className="text-primary">detail</code> (explanation). Only present when disposition categories are configured for the client/pathway.</p>
                 </div>
               </div>
             </div>
@@ -1507,6 +1596,250 @@ export default function Reference() {
         <Card className="border-border/60 shadow-sm mb-6">
           <CardHeader>
             <CardTitle className="text-foreground flex items-center gap-2">
+              <ListChecks className="h-5 w-5 text-primary" />
+              Call Dispositions CRUD
+              <Badge className="bg-[#96d410]/10 text-[#4d6d08] border-[#96d410]/30 ml-2">Setup</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <p className="text-muted-foreground">Manage call disposition taxonomy — categories and details that classify call outcomes. When configured, Gemini automatically classifies each call's disposition based on the taxonomy. Scoped by <code className="text-primary">clientPathwayId</code>.</p>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">Disposition Categories</h3>
+              <div className="space-y-4">
+                <div>
+                  <p className="text-foreground text-sm font-medium">GET /api/disposition-categories</p>
+                  <p className="text-muted-foreground text-sm">Returns all disposition categories for the client/pathway.</p>
+                </div>
+                <div>
+                  <p className="text-foreground text-sm font-medium">POST /api/disposition-categories</p>
+                  <p className="text-muted-foreground text-sm mb-2">Create a new disposition category.</p>
+                  <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`{
+  "name": "connected",
+  "displayName": "Connected",
+  "description": "Call where the patient or caregiver was reached"
+}`}
+                  </pre>
+                </div>
+                <div>
+                  <p className="text-foreground text-sm font-medium">PUT /api/disposition-categories/:id</p>
+                  <p className="text-muted-foreground text-sm">Update an existing disposition category.</p>
+                </div>
+                <div>
+                  <p className="text-foreground text-sm font-medium">DELETE /api/disposition-categories/:id</p>
+                  <p className="text-muted-foreground text-sm">Permanently deletes a disposition category.</p>
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">Disposition Details</h3>
+              <div className="space-y-4">
+                <div>
+                  <p className="text-foreground text-sm font-medium">GET /api/disposition-details</p>
+                  <p className="text-muted-foreground text-sm">Returns all disposition details for the client/pathway.</p>
+                </div>
+                <div>
+                  <p className="text-foreground text-sm font-medium">POST /api/disposition-details</p>
+                  <p className="text-muted-foreground text-sm mb-2">Create a new disposition detail within a category.</p>
+                  <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`{
+  "categoryId": 1,
+  "name": "completed_interaction",
+  "displayName": "Completed Interaction",
+  "description": "Full conversation completed with the patient"
+}`}
+                  </pre>
+                </div>
+                <div>
+                  <p className="text-foreground text-sm font-medium">PUT /api/disposition-details/:id</p>
+                  <p className="text-muted-foreground text-sm">Update an existing disposition detail.</p>
+                </div>
+                <div>
+                  <p className="text-foreground text-sm font-medium">DELETE /api/disposition-details/:id</p>
+                  <p className="text-muted-foreground text-sm">Permanently deletes a disposition detail.</p>
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">Disposition in Analysis Response</h3>
+              <p className="text-muted-foreground text-sm mb-2">When disposition categories are configured, the analysis response includes a <code className="text-primary">disposition</code> field:</p>
+              <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`"disposition": {
+  "disposition_category": "connected",
+  "disposition_category_display": "Connected",
+  "disposition_detail": "completed_interaction",
+  "disposition_detail_display": "Completed Interaction",
+  "confidence": "high",
+  "evidence": "Patient answered the call and engaged in full conversation.",
+  "detail": "The patient was reached and all assessment questions were addressed."
+}`}
+              </pre>
+              <p className="text-muted-foreground text-sm mt-2">Stored in <code className="text-primary">call_information.call_dispositions</code> — one row per call.</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/60 shadow-sm mb-6">
+          <CardHeader>
+            <CardTitle className="text-foreground flex items-center gap-2">
+              <Star className="h-5 w-5 text-primary" />
+              Call Reviews
+              <Badge className="bg-blue-500/10 text-blue-600 border-blue-500/20 ml-2">Reviews</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <p className="text-muted-foreground">Manage review workflows for processed calls. Includes configurable review items, per-call review statuses, review submissions, and a review list analytics endpoint.</p>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">Review Items CRUD (scoped by clientPathwayId)</h3>
+              <p className="text-muted-foreground text-sm mb-3">Configure the review criteria that reviewers evaluate for each call.</p>
+              <div className="space-y-4">
+                <div>
+                  <p className="text-foreground text-sm font-medium">GET /api/call-review-items</p>
+                  <p className="text-muted-foreground text-sm">Returns all review items for the client/pathway.</p>
+                </div>
+                <div>
+                  <p className="text-foreground text-sm font-medium">POST /api/call-review-items</p>
+                  <p className="text-muted-foreground text-sm mb-2">Create a new review item.</p>
+                  <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`{
+  "name": "summary_accuracy",
+  "displayName": "Summary Accuracy",
+  "description": "Does the AI summary accurately reflect the call?",
+  "category": "Quality",
+  "isActive": true,
+  "displayOrder": 0
+}`}
+                  </pre>
+                </div>
+                <div>
+                  <p className="text-foreground text-sm font-medium">PUT /api/call-review-items/:id</p>
+                  <p className="text-muted-foreground text-sm">Update an existing review item. Partial updates supported.</p>
+                </div>
+                <div>
+                  <p className="text-foreground text-sm font-medium">DELETE /api/call-review-items/:id</p>
+                  <p className="text-muted-foreground text-sm">Permanently deletes a review item.</p>
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">Per-Call Reviews</h3>
+              <div className="space-y-4">
+                <div>
+                  <p className="text-foreground text-sm font-medium">GET /api/calls/:callId/reviews</p>
+                  <p className="text-muted-foreground text-sm">Returns all review submissions for a specific call.</p>
+                </div>
+                <div>
+                  <p className="text-foreground text-sm font-medium">POST /api/calls/:callId/reviews</p>
+                  <p className="text-muted-foreground text-sm mb-2">Submit review scores for a call.</p>
+                  <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`{
+  "reviews": [
+    {
+      "reviewItemId": 1,
+      "reviewItemName": "summary_accuracy",
+      "reviewItemDisplayName": "Summary Accuracy",
+      "status": "checked",
+      "notes": "",
+      "reviewedBy": "john.doe"
+    },
+    {
+      "reviewItemId": 2,
+      "reviewItemName": "empathy",
+      "reviewItemDisplayName": "Empathy",
+      "status": "flagged",
+      "notes": "Needs improvement",
+      "reviewedBy": "john.doe"
+    }
+  ]
+}`}
+                  </pre>
+                  <p className="text-muted-foreground text-sm mt-2">Status values: <code className="text-primary">checked</code>, <code className="text-primary">flagged</code>, <code className="text-primary">na</code>, <code className="text-primary">unchecked</code>.</p>
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">Review Status & Meta</h3>
+              <div className="space-y-4">
+                <div>
+                  <p className="text-foreground text-sm font-medium">PUT /api/calls/:callId/review-status</p>
+                  <p className="text-muted-foreground text-sm mb-2">Set the review status for a call.</p>
+                  <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`{
+  "reviewStatus": "reviewed"
+}`}
+                  </pre>
+                  <p className="text-muted-foreground text-sm mt-2">Valid values: <code className="text-primary">not_reviewed</code>, <code className="text-primary">in_progress</code>, <code className="text-primary">reviewed</code>, <code className="text-primary">flagged</code>.</p>
+                </div>
+                <div>
+                  <p className="text-foreground text-sm font-medium">PUT /api/calls/:callId/review-meta</p>
+                  <p className="text-muted-foreground text-sm mb-2">Update review metadata — supports reviewStatus, notes, and tags in a single call.</p>
+                  <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`{
+  "reviewStatus": "flagged",
+  "notes": "This call needs follow-up",
+  "tags": ["escalation", "urgent"]
+}`}
+                  </pre>
+                </div>
+                <div>
+                  <p className="text-foreground text-sm font-medium">GET /api/calls/review-statuses</p>
+                  <p className="text-muted-foreground text-sm">Returns review statuses for multiple calls. Pass <code className="text-primary">callIds</code> as a comma-separated query param.</p>
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">Review List (Analytics)</h3>
+              <div>
+                <p className="text-foreground text-sm font-medium">GET /api/calls/review-list</p>
+                <p className="text-muted-foreground text-sm mb-2">Returns a list of calls with their review data for the review analytics dashboard. Supports pagination and filtering.</p>
+                <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-2">
+                  <p className="text-foreground"><span className="text-primary font-semibold">limit</span> <span className="text-muted-foreground">(query, optional)</span> — Max rows to return (default 200).</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/60 shadow-sm mb-6">
+          <CardHeader>
+            <CardTitle className="text-foreground flex items-center gap-2">
+              <RefreshCw className="h-5 w-5 text-primary" />
+              Call Reprocessing
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">POST /api/calls/:callId/reprocess</h3>
+              <p className="text-muted-foreground text-sm mb-2">Reprocess an existing call through the current Gemini prompt configuration. Useful when observations, dispositions, or prompt settings have changed and you want to re-extract data for a specific call.</p>
+              <p className="text-muted-foreground text-sm">Deletes existing analysis data (observations, Q&A pairs, barriers, call QA, dispositions) and reprocesses from the stored transcript using the current tenant configuration. Returns the updated analysis.</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/60 shadow-sm mb-6">
+          <CardHeader>
+            <CardTitle className="text-foreground flex items-center gap-2">
               <FileText className="h-5 w-5 text-primary" />
               PDF Export
               <Badge className="bg-primary/10 text-primary border-primary/20 ml-2">Feature</Badge>
@@ -1659,6 +1992,53 @@ export default function Reference() {
             <Separator />
 
             <div>
+              <h3 className="text-foreground font-semibold mb-2">POST /api/batch/delete-pending</h3>
+              <p className="text-muted-foreground text-sm">Deletes all pending (unprocessed) batch items from the batch processing table.</p>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">POST /api/batch/trigger-job</h3>
+              <p className="text-muted-foreground text-sm mb-2">Triggers a background batch processing job that processes all pending items sequentially. Returns a job ID for progress tracking. Calls are processed one at a time to avoid BigQuery concurrent DML conflicts.</p>
+              <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-2 mb-3">
+                <p className="text-foreground"><span className="text-primary font-semibold">limit</span> <span className="text-muted-foreground">(body, optional)</span> — Max items to process (default: all pending).</p>
+              </div>
+              <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`// Response
+{
+  "status": "started",
+  "jobId": "batch_1712345678_abc123",
+  "total": 25,
+  "message": "Processing 25 items in background"
+}`}
+              </pre>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">GET /api/batch/job-status</h3>
+              <p className="text-muted-foreground text-sm mb-2">Returns live progress for a running batch job. Poll this endpoint to track completion.</p>
+              <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-2 mb-3">
+                <p className="text-foreground"><span className="text-primary font-semibold">jobId</span> <span className="text-muted-foreground">(query, required)</span> — The job ID returned by trigger-job.</p>
+              </div>
+              <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`{
+  "status": "running",
+  "jobId": "batch_1712345678_abc123",
+  "total": 25,
+  "completed": 12,
+  "failed": 1,
+  "currentCallId": "5ff863af-c06a-..."
+}`}
+              </pre>
+              <p className="text-muted-foreground text-sm mt-2">Status values: <code className="text-primary">running</code>, <code className="text-primary">completed</code>, <code className="text-primary">failed</code>. Returns 404 if job not found (expired after 30min TTL or server restart).</p>
+            </div>
+
+            <Separator />
+
+            <div>
               <h3 className="text-foreground font-semibold mb-2">BigQuery Tables Used</h3>
               <div className="bg-muted/30 border border-border/50 p-4 rounded-lg text-sm space-y-2">
                 <p className="text-foreground"><span className="text-primary font-semibold">Bland.calls</span> — Source call data (call_id, created_at, call_length, answered_by, concatenated_transcript)</p>
@@ -1669,6 +2049,8 @@ export default function Reference() {
                 <p className="text-foreground"><span className="text-primary font-semibold">call_information.call_observations</span> — Output: one row per observation per call</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">call_information.call_qa_pairs</span> — Output: one row per Q&A exchange per call</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">call_information.barriers</span> — Output: one row per identified barrier per call (barrier, context, category, severity, evidence, observation linkage)</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">call_information.call_qa_results</span> — Output: one row per Call QA assessment per call</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">call_information.call_dispositions</span> — Output: one row per call with disposition classification (category, detail, confidence, evidence)</p>
               </div>
             </div>
           </CardContent>

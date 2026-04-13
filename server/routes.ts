@@ -1084,6 +1084,8 @@ export async function registerRoutes(
       client: z.string().min(1, "Client is required"),
       pathway: z.string().min(1, "Pathway is required"),
       description: z.string().optional().default(""),
+      gcp_project_id: z.string().optional().default(""),
+      secret_key: z.string().optional().default(""),
     }).safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: parsed.error.errors.map(e => e.message).join(", ") });
@@ -1103,6 +1105,8 @@ export async function registerRoutes(
       client: z.string().min(1).optional(),
       pathway: z.string().min(1).optional(),
       description: z.string().optional(),
+      gcp_project_id: z.string().optional(),
+      secret_key: z.string().optional(),
     }).safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: parsed.error.errors.map(e => e.message).join(", ") });

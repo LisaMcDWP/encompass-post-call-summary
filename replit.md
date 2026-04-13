@@ -20,7 +20,7 @@ A full-stack application that provides a Gemini-powered transcript analysis API.
 - Call Dispositions (two-level: Category → Detail)
 
 ### How it works:
-- `client_pathway` table stores multiple entries (id, client, pathway, description)
+- `client_pathway` table stores multiple entries (id, client, pathway, description, gcp_project_id, secret_key)
 - Config tables (`observations`, `context_parameters`, `settings`, `call_qa_prompts`, `disposition_categories`, `disposition_details`) all have a `client_pathway_id` column
 - All config API endpoints require `clientPathwayId` as a query param (GET/DELETE) or body param (POST/PUT)
 - Frontend uses React Context (`ClientPathwayContext`) with a sidebar dropdown selector
@@ -153,7 +153,7 @@ Returns service connectivity status.
 
 ## BigQuery Schema
 - Dataset: `call_information`
-- Table: `client_pathway` — Client and pathway configurations (id, client, pathway, description)
+- Table: `client_pathway` — Client and pathway configurations (id, client, pathway, description, gcp_project_id, secret_key)
 - Table: `call_info` — One row per API call (call_id, care_flow_id, processed_datetime, source_type, source_id, processed_at, processing_time_ms, prompt_version, prompt_version_date, context_values JSON, transcript_length, summary, follow_up_areas, transition_status, prompt_tokens, completion_tokens, total_tokens, estimated_cost, status, error_message, request_body, client, pathway)
 - Table: `call_observations` — One row per observation per call
 - Table: `call_qa_pairs` — One row per Q&A exchange per call
@@ -171,8 +171,8 @@ Returns service connectivity status.
   - Fields: batch_id, bland_call_id, transcript, source_type, created_at, status (pending/processing/completed/failed), error_message, result_call_id, processed_at, batch_label
 - **Source data**: `Bland.calls` table (historical call transcripts)
 - **Flow**: Search Bland calls → select → load to batch table (optionally fetching Awell known context per care flow) → process (runs each through extraction API with current prompt/observations/context)
-- **API endpoints**: `GET /api/batch/bland-calls`, `POST /api/batch/load`, `GET /api/batch/items`, `GET /api/batch/summary`, `POST /api/batch/process`, `GET /api/batch/job-status`, `POST /api/batch/reset-failed`
-- **Background processing**: `POST /api/batch/process` responds immediately with a `jobId` and processes all requested calls in the background (5 concurrent). Frontend polls `GET /api/batch/job-status?jobId=...` every 2s for live progress (completed/failed/total counts). Progress bar shown in UI. Job state kept in memory for 30min after completion.
+- **API endpoints**: `GET /api/batch/bland-calls`, `POST /api/batch/load`, `GET /api/batch/items`, `GET /api/batch/summary`, `POST /api/batch/process`, `POST /api/batch/trigger-job`, `GET /api/batch/job-status`, `POST /api/batch/reset-failed`, `POST /api/batch/delete-pending`, `POST /api/batch/recreate`
+- **Background processing**: `POST /api/batch/trigger-job` starts a background batch job (sequential to avoid BigQuery concurrent DML conflicts). Returns a `jobId`. Frontend polls `GET /api/batch/job-status?jobId=...` every 2s for live progress (completed/failed/total counts, elapsed time, ETA). Progress bar shown in UI. Job state kept in memory for 30min after completion.
 - **Cloud Run Job**: `server/batch-job.ts` + `Dockerfile.batch` — standalone job that processes pending batch items
 - **UI**: `/batch` page in Analytics section
 - **Safety**: Parameterized SQL, atomic claim semantics (pending→processing prevents duplicate work), status validation
