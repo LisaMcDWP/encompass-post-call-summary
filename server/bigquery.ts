@@ -1069,7 +1069,13 @@ export async function getCallInfoList(limit = 100, targetProjectId?: string): Pr
     ORDER BY processed_at DESC
     LIMIT @limit
   `;
-  const [rows] = await client.query({ query, params: { limit }, location: "US" });
+  let rows: any[];
+  try {
+    [rows] = await client.query({ query, params: { limit }, location: "US" });
+  } catch (err: any) {
+    if (err.message?.includes("Not found: Table")) return [];
+    throw err;
+  }
   const knownNonContext = new Set(["source_id", "source_type", "source_text", "care_flow_id", "processed_datetime", "context", "batch_id", "bland_call_id", "client", "pathway"]);
   return (rows as CallInfoRow[]).map(row => {
     let contextValues: Record<string, string> | null = null;
@@ -1344,8 +1350,13 @@ export async function queryBlandCalls(filters: {
     LIMIT ${rowLimit}
   `;
 
-  const [rows] = await client.query({ query, params, location: "US" });
-  return rows as any[];
+  try {
+    const [rows] = await client.query({ query, params, location: "US" });
+    return rows as any[];
+  } catch (err: any) {
+    if (err.message?.includes("Not found: Table") || err.message?.includes("Not found: Dataset")) return [];
+    throw err;
+  }
 }
 
 export async function getDistinctTags(targetProjectId?: string): Promise<string[]> {
@@ -1356,8 +1367,13 @@ export async function getDistinctTags(targetProjectId?: string): Promise<string[
     WHERE tag IS NOT NULL AND tag != ''
     ORDER BY tag
   `;
-  const [rows] = await client.query({ query, location: "US" });
-  return (rows as any[]).map(r => r.tag);
+  try {
+    const [rows] = await client.query({ query, location: "US" });
+    return (rows as any[]).map(r => r.tag);
+  } catch (err: any) {
+    if (err.message?.includes("Not found: Table") || err.message?.includes("Not found: Dataset")) return [];
+    throw err;
+  }
 }
 
 export async function fetchAwellContextForCareFlows(
@@ -1575,12 +1591,17 @@ export async function getBatchItems(filters?: {
     LIMIT ${rowLimit}
   `;
 
-  const [rows] = await client.query({ query, params, location: "US" });
-  return (rows as any[]).map(row => ({
-    ...row,
-    created_at: extractTimestamp(row.created_at),
-    processed_at: extractTimestamp(row.processed_at),
-  }));
+  try {
+    const [rows] = await client.query({ query, params, location: "US" });
+    return (rows as any[]).map(row => ({
+      ...row,
+      created_at: extractTimestamp(row.created_at),
+      processed_at: extractTimestamp(row.processed_at),
+    }));
+  } catch (err: any) {
+    if (err.message?.includes("Not found: Table")) return [];
+    throw err;
+  }
 }
 
 export async function getBatchSummary(targetProjectId?: string): Promise<{
