@@ -911,12 +911,24 @@ export async function getCallReviewStatusesBulk(callIds: string[], targetProject
   }
 }
 
-export async function getCallReviewList(limit = 200, targetProjectId?: string): Promise<any[]> {
+export async function getCallReviewList(limit = 200, targetProjectId?: string, obsFilter?: { name: string; value?: string }): Promise<any[]> {
   try {
     await ensureCallReviewStatusesTable(targetProjectId);
     const client = getOutputBigQueryClient(targetProjectId);
     const ciTable = `\`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\``;
     const crsTable = `\`${client.projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\``;
+    const obsTable = `\`${client.projectId}.${DATASET_ID}.${OBSERVATIONS_TABLE_ID}\``;
+    const params: Record<string, any> = { limit };
+    let obsJoin = "";
+    let obsWhere = "";
+    if (obsFilter?.name) {
+      obsJoin = `INNER JOIN ${obsTable} obs ON c.call_id = obs.call_id AND obs.observation_name = @obsName`;
+      params.obsName = obsFilter.name;
+      if (obsFilter.value) {
+        obsWhere = `AND obs.observation_value = @obsValue`;
+        params.obsValue = obsFilter.value;
+      }
+    }
     const query = `
       WITH latest_calls AS (
         SELECT *, ROW_NUMBER() OVER (PARTITION BY call_id ORDER BY processed_at DESC) AS rn
@@ -927,18 +939,19 @@ export async function getCallReviewList(limit = 200, targetProjectId?: string): 
           ROW_NUMBER() OVER (PARTITION BY call_id ORDER BY updated_at DESC) AS rn
         FROM ${crsTable}
       )
-      SELECT
+      SELECT DISTINCT
         c.call_id, c.source_id, c.source_type, c.call_date, c.processed_at,
         c.summary, c.status, c.client, c.pathway, c.context_values,
         c.transcript_length, c.error_message,
         r.review_status, r.tags, r.notes, r.updated_at AS review_updated_at
       FROM latest_calls c
       LEFT JOIN latest_reviews r ON c.call_id = r.call_id AND r.rn = 1
-      WHERE c.rn = 1
+      ${obsJoin}
+      WHERE c.rn = 1 ${obsWhere}
       ORDER BY c.processed_at DESC
       LIMIT @limit
     `;
-    const [rows] = await client.query({ query, params: { limit }, location: "US" });
+    const [rows] = await client.query({ query, params, location: "US" });
     return (rows as any[]).map(row => {
       let parsedTags: string[] = [];
       try { if (row.tags) parsedTags = JSON.parse(row.tags); } catch {}
@@ -1061,17 +1074,32 @@ function extractTimestamp(val: { value: string } | string | null | undefined): s
   return String(val);
 }
 
-export async function getCallInfoList(limit = 100, targetProjectId?: string): Promise<any[]> {
+export async function getCallInfoList(limit = 100, targetProjectId?: string, obsFilter?: { name: string; value?: string }): Promise<any[]> {
   const client = getOutputBigQueryClient(targetProjectId);
+  const obsTable = `\`${client.projectId}.${DATASET_ID}.${OBSERVATIONS_TABLE_ID}\``;
+  const ciTable = `\`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\``;
+  const params: Record<string, any> = { limit };
+  let obsJoin = "";
+  let obsWhere = "";
+  if (obsFilter?.name) {
+    obsJoin = `INNER JOIN ${obsTable} obs ON ci.call_id = obs.call_id AND obs.observation_name = @obsName`;
+    params.obsName = obsFilter.name;
+    if (obsFilter.value) {
+      obsWhere = `AND obs.observation_value = @obsValue`;
+      params.obsValue = obsFilter.value;
+    }
+  }
   const query = `
-    SELECT *
-    FROM \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\`
-    ORDER BY processed_at DESC
+    SELECT DISTINCT ci.*
+    FROM ${ciTable} ci
+    ${obsJoin}
+    WHERE 1=1 ${obsWhere}
+    ORDER BY ci.processed_at DESC
     LIMIT @limit
   `;
   let rows: any[];
   try {
-    [rows] = await client.query({ query, params: { limit }, location: "US" });
+    [rows] = await client.query({ query, params, location: "US" });
   } catch (err: any) {
     if (err.message?.includes("Not found: Table")) return [];
     throw err;

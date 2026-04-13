@@ -1201,15 +1201,44 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
   );
 }
 
+interface ObsConfigItem {
+  name: string;
+  displayName: string;
+  valueType: string;
+  value: { label: string }[] | string[];
+}
+
 export default function CallHistory() {
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
+  const [obsNameFilter, setObsNameFilter] = useState("");
+  const [obsValueFilter, setObsValueFilter] = useState("");
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { selectedCPId } = useClientPathway();
+
+  const { data: obsOptions } = useQuery<ObsConfigItem[]>({
+    queryKey: ["/api/observations-filter-options", selectedCPId],
+    queryFn: async () => {
+      const res = await fetch(`/api/observations?clientPathwayId=${selectedCPId || 1}`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  const selectedObs = obsOptions?.find(o => o.name === obsNameFilter);
+  const obsValueOptions: string[] = selectedObs
+    ? (Array.isArray(selectedObs.value)
+        ? selectedObs.value.map((v: any) => typeof v === "object" ? v.label : v)
+        : [])
+    : [];
 
   const { data: calls, isLoading, isFetching, refetch } = useQuery<CallInfo[]>({
-    queryKey: ["/api/calls"],
+    queryKey: ["/api/calls", obsNameFilter, obsValueFilter],
     queryFn: async () => {
-      const res = await fetch("/api/calls");
+      const params = new URLSearchParams();
+      if (obsNameFilter) params.set("obsName", obsNameFilter);
+      if (obsValueFilter) params.set("obsValue", obsValueFilter);
+      const res = await fetch(`/api/calls?${params}`);
       if (!res.ok) throw new Error("Failed to load calls");
       return res.json();
     },
@@ -1267,6 +1296,56 @@ export default function CallHistory() {
           <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${isFetching ? "animate-spin" : ""}`} />
           {isFetching ? "Refreshing..." : "Refresh"}
         </Button>
+      </div>
+
+      <div className="mb-4 flex items-end gap-3 flex-wrap">
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">Observation</label>
+          <select
+            value={obsNameFilter}
+            onChange={(e) => { setObsNameFilter(e.target.value); setObsValueFilter(""); }}
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm w-52"
+            data-testid="select-obs-name-filter"
+          >
+            <option value="">All Observations</option>
+            {obsOptions?.map(o => (
+              <option key={o.name} value={o.name}>{o.displayName}</option>
+            ))}
+          </select>
+        </div>
+        {obsNameFilter && obsValueOptions.length > 0 && (
+          <div>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">Value</label>
+            <select
+              value={obsValueFilter}
+              onChange={(e) => setObsValueFilter(e.target.value)}
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm w-44"
+              data-testid="select-obs-value-filter"
+            >
+              <option value="">Any Value</option>
+              {obsValueOptions.map(v => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        {(obsNameFilter || obsValueFilter) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => { setObsNameFilter(""); setObsValueFilter(""); }}
+            className="text-muted-foreground"
+            data-testid="button-clear-obs-filter"
+          >
+            <X className="h-3.5 w-3.5 mr-1" />
+            Clear Filter
+          </Button>
+        )}
+        {obsNameFilter && (
+          <span className="text-xs text-muted-foreground ml-auto">
+            {isFetching ? "Filtering..." : `${calls?.length ?? 0} calls`}
+          </span>
+        )}
       </div>
 
       {isLoading && (

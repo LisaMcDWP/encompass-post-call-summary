@@ -961,7 +961,10 @@ export async function registerRoutes(
     try {
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 200;
       const targetProjectId = await resolveTargetProjectId(Number(req.query.clientPathwayId) || null);
-      const list = await getCallReviewList(limit, targetProjectId);
+      const obsName = req.query.obsName as string | undefined;
+      const obsValue = req.query.obsValue as string | undefined;
+      const obsFilter = obsName ? { name: obsName, value: obsValue } : undefined;
+      const list = await getCallReviewList(limit, targetProjectId, obsFilter);
       res.json(list);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -1353,7 +1356,10 @@ export async function registerRoutes(
       const rawLimit = parseInt(req.query.limit as string) || 100;
       const limit = Math.max(1, Math.min(rawLimit, 500));
       const targetProjectId = await resolveTargetProjectId(Number(req.query.clientPathwayId) || null);
-      const calls = await getCallInfoList(limit, targetProjectId);
+      const obsName = req.query.obsName as string | undefined;
+      const obsValue = req.query.obsValue as string | undefined;
+      const obsFilter = obsName ? { name: obsName, value: obsValue } : undefined;
+      const calls = await getCallInfoList(limit, targetProjectId, obsFilter);
       res.json(calls);
     } catch (error: any) {
       res.status(500).json({ message: error.message });

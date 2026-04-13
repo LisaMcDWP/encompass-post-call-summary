@@ -61,16 +61,44 @@ function truncate(str: string | null, max: number): string {
   return str.length > max ? str.slice(0, max) + "..." : str;
 }
 
+interface ObsConfigItem {
+  name: string;
+  displayName: string;
+  valueType: string;
+  value: { label: string }[] | string[];
+}
+
 export default function CallReviews() {
   const [, navigate] = useLocation();
   const [statusFilter, setStatusFilter] = useState<ReviewStatusFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const [obsNameFilter, setObsNameFilter] = useState("");
+  const [obsValueFilter, setObsValueFilter] = useState("");
+
+  const { data: obsOptions } = useQuery<ObsConfigItem[]>({
+    queryKey: ["/api/observations-review-filter"],
+    queryFn: async () => {
+      const res = await fetch("/api/observations?clientPathwayId=1");
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  const selectedObs = obsOptions?.find(o => o.name === obsNameFilter);
+  const obsValueOptions: string[] = selectedObs
+    ? (Array.isArray(selectedObs.value)
+        ? selectedObs.value.map((v: any) => typeof v === "object" ? v.label : v)
+        : [])
+    : [];
 
   const { data: items, isLoading } = useQuery<CallReviewItem[]>({
-    queryKey: ["/api/calls/review-list"],
+    queryKey: ["/api/calls/review-list", obsNameFilter, obsValueFilter],
     queryFn: async () => {
-      const res = await fetch("/api/calls/review-list");
+      const params = new URLSearchParams();
+      if (obsNameFilter) params.set("obsName", obsNameFilter);
+      if (obsValueFilter) params.set("obsValue", obsValueFilter);
+      const res = await fetch(`/api/calls/review-list?${params}`);
       if (!res.ok) throw new Error("Failed to load review list");
       return res.json();
     },
@@ -165,8 +193,8 @@ export default function CallReviews() {
         })}
       </div>
 
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1">
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             value={searchQuery}
@@ -176,6 +204,45 @@ export default function CallReviews() {
             data-testid="input-search"
           />
         </div>
+        <div>
+          <select
+            value={obsNameFilter}
+            onChange={(e) => { setObsNameFilter(e.target.value); setObsValueFilter(""); }}
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm w-48"
+            data-testid="select-obs-name-filter"
+          >
+            <option value="">All Observations</option>
+            {obsOptions?.map(o => (
+              <option key={o.name} value={o.name}>{o.displayName}</option>
+            ))}
+          </select>
+        </div>
+        {obsNameFilter && obsValueOptions.length > 0 && (
+          <div>
+            <select
+              value={obsValueFilter}
+              onChange={(e) => setObsValueFilter(e.target.value)}
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm w-40"
+              data-testid="select-obs-value-filter"
+            >
+              <option value="">Any Value</option>
+              {obsValueOptions.map(v => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        {(obsNameFilter || obsValueFilter) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => { setObsNameFilter(""); setObsValueFilter(""); }}
+            className="text-muted-foreground h-9"
+          >
+            <X className="h-3.5 w-3.5 mr-1" />
+            Clear
+          </Button>
+        )}
         <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as ReviewStatusFilter)}>
           <SelectTrigger className="w-[180px] h-9" data-testid="select-status-filter">
             <div className="flex items-center gap-2">
@@ -201,7 +268,7 @@ export default function CallReviews() {
         </Select>
       </div>
 
-      {(tagFilter || statusFilter !== "all") && (
+      {(tagFilter || statusFilter !== "all" || obsNameFilter) && (
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs text-muted-foreground">Active filters:</span>
           {statusFilter !== "all" && (
@@ -228,8 +295,21 @@ export default function CallReviews() {
               <X className="h-3 w-3 ml-1" />
             </Badge>
           )}
+          {obsNameFilter && (
+            <Badge
+              variant="outline"
+              className="text-xs cursor-pointer bg-purple-50 text-purple-700 border-purple-200"
+              onClick={() => { setObsNameFilter(""); setObsValueFilter(""); }}
+              data-testid="badge-active-obs-filter"
+            >
+              <Filter className="h-3 w-3 mr-1" />
+              {obsOptions?.find(o => o.name === obsNameFilter)?.displayName || obsNameFilter}
+              {obsValueFilter && `: ${obsValueFilter}`}
+              <X className="h-3 w-3 ml-1" />
+            </Badge>
+          )}
           <button
-            onClick={() => { setStatusFilter("all"); setTagFilter(null); }}
+            onClick={() => { setStatusFilter("all"); setTagFilter(null); setObsNameFilter(""); setObsValueFilter(""); }}
             className="text-[11px] text-muted-foreground hover:text-foreground underline ml-1"
             data-testid="button-clear-all-filters"
           >
