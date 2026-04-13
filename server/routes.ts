@@ -1512,6 +1512,7 @@ export async function registerRoutes(
       const batchDispCats = await storage.getDispositionCategories(resolvedBatchCpId);
       const batchDispDets = await storage.getDispositionDetails(resolvedBatchCpId);
       const batchDispConfig: DispositionConfig = { categories: batchDispCats, details: batchDispDets };
+      console.log(`Batch job: disposition config loaded — ${batchDispCats.length} categories, ${batchDispDets.length} details for CP ${resolvedBatchCpId}`);
       const { prompt: _p, promptVersion, promptVersionDate } = await getPromptWithVersion(resolvedBatchCpId);
 
       const jobId = `batch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -1603,7 +1604,10 @@ export async function registerRoutes(
               await insertCallBarriers(callId, analysis.barriers);
               await insertCallQAResults(callId, analysis.call_qa || []);
               if (analysis.disposition) {
+                console.log(`Batch job ${jobId}: ${callId} has disposition: ${analysis.disposition.disposition_category} / ${analysis.disposition.disposition_detail}`);
                 await insertCallDisposition(callId, analysis.disposition);
+              } else {
+                console.log(`Batch job ${jobId}: ${callId} — NO disposition returned by Gemini`);
               }
               await updateBatchItemStatus(callId, "completed", callId);
               jobState.completed++;
