@@ -46,7 +46,8 @@ async function ensureSettingsTable(): Promise<void> {
     await client.query({
       query: `CREATE TABLE IF NOT EXISTS \`${fullTable}\` (
         key STRING NOT NULL,
-        value STRING NOT NULL
+        value STRING NOT NULL,
+        client_pathway_id INT64
       )`,
     });
     console.log(`BigQuery table ${DATASET_ID}.${SETTINGS_TABLE_ID} ready.`);
@@ -97,7 +98,8 @@ async function ensureContextParamsTable(): Promise<void> {
         display_order INT64 NOT NULL,
         awell_data_point_key STRING,
         awell_mapping_type STRING,
-        awell_patient_profile_field STRING
+        awell_patient_profile_field STRING,
+        client_pathway_id INT64
       )`,
     });
     console.log(`BigQuery table ${DATASET_ID}.${CONTEXT_PARAMS_TABLE_ID} ready.`);
@@ -148,12 +150,14 @@ async function ensureObservationsTable(): Promise<void> {
         id INT64 NOT NULL,
         name STRING NOT NULL,
         display_name STRING NOT NULL,
+        description STRING,
         domain STRING NOT NULL,
         display_order INT64 NOT NULL,
         value_type STRING NOT NULL,
         value STRING,
         is_active BOOL NOT NULL,
-        prompt_guidance STRING
+        prompt_guidance STRING,
+        client_pathway_id INT64
       )`,
     });
     console.log(`BigQuery table ${DATASET_ID}.${TABLE_ID} ready.`);
@@ -205,7 +209,8 @@ async function ensureCallQAPromptsTable(): Promise<void> {
         response_type STRING DEFAULT 'enum',
         response_options STRING,
         is_active BOOL DEFAULT TRUE,
-        display_order INT64 DEFAULT 0
+        display_order INT64 DEFAULT 0,
+        client_pathway_id INT64
       )`,
     });
     console.log(`BigQuery table ${DATASET_ID}.${CALL_QA_PROMPTS_TABLE_ID} ready.`);
