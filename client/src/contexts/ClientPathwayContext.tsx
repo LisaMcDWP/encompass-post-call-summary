@@ -5,6 +5,7 @@ export interface ClientPathway {
   client: string;
   pathway: string;
   description?: string;
+  gcp_project_id?: string;
 }
 
 interface ClientPathwayContextType {

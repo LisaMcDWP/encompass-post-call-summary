@@ -480,7 +480,7 @@ export class BigQueryStorage implements IStorage {
     const client = getBigQueryClient();
     const table = this.getClientPathwayTable();
     const [rows] = await client.query({ query: `SELECT * FROM ${table} ORDER BY id ASC` });
-    return rows.map((row: any) => ({ id: row.id, client: row.client, pathway: row.pathway, description: row.description || "" }));
+    return rows.map((row: any) => ({ id: row.id, client: row.client, pathway: row.pathway, description: row.description || "", gcp_project_id: row.gcp_project_id || "" }));
   }
 
   async getClientPathway(id: number): Promise<ClientPathway | null> {
@@ -490,7 +490,7 @@ export class BigQueryStorage implements IStorage {
     const [rows] = await client.query({ query: `SELECT * FROM ${table} WHERE id = @id`, params: { id } });
     if (rows.length === 0) return null;
     const row = rows[0] as any;
-    return { id: row.id, client: row.client, pathway: row.pathway, description: row.description || "" };
+    return { id: row.id, client: row.client, pathway: row.pathway, description: row.description || "", gcp_project_id: row.gcp_project_id || "" };
   }
 
   async createClientPathway(data: InsertClientPathway): Promise<ClientPathway> {
@@ -498,9 +498,9 @@ export class BigQueryStorage implements IStorage {
     const client = getBigQueryClient();
     const table = this.getClientPathwayTable();
     const id = await this.getNextIdForTable(table);
-    const row = { id, client: data.client, pathway: data.pathway, description: data.description || "" };
+    const row = { id, client: data.client, pathway: data.pathway, description: data.description || "", gcp_project_id: data.gcp_project_id || "" };
     await client.query({
-      query: `INSERT INTO ${table} (id, client, pathway, description) VALUES (@id, @client, @pathway, @description)`,
+      query: `INSERT INTO ${table} (id, client, pathway, description, gcp_project_id) VALUES (@id, @client, @pathway, @description, @gcp_project_id)`,
       params: row,
     });
     return row;
@@ -517,6 +517,7 @@ export class BigQueryStorage implements IStorage {
     if (data.client !== undefined) { setClauses.push("client = @client"); params.client = data.client; }
     if (data.pathway !== undefined) { setClauses.push("pathway = @pathway"); params.pathway = data.pathway; }
     if (data.description !== undefined) { setClauses.push("description = @description"); params.description = data.description; }
+    if (data.gcp_project_id !== undefined) { setClauses.push("gcp_project_id = @gcp_project_id"); params.gcp_project_id = data.gcp_project_id; }
     if (setClauses.length > 0) {
       await client.query({ query: `UPDATE ${table} SET ${setClauses.join(", ")} WHERE id = @id`, params });
     }
@@ -1150,7 +1151,8 @@ async function ensureClientPathwayTable(): Promise<void> {
         id INT64 NOT NULL,
         client STRING NOT NULL,
         pathway STRING NOT NULL,
-        description STRING
+        description STRING,
+        gcp_project_id STRING
       )`,
     });
     console.log(`BigQuery table ${DATASET_ID}.${CLIENT_PATHWAY_TABLE_ID} ready.`);
@@ -1165,6 +1167,12 @@ async function ensureClientPathwayTable(): Promise<void> {
   try {
     await client.query({
       query: `ALTER TABLE \`${fullTable}\` ADD COLUMN IF NOT EXISTS description STRING`,
+    });
+  } catch {}
+
+  try {
+    await client.query({
+      query: `ALTER TABLE \`${fullTable}\` ADD COLUMN IF NOT EXISTS gcp_project_id STRING`,
     });
   } catch {}
 
