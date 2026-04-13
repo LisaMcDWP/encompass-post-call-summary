@@ -24,6 +24,7 @@ import CallStats from "@/pages/CallStats";
 import Dispositions from "@/pages/Dispositions";
 import ReviewItems from "@/pages/ReviewItems";
 import CallReviews from "@/pages/CallReviews";
+import Reference2 from "@/pages/Reference2";
 
 function Router() {
   return (
@@ -47,6 +48,7 @@ function Router() {
         <Route path="/batch" component={BatchProcessing} />
         <Route path="/product" component={ProductReference} />
         <Route path="/reference" component={Reference} />
+        <Route path="/reference2" component={Reference2} />
         <Route component={NotFound} />
       </Switch>
     </AppLayout>
