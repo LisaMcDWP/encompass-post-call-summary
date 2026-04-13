@@ -102,6 +102,40 @@ export default function BatchProcessing() {
   const [excludeTags, setExcludeTags] = useState<string[]>([]);
   const [processedFilter, setProcessedFilter] = useState<"unprocessed" | "processed" | "all">("unprocessed");
   const [useKnownContext, setUseKnownContext] = useState(true);
+  const [callIdInput, setCallIdInput] = useState("");
+  const [callIdSearching, setCallIdSearching] = useState(false);
+
+  async function handleCallIdLookup() {
+    const ids = callIdInput
+      .split(/[\n,]+/)
+      .map(s => s.trim())
+      .filter(Boolean);
+    if (ids.length === 0) {
+      toast({ title: "No call IDs", description: "Enter one or more Bland call IDs", variant: "destructive" });
+      return;
+    }
+    setCallIdSearching(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("callIds", ids.join(","));
+      params.set("processedFilter", "all");
+      if (selectedCPId) params.set("clientPathwayId", String(selectedCPId));
+      const res = await fetch(`/api/batch/bland-calls?${params}`);
+      if (!res.ok) throw new Error("Lookup failed");
+      const data = await res.json();
+      setSearchResults(data);
+      setSelectedCalls(new Set(data.map((c: BlandCall) => c.call_id)));
+      if (data.length === 0) {
+        toast({ title: "No results", description: `No Bland calls found for ${ids.length} ID(s)`, variant: "destructive" });
+      } else {
+        toast({ title: `Found ${data.length} call(s)`, description: "All found calls have been selected" });
+      }
+    } catch (err: any) {
+      toast({ title: "Lookup failed", description: err.message, variant: "destructive" });
+    } finally {
+      setCallIdSearching(false);
+    }
+  }
 
   const tagsQuery = useQuery<string[]>({
     queryKey: ["/api/batch/tags"],
@@ -654,6 +688,34 @@ export default function BatchProcessing() {
         </CardHeader>
         {showSearch && (
           <CardContent className="space-y-4">
+            <div className="border rounded-lg p-3 bg-muted/30 space-y-2">
+              <Label className="text-xs font-medium">Look Up by Call ID</Label>
+              <div className="flex gap-2 items-start">
+                <textarea
+                  value={callIdInput}
+                  onChange={(e) => setCallIdInput(e.target.value)}
+                  placeholder="Paste one or more Bland call IDs (comma or newline separated)"
+                  className="flex-1 min-h-[38px] max-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm resize-y"
+                  data-testid="input-call-id-lookup"
+                />
+                <Button
+                  onClick={handleCallIdLookup}
+                  disabled={callIdSearching || !callIdInput.trim()}
+                  className="bg-[#0098db] hover:bg-[#0098db]/90 shrink-0"
+                  data-testid="button-call-id-lookup"
+                >
+                  {callIdSearching ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Search className="h-4 w-4 mr-1" />}
+                  Look Up
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="border-t flex-1" />
+              <span className="text-xs text-muted-foreground">or search by filters</span>
+              <div className="border-t flex-1" />
+            </div>
+
             <div className="flex flex-wrap gap-3 items-end">
               <div>
                 <Label className="text-xs">Start Date</Label>
