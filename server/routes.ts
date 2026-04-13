@@ -36,6 +36,17 @@ async function getPromptWithVersion(clientPathwayId: number) {
   return { prompt, promptVersion: version, promptVersionDate: versionDate };
 }
 
+async function resolveTargetProjectId(cpIdInput?: number | null): Promise<string | undefined> {
+  let cpId = cpIdInput || null;
+  if (!cpId) {
+    const allCPs = await storage.getClientPathways();
+    if (allCPs.length > 0) cpId = allCPs[0].id;
+  }
+  if (!cpId) return undefined;
+  const cpRecord = await storage.getClientPathway(cpId);
+  return cpRecord?.gcp_project_id || undefined;
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -71,6 +82,9 @@ export async function registerRoutes(
     if (!source_text || typeof source_text !== "string" || source_text.trim().length === 0) {
       const processingTime = Date.now() - startTime;
       const logId = source_id || care_flow_id || `call_${randomUUID().slice(0, 12)}`;
+      const earlyTargetProjectId = await resolveTargetProjectId(
+        req.body.client_pathway_id ? Number(req.body.client_pathway_id) : null
+      );
       await insertCallInfo({
         callId: logId,
         processedAt: new Date().toISOString(),
@@ -78,7 +92,7 @@ export async function registerRoutes(
         processingTimeMs: processingTime,
         status: "error",
         errorMessage: "Missing or empty source_text",
-      });
+      }, earlyTargetProjectId);
 
       return res.status(400).json({
         status: "error",
@@ -89,6 +103,7 @@ export async function registerRoutes(
     const resolvedSourceId = source_id || `call_${randomUUID().slice(0, 12)}`;
     const analyzeProcessingId = randomUUID();
     const clientPathwayId = req.body.client_pathway_id ? Number(req.body.client_pathway_id) : null;
+    let targetProjectId: string | undefined;
 
     try {
       let cpId = clientPathwayId;
@@ -110,6 +125,7 @@ export async function registerRoutes(
       const cpRecord = await storage.getClientPathway(cpId);
       const resolvedClient = reqClient || cpRecord?.client || null;
       const resolvedPathway = reqPathway || cpRecord?.pathway || null;
+      targetProjectId = cpRecord?.gcp_project_id || undefined;
 
       const { prompt: _promptText, promptVersion, promptVersionDate } = await getPromptWithVersion(cpId);
       const activeObs = await storage.getActiveObservations(cpId);
@@ -174,14 +190,14 @@ export async function registerRoutes(
         responseJson: JSON.stringify(analysis),
         client: resolvedClient,
         pathway: resolvedPathway,
-      });
+      }, targetProjectId);
 
-      await insertCallObservations(resolvedSourceId, analysis.observations);
-      await insertCallQAPairs(resolvedSourceId, analysis.qa_pairs);
-      await insertCallBarriers(resolvedSourceId, analysis.barriers);
-      await insertCallQAResults(resolvedSourceId, analysis.call_qa || []);
+      await insertCallObservations(resolvedSourceId, analysis.observations, targetProjectId);
+      await insertCallQAPairs(resolvedSourceId, analysis.qa_pairs, targetProjectId);
+      await insertCallBarriers(resolvedSourceId, analysis.barriers, targetProjectId);
+      await insertCallQAResults(resolvedSourceId, analysis.call_qa || [], targetProjectId);
       if (analysis.disposition) {
-        await insertCallDisposition(resolvedSourceId, analysis.disposition);
+        await insertCallDisposition(resolvedSourceId, analysis.disposition, targetProjectId);
       }
 
       return res.json({
@@ -213,7 +229,7 @@ export async function registerRoutes(
         errorMessage: error.message,
         requestBody: requestBodyJson,
         requestHeaders: requestHeadersJson,
-      });
+      }, targetProjectId);
 
       console.error("Transcript analysis failed:", error);
 
@@ -268,6 +284,7 @@ export async function registerRoutes(
       });
 
       (async () => {
+        let targetProjectId: string | undefined;
         try {
           let cpId = clientPathwayId;
           if (!cpId) {
@@ -286,6 +303,7 @@ export async function registerRoutes(
           const cpRecord = await storage.getClientPathway(cpId);
           const resolvedClient = reqClient || cpRecord?.client || null;
           const resolvedPathway = reqPathway || cpRecord?.pathway || null;
+          targetProjectId = cpRecord?.gcp_project_id || undefined;
 
           const [
             { prompt: _p, promptVersion, promptVersionDate },
@@ -343,12 +361,12 @@ export async function registerRoutes(
               status: "success", requestBody: requestBodyJson, requestHeaders: requestHeadersJson,
               responseJson: JSON.stringify(analysis),
               client: resolvedClient, pathway: resolvedPathway,
-            }),
-            insertCallObservations(resolvedSourceId, analysis.observations || []),
-            insertCallQAPairs(resolvedSourceId, analysis.qa_pairs || []),
-            insertCallBarriers(resolvedSourceId, analysis.barriers || []),
-            insertCallQAResults(resolvedSourceId, analysis.call_qa || []),
-            ...(analysis.disposition ? [insertCallDisposition(resolvedSourceId, analysis.disposition)] : []),
+            }, targetProjectId),
+            insertCallObservations(resolvedSourceId, analysis.observations || [], targetProjectId),
+            insertCallQAPairs(resolvedSourceId, analysis.qa_pairs || [], targetProjectId),
+            insertCallBarriers(resolvedSourceId, analysis.barriers || [], targetProjectId),
+            insertCallQAResults(resolvedSourceId, analysis.call_qa || [], targetProjectId),
+            ...(analysis.disposition ? [insertCallDisposition(resolvedSourceId, analysis.disposition, targetProjectId)] : []),
           ]);
 
           console.log(`[AWELL-ASYNC] BigQuery writes completed for ${resolvedSourceId}`);
@@ -406,7 +424,7 @@ export async function registerRoutes(
             processedAt: new Date().toISOString(), processingTimeMs: processingTime,
             transcriptLength: source_text.length, status: "error",
             errorMessage: err.message, requestBody: requestBodyJson, requestHeaders: requestHeadersJson,
-          }).catch(() => {});
+          }, targetProjectId).catch(() => {});
 
           if (webhook_url) {
             try {
@@ -422,6 +440,7 @@ export async function registerRoutes(
       return;
     }
 
+    let targetProjectId: string | undefined;
     try {
       let cpId = clientPathwayId;
       if (!cpId) {
@@ -439,6 +458,7 @@ export async function registerRoutes(
       const cpRecord = await storage.getClientPathway(cpId);
       const resolvedClient = reqClient || cpRecord?.client || null;
       const resolvedPathway = reqPathway || cpRecord?.pathway || null;
+      targetProjectId = cpRecord?.gcp_project_id || undefined;
 
       const { prompt: _promptText, promptVersion, promptVersionDate } = await getPromptWithVersion(cpId);
       const activeObs = await storage.getActiveObservations(cpId);
@@ -532,14 +552,14 @@ export async function registerRoutes(
               status: "success", requestBody: requestBodyJson, requestHeaders: requestHeadersJson,
               responseJson: JSON.stringify(fullAnalysis),
               client: resolvedClient, pathway: resolvedPathway,
-            }),
-            insertCallObservations(resolvedSourceId, fullAnalysis.observations || []),
-            insertCallQAPairs(resolvedSourceId, bgResult.qa_pairs),
-            insertCallBarriers(resolvedSourceId, bgResult.barriers),
-            insertCallQAResults(resolvedSourceId, bgResult.call_qa),
+            }, targetProjectId),
+            insertCallObservations(resolvedSourceId, fullAnalysis.observations || [], targetProjectId),
+            insertCallQAPairs(resolvedSourceId, bgResult.qa_pairs, targetProjectId),
+            insertCallBarriers(resolvedSourceId, bgResult.barriers, targetProjectId),
+            insertCallQAResults(resolvedSourceId, bgResult.call_qa, targetProjectId),
           ];
           if (fastAnalysis.disposition) {
-            bqInserts.push(insertCallDisposition(resolvedSourceId, fastAnalysis.disposition));
+            bqInserts.push(insertCallDisposition(resolvedSourceId, fastAnalysis.disposition, targetProjectId));
           }
           await Promise.all(bqInserts);
           console.log(`[AWELL-BG] All BigQuery writes completed for ${resolvedSourceId}`);
@@ -558,10 +578,10 @@ export async function registerRoutes(
             responseJson: JSON.stringify(fastAnalysis),
             client: resolvedClient, pathway: resolvedPathway,
             errorMessage: `Background processing failed: ${bgErr.message}`,
-          }).catch(() => {});
-          insertCallObservations(resolvedSourceId, fastAnalysis.observations || []).catch(() => {});
+          }, targetProjectId).catch(() => {});
+          insertCallObservations(resolvedSourceId, fastAnalysis.observations || [], targetProjectId).catch(() => {});
           if (fastAnalysis.disposition) {
-            insertCallDisposition(resolvedSourceId, fastAnalysis.disposition).catch(() => {});
+            insertCallDisposition(resolvedSourceId, fastAnalysis.disposition, targetProjectId).catch(() => {});
           }
           console.error(`[AWELL-BG] Saved partial results (fast-only, no barriers/qa) for ${resolvedSourceId}`);
         }
@@ -574,7 +594,7 @@ export async function registerRoutes(
         processingTimeMs: processingTime, transcriptLength: source_text.length,
         status: "error", errorMessage: error.message,
         requestBody: requestBodyJson, requestHeaders: requestHeadersJson,
-      }).catch(() => {});
+      }, targetProjectId).catch(() => {});
       console.error("Transcript analysis failed:", error);
       return res.status(500).json({ status: "error", message: "Failed to analyze transcript. " + error.message });
     }
@@ -595,7 +615,8 @@ export async function registerRoutes(
     }
 
     try {
-      const detail = await getCallDetail(jobId);
+      const targetProjectId = await resolveTargetProjectId(Number(req.query.clientPathwayId) || null);
+      const detail = await getCallDetail(jobId, undefined, targetProjectId);
 
       if (!detail.callInfo) {
         return res.json({ status: "processing", job_id: jobId, message: "Job is still processing. Try again shortly." });
@@ -864,7 +885,8 @@ export async function registerRoutes(
 
   app.get("/api/calls/:callId/reviews", async (req, res) => {
     try {
-      const reviews = await getCallReviews(req.params.callId);
+      const targetProjectId = await resolveTargetProjectId(Number(req.query.clientPathwayId) || null);
+      const reviews = await getCallReviews(req.params.callId, targetProjectId);
       res.json(reviews);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -875,7 +897,8 @@ export async function registerRoutes(
     try {
       const { reviews } = req.body;
       if (!Array.isArray(reviews)) return res.status(400).json({ message: "reviews array required" });
-      await upsertCallReviews(req.params.callId, reviews);
+      const targetProjectId = await resolveTargetProjectId(Number(req.body.clientPathwayId) || null);
+      await upsertCallReviews(req.params.callId, reviews, targetProjectId);
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -892,7 +915,8 @@ export async function registerRoutes(
       if (!validStatuses.includes(reviewStatus)) {
         return res.status(400).json({ message: `Invalid status. Must be one of: ${validStatuses.join(", ")}` });
       }
-      await upsertCallReviewStatus(req.params.callId, reviewStatus);
+      const targetProjectId = await resolveTargetProjectId(Number(req.body.clientPathwayId) || null);
+      await upsertCallReviewStatus(req.params.callId, reviewStatus, targetProjectId);
       res.json({ success: true, reviewStatus });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -914,7 +938,8 @@ export async function registerRoutes(
       if (notes !== undefined && typeof notes !== "string") {
         return res.status(400).json({ message: "notes must be a string" });
       }
-      await upsertCallReviewMeta(req.params.callId, { reviewStatus, tags, notes });
+      const targetProjectId = await resolveTargetProjectId(Number(req.body.clientPathwayId) || null);
+      await upsertCallReviewMeta(req.params.callId, { reviewStatus, tags, notes }, targetProjectId);
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -924,7 +949,8 @@ export async function registerRoutes(
   app.get("/api/calls/review-statuses", async (req, res) => {
     try {
       const callIds = req.query.callIds ? (req.query.callIds as string).split(",") : [];
-      const statuses = await getCallReviewStatusesBulk(callIds);
+      const targetProjectId = await resolveTargetProjectId(Number(req.query.clientPathwayId) || null);
+      const statuses = await getCallReviewStatusesBulk(callIds, targetProjectId);
       res.json(statuses);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -934,7 +960,8 @@ export async function registerRoutes(
   app.get("/api/calls/review-list", async (req, res) => {
     try {
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 200;
-      const list = await getCallReviewList(limit);
+      const targetProjectId = await resolveTargetProjectId(Number(req.query.clientPathwayId) || null);
+      const list = await getCallReviewList(limit, targetProjectId);
       res.json(list);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -944,7 +971,8 @@ export async function registerRoutes(
   app.post("/api/calls/:callId/reprocess", async (req, res) => {
     try {
       const callId = req.params.callId;
-      const detail = await getCallDetail(callId);
+      const targetProjectId = await resolveTargetProjectId(Number(req.body.clientPathwayId || req.query.clientPathwayId) || null);
+      const detail = await getCallDetail(callId, undefined, targetProjectId);
       if (!detail.callInfo) {
         return res.status(404).json({ message: "Call not found" });
       }
@@ -1324,7 +1352,8 @@ export async function registerRoutes(
     try {
       const rawLimit = parseInt(req.query.limit as string) || 100;
       const limit = Math.max(1, Math.min(rawLimit, 500));
-      const calls = await getCallInfoList(limit);
+      const targetProjectId = await resolveTargetProjectId(Number(req.query.clientPathwayId) || null);
+      const calls = await getCallInfoList(limit, targetProjectId);
       res.json(calls);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1335,7 +1364,8 @@ export async function registerRoutes(
     try {
       const rawDays = parseInt(req.query.days as string);
       const days = isNaN(rawDays) ? 30 : rawDays;
-      const stats = await getCallStatsByDay(days);
+      const targetProjectId = await resolveTargetProjectId(Number(req.query.clientPathwayId) || null);
+      const stats = await getCallStatsByDay(days, targetProjectId);
       res.json(stats);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1345,7 +1375,8 @@ export async function registerRoutes(
   app.get("/api/calls/:callId", async (req, res) => {
     try {
       const runIndex = req.query.run !== undefined ? Number(req.query.run) - 1 : undefined;
-      const result = await getCallDetail(req.params.callId, runIndex);
+      const targetProjectId = await resolveTargetProjectId(Number(req.query.clientPathwayId) || null);
+      const result = await getCallDetail(req.params.callId, runIndex, targetProjectId);
       if (!result.callInfo) {
         return res.status(404).json({ message: "Call not found" });
       }
@@ -1359,9 +1390,10 @@ export async function registerRoutes(
   await ensureCallBarriersTable();
   await ensureCallQATable();
 
-  app.get("/api/batch/tags", async (_req, res) => {
+  app.get("/api/batch/tags", async (req, res) => {
     try {
-      const tags = await getDistinctTags();
+      const targetProjectId = await resolveTargetProjectId(Number(req.query.clientPathwayId) || null);
+      const tags = await getDistinctTags(targetProjectId);
       res.json(tags);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1385,7 +1417,8 @@ export async function registerRoutes(
         filters.processedFilter = processedFilter;
       }
 
-      const calls = await queryBlandCalls(filters);
+      const targetProjectId = await resolveTargetProjectId(Number(req.query.clientPathwayId) || null);
+      const calls = await queryBlandCalls(filters, targetProjectId);
       res.json(calls);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1399,17 +1432,20 @@ export async function registerRoutes(
         return res.status(400).json({ message: "callIds array is required" });
       }
 
+      const loadCpId = Number(req.body.clientPathwayId) || null;
+      let resolvedLoadCpId = loadCpId;
+      if (!resolvedLoadCpId) {
+        const allCPs = await storage.getClientPathways();
+        if (allCPs.length > 0) resolvedLoadCpId = allCPs[0].id;
+      }
+      if (!resolvedLoadCpId) {
+        return res.status(400).json({ message: "No client/pathway configuration found." });
+      }
+      const loadCPRecord = await storage.getClientPathway(resolvedLoadCpId);
+      const targetProjectId = loadCPRecord?.gcp_project_id || undefined;
+
       let contextByCareFlow: Record<string, Record<string, string>> | undefined;
       if (useKnownContext && careFlowIds && careFlowIds.length > 0) {
-        const loadCpId = Number(req.body.clientPathwayId) || null;
-        let resolvedLoadCpId = loadCpId;
-        if (!resolvedLoadCpId) {
-          const allCPs = await storage.getClientPathways();
-          if (allCPs.length > 0) resolvedLoadCpId = allCPs[0].id;
-        }
-        if (!resolvedLoadCpId) {
-          return res.status(400).json({ message: "No client/pathway configuration found." });
-        }
         const contextParams = await storage.getActiveContextParameters(resolvedLoadCpId);
         const paramsWithMapping = contextParams
           .filter(p =>
@@ -1419,12 +1455,12 @@ export async function registerRoutes(
           )
           .map(p => ({ name: p.name, awellDataPointKey: p.awellDataPointKey, awellMappingType: p.awellMappingType, awellPatientProfileField: p.awellPatientProfileField }));
         if (paramsWithMapping.length > 0) {
-          contextByCareFlow = await fetchAwellContextForCareFlows(careFlowIds, paramsWithMapping);
+          contextByCareFlow = await fetchAwellContextForCareFlows(careFlowIds, paramsWithMapping, targetProjectId);
           console.log(`Fetched Awell context for ${Object.keys(contextByCareFlow).length} care flows across ${paramsWithMapping.length} mapped parameters`);
         }
       }
 
-      const result = await loadBlandCallsToBatch(callIds, batchLabel || null, contextByCareFlow);
+      const result = await loadBlandCallsToBatch(callIds, batchLabel || null, contextByCareFlow, targetProjectId);
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1438,17 +1474,19 @@ export async function registerRoutes(
       if (status) filters.status = status;
       if (batchLabel) filters.batchLabel = batchLabel;
       if (limit) filters.limit = parseInt(limit as string);
+      const targetProjectId = await resolveTargetProjectId(Number(req.query.clientPathwayId) || null);
 
-      const items = await getBatchItems(filters);
+      const items = await getBatchItems(filters, targetProjectId);
       res.json(items);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
 
-  app.get("/api/batch/summary", async (_req, res) => {
+  app.get("/api/batch/summary", async (req, res) => {
     try {
-      const summary = await getBatchSummary();
+      const targetProjectId = await resolveTargetProjectId(Number(req.query.clientPathwayId) || null);
+      const summary = await getBatchSummary(targetProjectId);
       res.json(summary);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1484,14 +1522,6 @@ export async function registerRoutes(
 
   app.post("/api/batch/process", async (req, res) => {
     try {
-      const batchSize = parseInt(req.query.limit as string) || 5;
-      const batchId = req.query.batchId as string | undefined;
-      const pendingItems = await getPendingBatchItems(batchSize, batchId);
-
-      if (pendingItems.length === 0) {
-        return res.json({ processed: 0, message: "No pending items", background: false });
-      }
-
       const batchCpId = Number(req.query.clientPathwayId) || null;
       let resolvedBatchCpId = batchCpId;
       if (!resolvedBatchCpId) {
@@ -1502,6 +1532,15 @@ export async function registerRoutes(
         return res.status(400).json({ message: "No client/pathway configuration found." });
       }
       const batchCPRecord = await storage.getClientPathway(resolvedBatchCpId);
+      const targetProjectId = batchCPRecord?.gcp_project_id || undefined;
+
+      const batchSize = parseInt(req.query.limit as string) || 5;
+      const batchId = req.query.batchId as string | undefined;
+      const pendingItems = await getPendingBatchItems(batchSize, batchId, targetProjectId);
+
+      if (pendingItems.length === 0) {
+        return res.json({ processed: 0, message: "No pending items", background: false });
+      }
 
       const activeObs = await storage.getActiveObservations(resolvedBatchCpId);
       const summaryInstruction = await storage.getSetting(resolvedBatchCpId, "summary_instruction");
@@ -1542,7 +1581,7 @@ export async function registerRoutes(
             const callId = item.bland_call_id;
 
             try {
-              await updateBatchItemStatus(callId, "processing");
+              await updateBatchItemStatus(callId, "processing", undefined, undefined, targetProjectId);
             } catch (claimErr: any) {
               console.error(`Batch job ${jobId}: failed to claim ${callId}: ${claimErr.message}`);
               jobState.skipped++;
@@ -1597,23 +1636,23 @@ export async function registerRoutes(
                 responseJson: JSON.stringify(analysis),
                 client: batchCPRecord?.client || null,
                 pathway: batchCPRecord?.pathway || null,
-              });
+              }, targetProjectId);
 
-              await insertCallObservations(callId, analysis.observations);
-              await insertCallQAPairs(callId, analysis.qa_pairs);
-              await insertCallBarriers(callId, analysis.barriers);
-              await insertCallQAResults(callId, analysis.call_qa || []);
+              await insertCallObservations(callId, analysis.observations, targetProjectId);
+              await insertCallQAPairs(callId, analysis.qa_pairs, targetProjectId);
+              await insertCallBarriers(callId, analysis.barriers, targetProjectId);
+              await insertCallQAResults(callId, analysis.call_qa || [], targetProjectId);
               if (analysis.disposition) {
                 console.log(`Batch job ${jobId}: ${callId} has disposition: ${analysis.disposition.disposition_category} / ${analysis.disposition.disposition_detail}`);
-                await insertCallDisposition(callId, analysis.disposition);
+                await insertCallDisposition(callId, analysis.disposition, targetProjectId);
               } else {
                 console.log(`Batch job ${jobId}: ${callId} — NO disposition returned by Gemini`);
               }
-              await updateBatchItemStatus(callId, "completed", callId);
+              await updateBatchItemStatus(callId, "completed", callId, undefined, targetProjectId);
               jobState.completed++;
               console.log(`Batch job ${jobId}: [${idx + 1}/${pendingItems.length}] ${callId} completed (${processingTimeMs}ms)`);
             } catch (err: any) {
-              try { await updateBatchItemStatus(callId, "failed", undefined, err.message); } catch {}
+              try { await updateBatchItemStatus(callId, "failed", undefined, err.message, targetProjectId); } catch {}
               jobState.failed++;
               jobState.errors.push({ callId, error: err.message });
               console.error(`Batch job ${jobId}: [${idx + 1}/${pendingItems.length}] ${callId} failed: ${err.message}`);
@@ -1637,7 +1676,8 @@ export async function registerRoutes(
   app.post("/api/batch/reset-failed", async (req, res) => {
     try {
       const { batchId } = req.body;
-      const count = await resetFailedBatchItems(batchId);
+      const targetProjectId = await resolveTargetProjectId(Number(req.body.clientPathwayId) || null);
+      const count = await resetFailedBatchItems(batchId, targetProjectId);
       res.json({ reset: count });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1646,7 +1686,8 @@ export async function registerRoutes(
 
   app.post("/api/batch/delete-pending", async (req, res) => {
     try {
-      const count = await deletePendingBatchItems();
+      const targetProjectId = await resolveTargetProjectId(Number(req.body.clientPathwayId) || null);
+      const count = await deletePendingBatchItems(targetProjectId);
       res.json({ deleted: count });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1657,7 +1698,8 @@ export async function registerRoutes(
     try {
       const { batchId } = req.body;
       if (!batchId) return res.status(400).json({ message: "batchId required" });
-      const result = await recreateBatch(batchId);
+      const targetProjectId = await resolveTargetProjectId(Number(req.body.clientPathwayId) || null);
+      const result = await recreateBatch(batchId, targetProjectId);
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ message: error.message });

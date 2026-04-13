@@ -53,38 +53,61 @@ export interface CallObservationRow {
 }
 
 let bigquery: BigQuery | null = null;
+const clientBigQueryMap = new Map<string, BigQuery>();
+
+function getCentralProjectId(): string {
+  const projectId = process.env.GCP_PROJECT_ID;
+  if (!projectId) throw new Error("GCP_PROJECT_ID is not set");
+  return projectId;
+}
+
+function getCentralCredentials(): any {
+  const raw = process.env.GCP_SERVICE_ACCOUNT_KEY;
+  if (!raw) throw new Error("GCP_SERVICE_ACCOUNT_KEY is not set");
+  return JSON.parse(raw);
+}
 
 function getBigQueryClient(): BigQuery {
   if (!bigquery) {
-    const raw = process.env.GCP_SERVICE_ACCOUNT_KEY;
-    if (!raw) throw new Error("GCP_SERVICE_ACCOUNT_KEY is not set");
-
-    const credentials = JSON.parse(raw);
-    const projectId = process.env.GCP_PROJECT_ID;
-    if (!projectId) throw new Error("GCP_PROJECT_ID is not set");
-
-    bigquery = new BigQuery({
-      projectId,
-      credentials,
-    });
+    const credentials = getCentralCredentials();
+    const projectId = getCentralProjectId();
+    bigquery = new BigQuery({ projectId, credentials });
   }
   return bigquery;
 }
 
-async function ensureDataset() {
-  const client = getBigQueryClient();
+function getOutputBigQueryClient(targetProjectId?: string): BigQuery {
+  const effectiveProjectId = targetProjectId || getCentralProjectId();
+  if (effectiveProjectId === getCentralProjectId()) {
+    return getBigQueryClient();
+  }
+  if (!clientBigQueryMap.has(effectiveProjectId)) {
+    const credentials = getCentralCredentials();
+    const client = new BigQuery({ projectId: effectiveProjectId, credentials });
+    clientBigQueryMap.set(effectiveProjectId, client);
+    console.log(`Created BigQuery client for client project: ${effectiveProjectId}`);
+  }
+  return clientBigQueryMap.get(effectiveProjectId)!;
+}
+
+function resolveProjectId(targetProjectId?: string): string {
+  return targetProjectId || getCentralProjectId();
+}
+
+async function ensureDataset(targetProjectId?: string) {
+  const client = getOutputBigQueryClient(targetProjectId);
   const dataset = client.dataset(DATASET_ID);
   const [datasetExists] = await dataset.exists();
   if (!datasetExists) {
     await client.createDataset(DATASET_ID, { location: "US" });
-    console.log(`Created BigQuery dataset: ${DATASET_ID}`);
+    console.log(`Created BigQuery dataset: ${DATASET_ID} in project ${resolveProjectId(targetProjectId)}`);
   }
   return dataset;
 }
 
-async function ensureCallInfoTable() {
-  const client = getBigQueryClient();
-  const dataset = await ensureDataset();
+async function ensureCallInfoTable(targetProjectId?: string) {
+  const client = getOutputBigQueryClient(targetProjectId);
+  const dataset = await ensureDataset(targetProjectId);
   const table = dataset.table(CALL_INFO_TABLE_ID);
   const [tableExists] = await table.exists();
   if (tableExists) {
@@ -117,13 +140,13 @@ async function ensureCallInfoTable() {
         ],
       },
     });
-    console.log(`Created BigQuery table: ${DATASET_ID}.${CALL_INFO_TABLE_ID}`);
+    console.log(`Created BigQuery table: ${DATASET_ID}.${CALL_INFO_TABLE_ID} in project ${resolveProjectId(targetProjectId)}`);
   }
 }
 
-async function ensureObservationsTable() {
-  const client = getBigQueryClient();
-  const dataset = await ensureDataset();
+async function ensureObservationsTable(targetProjectId?: string) {
+  const client = getOutputBigQueryClient(targetProjectId);
+  const dataset = await ensureDataset(targetProjectId);
   const table = dataset.table(OBSERVATIONS_TABLE_ID);
   const [tableExists] = await table.exists();
   if (tableExists) {
@@ -145,17 +168,19 @@ async function ensureObservationsTable() {
         ],
       },
     });
-    console.log(`Created BigQuery table: ${DATASET_ID}.${OBSERVATIONS_TABLE_ID}`);
+    console.log(`Created BigQuery table: ${DATASET_ID}.${OBSERVATIONS_TABLE_ID} in project ${resolveProjectId(targetProjectId)}`);
   }
 }
 
-let callInfoInitialized = false;
-let observationsInitialized = false;
-let qaPairsInitialized = false;
+const initializedTables = new Set<string>();
 
-async function migrateCallInfoColumns(): Promise<void> {
+function tableInitKey(tableId: string, targetProjectId?: string): string {
+  return `${resolveProjectId(targetProjectId)}:${tableId}`;
+}
+
+async function migrateCallInfoColumns(targetProjectId?: string): Promise<void> {
   try {
-    const client = getBigQueryClient();
+    const client = getOutputBigQueryClient(targetProjectId);
     const dataset = client.dataset(DATASET_ID);
     const table = dataset.table(CALL_INFO_TABLE_ID);
     const [metadata] = await table.getMetadata();
@@ -215,15 +240,21 @@ async function migrateCallInfoColumns(): Promise<void> {
   }
 }
 
-export async function initializeCallTables(): Promise<void> {
+export async function initializeCallTables(targetProjectId?: string): Promise<void> {
   try {
-    await ensureCallInfoTable();
-    callInfoInitialized = true;
-    console.log("BigQuery table call_info ready.");
-    await ensureObservationsTable();
-    observationsInitialized = true;
-    console.log("BigQuery table call_observations ready.");
-    await migrateCallInfoColumns();
+    const ciKey = tableInitKey(CALL_INFO_TABLE_ID, targetProjectId);
+    if (!initializedTables.has(ciKey)) {
+      await ensureCallInfoTable(targetProjectId);
+      initializedTables.add(ciKey);
+      console.log(`BigQuery table call_info ready in project ${resolveProjectId(targetProjectId)}.`);
+    }
+    const obsKey = tableInitKey(OBSERVATIONS_TABLE_ID, targetProjectId);
+    if (!initializedTables.has(obsKey)) {
+      await ensureObservationsTable(targetProjectId);
+      initializedTables.add(obsKey);
+      console.log(`BigQuery table call_observations ready in project ${resolveProjectId(targetProjectId)}.`);
+    }
+    await migrateCallInfoColumns(targetProjectId);
   } catch (err: any) {
     console.error("Failed to initialize call tables:", err.message);
   }
@@ -259,9 +290,9 @@ export interface CallInfoEntry {
   pathway?: string | null;
 }
 
-async function deleteExistingCallData(callId: string, tableId: string): Promise<void> {
+async function deleteExistingCallData(callId: string, tableId: string, targetProjectId?: string): Promise<void> {
   try {
-    const client = getBigQueryClient();
+    const client = getOutputBigQueryClient(targetProjectId);
     const query = `DELETE FROM \`${client.projectId}.${DATASET_ID}.${tableId}\` WHERE call_id = @callId`;
     await client.query({ query, params: { callId }, location: "US" });
   } catch (err: any) {
@@ -269,16 +300,17 @@ async function deleteExistingCallData(callId: string, tableId: string): Promise<
   }
 }
 
-export async function insertCallInfo(entry: CallInfoEntry): Promise<void> {
+export async function insertCallInfo(entry: CallInfoEntry, targetProjectId?: string): Promise<void> {
   try {
-    if (!callInfoInitialized) {
-      await ensureCallInfoTable();
-      callInfoInitialized = true;
+    const key = tableInitKey(CALL_INFO_TABLE_ID, targetProjectId);
+    if (!initializedTables.has(key)) {
+      await ensureCallInfoTable(targetProjectId);
+      initializedTables.add(key);
     }
 
-    await deleteExistingCallData(entry.callId, CALL_INFO_TABLE_ID);
+    await deleteExistingCallData(entry.callId, CALL_INFO_TABLE_ID, targetProjectId);
 
-    const client = getBigQueryClient();
+    const client = getOutputBigQueryClient(targetProjectId);
     const row: Record<string, any> = {
       call_id: entry.callId,
       processing_id: entry.processingId || null,
@@ -323,18 +355,19 @@ export async function insertCallInfo(entry: CallInfoEntry): Promise<void> {
   }
 }
 
-export async function insertCallObservations(callId: string, observations: ObservationResult[]): Promise<void> {
+export async function insertCallObservations(callId: string, observations: ObservationResult[], targetProjectId?: string): Promise<void> {
   try {
-    if (!observationsInitialized) {
-      await ensureObservationsTable();
-      observationsInitialized = true;
+    const key = tableInitKey(OBSERVATIONS_TABLE_ID, targetProjectId);
+    if (!initializedTables.has(key)) {
+      await ensureObservationsTable(targetProjectId);
+      initializedTables.add(key);
     }
 
     if (!observations || observations.length === 0) return;
 
-    await deleteExistingCallData(callId, OBSERVATIONS_TABLE_ID);
+    await deleteExistingCallData(callId, OBSERVATIONS_TABLE_ID, targetProjectId);
 
-    const client = getBigQueryClient();
+    const client = getOutputBigQueryClient(targetProjectId);
     const rows = observations.map(obs => ({
       call_id: callId,
       observation_name: obs.name,
@@ -361,9 +394,9 @@ export async function insertCallObservations(callId: string, observations: Obser
   }
 }
 
-async function ensureQAPairsTable() {
-  const client = getBigQueryClient();
-  const dataset = await ensureDataset();
+async function ensureQAPairsTable(targetProjectId?: string) {
+  const client = getOutputBigQueryClient(targetProjectId);
+  const dataset = await ensureDataset(targetProjectId);
   const table = dataset.table(QA_PAIRS_TABLE_ID);
   const [tableExists] = await table.exists();
   if (tableExists) {
@@ -384,14 +417,15 @@ async function ensureQAPairsTable() {
       ],
     },
   });
-  console.log(`Created BigQuery table: ${DATASET_ID}.${QA_PAIRS_TABLE_ID}`);
+  console.log(`Created BigQuery table: ${DATASET_ID}.${QA_PAIRS_TABLE_ID} in project ${resolveProjectId(targetProjectId)}`);
 }
 
-export async function insertCallQAPairs(callId: string, qaPairs: QAPair[]): Promise<void> {
+export async function insertCallQAPairs(callId: string, qaPairs: QAPair[], targetProjectId?: string): Promise<void> {
   try {
-    if (!qaPairsInitialized) {
-      await ensureQAPairsTable();
-      qaPairsInitialized = true;
+    const key = tableInitKey(QA_PAIRS_TABLE_ID, targetProjectId);
+    if (!initializedTables.has(key)) {
+      await ensureQAPairsTable(targetProjectId);
+      initializedTables.add(key);
     }
 
     if (!qaPairs || qaPairs.length === 0) return;
@@ -410,9 +444,9 @@ export async function insertCallQAPairs(callId: string, qaPairs: QAPair[]): Prom
       console.warn(`Dropped ${qaPairs.length - validPairs.length} invalid Q&A pairs for call ${callId}`);
     }
 
-    await deleteExistingCallData(callId, QA_PAIRS_TABLE_ID);
+    await deleteExistingCallData(callId, QA_PAIRS_TABLE_ID, targetProjectId);
 
-    const client = getBigQueryClient();
+    const client = getOutputBigQueryClient(targetProjectId);
     const rows = validPairs.map((qa, index) => ({
       call_id: callId,
       sequence_number: index + 1,
@@ -439,10 +473,9 @@ export async function insertCallQAPairs(callId: string, qaPairs: QAPair[]): Prom
   }
 }
 
-export async function ensureCallBarriersTable(): Promise<void> {
+export async function ensureCallBarriersTable(targetProjectId?: string): Promise<void> {
   try {
-    const client = getBigQueryClient();
-    const dataset = client.dataset(DATASET_ID);
+    const dataset = await ensureDataset(targetProjectId);
     const table = dataset.table(BARRIERS_TABLE_ID);
     const [exists] = await table.exists();
     if (!exists) {
@@ -460,14 +493,14 @@ export async function ensureCallBarriersTable(): Promise<void> {
           ],
         },
       });
-      console.log("Created barriers table");
+      console.log(`Created barriers table in project ${resolveProjectId(targetProjectId)}`);
     }
   } catch (error: any) {
     console.error("Failed to ensure barriers table:", error.message);
   }
 }
 
-export async function insertCallBarriers(callId: string, barriers: Barrier[]): Promise<void> {
+export async function insertCallBarriers(callId: string, barriers: Barrier[], targetProjectId?: string): Promise<void> {
   try {
     if (!barriers || barriers.length === 0) {
       return;
@@ -486,9 +519,9 @@ export async function insertCallBarriers(callId: string, barriers: Barrier[]): P
       console.warn(`Dropped ${barriers.length - validBarriers.length} invalid barriers for call ${callId}`);
     }
 
-    await deleteExistingCallData(callId, BARRIERS_TABLE_ID);
+    await deleteExistingCallData(callId, BARRIERS_TABLE_ID, targetProjectId);
 
-    const client = getBigQueryClient();
+    const client = getOutputBigQueryClient(targetProjectId);
     const rows = validBarriers.map((b) => ({
       call_id: callId,
       barrier: b.barrier,
@@ -514,9 +547,9 @@ export async function insertCallBarriers(callId: string, barriers: Barrier[]): P
   }
 }
 
-export async function getCallBarriers(callId: string): Promise<any[]> {
+export async function getCallBarriers(callId: string, targetProjectId?: string): Promise<any[]> {
   try {
-    const client = getBigQueryClient();
+    const client = getOutputBigQueryClient(targetProjectId);
     const query = `SELECT * FROM \`${client.projectId}.${DATASET_ID}.${BARRIERS_TABLE_ID}\` WHERE call_id = @callId`;
     const [rows] = await client.query({ query, params: { callId } });
     return rows;
@@ -526,10 +559,9 @@ export async function getCallBarriers(callId: string): Promise<any[]> {
   }
 }
 
-export async function ensureCallQATable(): Promise<void> {
+export async function ensureCallQATable(targetProjectId?: string): Promise<void> {
   try {
-    const client = getBigQueryClient();
-    const dataset = client.dataset(DATASET_ID);
+    const dataset = await ensureDataset(targetProjectId);
     const table = dataset.table(CALL_QA_TABLE_ID);
     const [exists] = await table.exists();
     if (!exists) {
@@ -545,14 +577,14 @@ export async function ensureCallQATable(): Promise<void> {
           ],
         },
       });
-      console.log("Created call_qa_results table");
+      console.log(`Created call_qa_results table in project ${resolveProjectId(targetProjectId)}`);
     }
   } catch (error: any) {
     console.error("Failed to ensure call_qa_results table:", error.message);
   }
 }
 
-export async function insertCallQAResults(callId: string, results: CallQAResult[]): Promise<void> {
+export async function insertCallQAResults(callId: string, results: CallQAResult[], targetProjectId?: string): Promise<void> {
   try {
     if (!results || !Array.isArray(results) || results.length === 0) return;
 
@@ -562,9 +594,9 @@ export async function insertCallQAResults(callId: string, results: CallQAResult[
 
     if (validResults.length === 0) return;
 
-    await deleteExistingCallData(callId, CALL_QA_TABLE_ID);
+    await deleteExistingCallData(callId, CALL_QA_TABLE_ID, targetProjectId);
 
-    const client = getBigQueryClient();
+    const client = getOutputBigQueryClient(targetProjectId);
     const rows = validResults.map((r) => ({
       call_id: callId,
       name: r.name,
@@ -588,9 +620,9 @@ export async function insertCallQAResults(callId: string, results: CallQAResult[
   }
 }
 
-export async function getCallQAResults(callId: string): Promise<any[]> {
+export async function getCallQAResults(callId: string, targetProjectId?: string): Promise<any[]> {
   try {
-    const client = getBigQueryClient();
+    const client = getOutputBigQueryClient(targetProjectId);
     const query = `SELECT * FROM \`${client.projectId}.${DATASET_ID}.${CALL_QA_TABLE_ID}\` WHERE call_id = @callId`;
     const [rows] = await client.query({ query, params: { callId } });
     return rows;
@@ -600,10 +632,9 @@ export async function getCallQAResults(callId: string): Promise<any[]> {
   }
 }
 
-export async function ensureCallDispositionsTable(): Promise<void> {
+export async function ensureCallDispositionsTable(targetProjectId?: string): Promise<void> {
   try {
-    const client = getBigQueryClient();
-    const dataset = client.dataset(DATASET_ID);
+    const dataset = await ensureDataset(targetProjectId);
     const table = dataset.table(CALL_DISPOSITIONS_TABLE_ID);
     const [exists] = await table.exists();
     if (!exists) {
@@ -621,7 +652,7 @@ export async function ensureCallDispositionsTable(): Promise<void> {
           ],
         },
       });
-      console.log("Created call_dispositions table");
+      console.log(`Created call_dispositions table in project ${resolveProjectId(targetProjectId)}`);
     }
   } catch (error: any) {
     console.error("Failed to ensure call_dispositions table:", error.message);
@@ -638,11 +669,11 @@ export interface CallDispositionEntry {
   detail?: string;
 }
 
-export async function insertCallDisposition(callId: string, disposition: CallDispositionEntry): Promise<void> {
+export async function insertCallDisposition(callId: string, disposition: CallDispositionEntry, targetProjectId?: string): Promise<void> {
   try {
     if (!disposition || !disposition.disposition_category) return;
-    await deleteExistingCallData(callId, CALL_DISPOSITIONS_TABLE_ID);
-    const client = getBigQueryClient();
+    await deleteExistingCallData(callId, CALL_DISPOSITIONS_TABLE_ID, targetProjectId);
+    const client = getOutputBigQueryClient(targetProjectId);
     const row = {
       call_id: callId,
       disposition_category: disposition.disposition_category,
@@ -660,10 +691,9 @@ export async function insertCallDisposition(callId: string, disposition: CallDis
   }
 }
 
-export async function ensureCallReviewsTable(): Promise<void> {
+export async function ensureCallReviewsTable(targetProjectId?: string): Promise<void> {
   try {
-    const client = getBigQueryClient();
-    const dataset = client.dataset(DATASET_ID);
+    const dataset = await ensureDataset(targetProjectId);
     const table = dataset.table(CALL_REVIEWS_TABLE_ID);
     const [exists] = await table.exists();
     if (!exists) {
@@ -682,7 +712,7 @@ export async function ensureCallReviewsTable(): Promise<void> {
           ],
         },
       });
-      console.log("Created call_reviews table");
+      console.log(`Created call_reviews table in project ${resolveProjectId(targetProjectId)}`);
     }
   } catch (error: any) {
     console.error("Failed to ensure call_reviews table:", error.message);
@@ -698,12 +728,11 @@ export interface CallReviewEntry {
   reviewedBy: string;
 }
 
-export async function upsertCallReviews(sourceId: string, reviews: CallReviewEntry[]): Promise<void> {
+export async function upsertCallReviews(sourceId: string, reviews: CallReviewEntry[], targetProjectId?: string): Promise<void> {
   try {
-    await ensureCallReviewsTable();
-    const client = getBigQueryClient();
-    const projectId = process.env.GCP_PROJECT_ID;
-    const fullTable = `\`${projectId}.${DATASET_ID}.${CALL_REVIEWS_TABLE_ID}\``;
+    await ensureCallReviewsTable(targetProjectId);
+    const client = getOutputBigQueryClient(targetProjectId);
+    const fullTable = `\`${client.projectId}.${DATASET_ID}.${CALL_REVIEWS_TABLE_ID}\``;
     try {
       await client.query({ query: `DELETE FROM ${fullTable} WHERE source_id = @sourceId`, params: { sourceId } });
     } catch (e: any) {
@@ -730,12 +759,11 @@ export async function upsertCallReviews(sourceId: string, reviews: CallReviewEnt
   }
 }
 
-export async function getCallReviews(sourceId: string): Promise<any[]> {
+export async function getCallReviews(sourceId: string, targetProjectId?: string): Promise<any[]> {
   try {
-    await ensureCallReviewsTable();
-    const client = getBigQueryClient();
-    const projectId = process.env.GCP_PROJECT_ID;
-    const fullTable = `\`${projectId}.${DATASET_ID}.${CALL_REVIEWS_TABLE_ID}\``;
+    await ensureCallReviewsTable(targetProjectId);
+    const client = getOutputBigQueryClient(targetProjectId);
+    const fullTable = `\`${client.projectId}.${DATASET_ID}.${CALL_REVIEWS_TABLE_ID}\``;
     const [rows] = await client.query({
       query: `SELECT * FROM ${fullTable} WHERE source_id = @sourceId ORDER BY review_item_id`,
       params: { sourceId },
@@ -753,10 +781,9 @@ export interface CallReviewMeta {
   notes: string;
 }
 
-export async function ensureCallReviewStatusesTable(): Promise<void> {
+export async function ensureCallReviewStatusesTable(targetProjectId?: string): Promise<void> {
   try {
-    const client = getBigQueryClient();
-    const dataset = client.dataset(DATASET_ID);
+    const dataset = await ensureDataset(targetProjectId);
     const table = dataset.table(CALL_REVIEW_STATUSES_TABLE_ID);
     const [exists] = await table.exists();
     if (!exists) {
@@ -771,19 +798,20 @@ export async function ensureCallReviewStatusesTable(): Promise<void> {
           ],
         },
       });
-      console.log("Created call_review_statuses table");
+      console.log(`Created call_review_statuses table in project ${resolveProjectId(targetProjectId)}`);
     } else {
       const [metadata] = await table.getMetadata();
       const fieldNames = new Set(metadata.schema.fields.map((f: any) => f.name));
+      const bqClient = getOutputBigQueryClient(targetProjectId);
       if (!fieldNames.has("tags")) {
-        await client.query({
-          query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\` ADD COLUMN tags STRING`,
+        await bqClient.query({
+          query: `ALTER TABLE \`${bqClient.projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\` ADD COLUMN tags STRING`,
         });
         console.log("Added tags column to call_review_statuses table.");
       }
       if (!fieldNames.has("notes")) {
-        await client.query({
-          query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\` ADD COLUMN notes STRING`,
+        await bqClient.query({
+          query: `ALTER TABLE \`${bqClient.projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\` ADD COLUMN notes STRING`,
         });
         console.log("Added notes column to call_review_statuses table.");
       }
@@ -793,12 +821,11 @@ export async function ensureCallReviewStatusesTable(): Promise<void> {
   }
 }
 
-export async function upsertCallReviewMeta(callId: string, data: { reviewStatus?: string; tags?: string[]; notes?: string }): Promise<void> {
+export async function upsertCallReviewMeta(callId: string, data: { reviewStatus?: string; tags?: string[]; notes?: string }, targetProjectId?: string): Promise<void> {
   try {
-    await ensureCallReviewStatusesTable();
-    const client = getBigQueryClient();
-    const projectId = process.env.GCP_PROJECT_ID;
-    const fullTable = `\`${projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\``;
+    await ensureCallReviewStatusesTable(targetProjectId);
+    const client = getOutputBigQueryClient(targetProjectId);
+    const fullTable = `\`${client.projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\``;
     let existing: any = null;
     try {
       const [rows] = await client.query({
@@ -832,16 +859,15 @@ export async function upsertCallReviewMeta(callId: string, data: { reviewStatus?
   }
 }
 
-export async function upsertCallReviewStatus(callId: string, reviewStatus: string): Promise<void> {
-  await upsertCallReviewMeta(callId, { reviewStatus });
+export async function upsertCallReviewStatus(callId: string, reviewStatus: string, targetProjectId?: string): Promise<void> {
+  await upsertCallReviewMeta(callId, { reviewStatus }, targetProjectId);
 }
 
-export async function getCallReviewMeta(callId: string): Promise<CallReviewMeta | null> {
+export async function getCallReviewMeta(callId: string, targetProjectId?: string): Promise<CallReviewMeta | null> {
   try {
-    await ensureCallReviewStatusesTable();
-    const client = getBigQueryClient();
-    const projectId = process.env.GCP_PROJECT_ID;
-    const fullTable = `\`${projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\``;
+    await ensureCallReviewStatusesTable(targetProjectId);
+    const client = getOutputBigQueryClient(targetProjectId);
+    const fullTable = `\`${client.projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\``;
     const [rows] = await client.query({
       query: `SELECT * FROM ${fullTable} WHERE call_id = @callId ORDER BY updated_at DESC LIMIT 1`,
       params: { callId },
@@ -860,18 +886,17 @@ export async function getCallReviewMeta(callId: string): Promise<CallReviewMeta 
   }
 }
 
-export async function getCallReviewStatus(callId: string): Promise<string | null> {
-  const meta = await getCallReviewMeta(callId);
+export async function getCallReviewStatus(callId: string, targetProjectId?: string): Promise<string | null> {
+  const meta = await getCallReviewMeta(callId, targetProjectId);
   return meta?.review_status ?? null;
 }
 
-export async function getCallReviewStatusesBulk(callIds: string[]): Promise<Record<string, string>> {
+export async function getCallReviewStatusesBulk(callIds: string[], targetProjectId?: string): Promise<Record<string, string>> {
   try {
     if (callIds.length === 0) return {};
-    await ensureCallReviewStatusesTable();
-    const client = getBigQueryClient();
-    const projectId = process.env.GCP_PROJECT_ID;
-    const fullTable = `\`${projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\``;
+    await ensureCallReviewStatusesTable(targetProjectId);
+    const client = getOutputBigQueryClient(targetProjectId);
+    const fullTable = `\`${client.projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\``;
     const [rows] = await client.query({
       query: `SELECT call_id, review_status FROM ${fullTable} WHERE call_id IN UNNEST(@callIds) QUALIFY ROW_NUMBER() OVER (PARTITION BY call_id ORDER BY updated_at DESC) = 1`,
       params: { callIds },
@@ -886,13 +911,12 @@ export async function getCallReviewStatusesBulk(callIds: string[]): Promise<Reco
   }
 }
 
-export async function getCallReviewList(limit = 200): Promise<any[]> {
+export async function getCallReviewList(limit = 200, targetProjectId?: string): Promise<any[]> {
   try {
-    await ensureCallReviewStatusesTable();
-    const client = getBigQueryClient();
-    const projectId = process.env.GCP_PROJECT_ID;
-    const ciTable = `\`${projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\``;
-    const crsTable = `\`${projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\``;
+    await ensureCallReviewStatusesTable(targetProjectId);
+    const client = getOutputBigQueryClient(targetProjectId);
+    const ciTable = `\`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\``;
+    const crsTable = `\`${client.projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\``;
     const query = `
       WITH latest_calls AS (
         SELECT *, ROW_NUMBER() OVER (PARTITION BY call_id ORDER BY processed_at DESC) AS rn
@@ -950,10 +974,9 @@ export async function getCallReviewList(limit = 200): Promise<any[]> {
   }
 }
 
-export async function ensureKnownContextTable(): Promise<void> {
+export async function ensureKnownContextTable(targetProjectId?: string): Promise<void> {
   try {
-    const client = getBigQueryClient();
-    const dataset = client.dataset(DATASET_ID);
+    const dataset = await ensureDataset(targetProjectId);
     const table = dataset.table(KNOWN_CONTEXT_TABLE_ID);
     const [exists] = await table.exists();
     if (!exists) {
@@ -971,7 +994,7 @@ export async function ensureKnownContextTable(): Promise<void> {
           ],
         },
       });
-      console.log("Created known_context_details table");
+      console.log(`Created known_context_details table in project ${resolveProjectId(targetProjectId)}`);
     }
   } catch (error: any) {
     console.error("Failed to ensure known_context_details table:", error.message);
@@ -987,11 +1010,11 @@ export interface KnownContextRow {
   active_ind?: boolean;
 }
 
-export async function insertKnownContextRows(rows: KnownContextRow[]): Promise<void> {
+export async function insertKnownContextRows(rows: KnownContextRow[], targetProjectId?: string): Promise<void> {
   try {
     if (!rows || !Array.isArray(rows) || rows.length === 0) return;
-    await ensureKnownContextTable();
-    const client = getBigQueryClient();
+    await ensureKnownContextTable(targetProjectId);
+    const client = getOutputBigQueryClient(targetProjectId);
     const now = new Date().toISOString();
     const insertRows = rows.map((r) => ({
       care_flow_id: r.care_flow_id,
@@ -1016,9 +1039,9 @@ export async function insertKnownContextRows(rows: KnownContextRow[]): Promise<v
   }
 }
 
-export async function getKnownContextForCareFlow(careFlowId: string, activeOnly = true): Promise<any[]> {
+export async function getKnownContextForCareFlow(careFlowId: string, activeOnly = true, targetProjectId?: string): Promise<any[]> {
   try {
-    const client = getBigQueryClient();
+    const client = getOutputBigQueryClient(targetProjectId);
     let query = `SELECT * FROM \`${client.projectId}.${DATASET_ID}.${KNOWN_CONTEXT_TABLE_ID}\` WHERE care_flow_id = @careFlowId`;
     if (activeOnly) {
       query += ` AND active_ind = TRUE`;
@@ -1038,8 +1061,8 @@ function extractTimestamp(val: { value: string } | string | null | undefined): s
   return String(val);
 }
 
-export async function getCallInfoList(limit = 100): Promise<any[]> {
-  const client = getBigQueryClient();
+export async function getCallInfoList(limit = 100, targetProjectId?: string): Promise<any[]> {
+  const client = getOutputBigQueryClient(targetProjectId);
   const query = `
     SELECT *
     FROM \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\`
@@ -1097,8 +1120,8 @@ export async function getCallInfoList(limit = 100): Promise<any[]> {
   });
 }
 
-export async function getCallStatsByDay(days = 30): Promise<any[]> {
-  const client = getBigQueryClient();
+export async function getCallStatsByDay(days = 30, targetProjectId?: string): Promise<any[]> {
+  const client = getOutputBigQueryClient(targetProjectId);
   const query = `
     SELECT
       DATE(processed_at, 'America/New_York') as date,
@@ -1146,11 +1169,9 @@ export interface BatchProcessingRow {
   bland_created_at: string | null;
 }
 
-let batchTableInitialized = false;
-
-async function ensureBatchProcessingTable(): Promise<void> {
-  const client = getBigQueryClient();
-  const dataset = await ensureDataset();
+async function ensureBatchProcessingTable(targetProjectId?: string): Promise<void> {
+  const client = getOutputBigQueryClient(targetProjectId);
+  const dataset = await ensureDataset(targetProjectId);
   const table = dataset.table(BATCH_PROCESSING_TABLE_ID);
   const [tableExists] = await table.exists();
   if (tableExists) return;
@@ -1173,12 +1194,12 @@ async function ensureBatchProcessingTable(): Promise<void> {
       ],
     },
   });
-  console.log(`Created BigQuery table: ${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}`);
+  console.log(`Created BigQuery table: ${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID} in project ${resolveProjectId(targetProjectId)}`);
 }
 
-async function migrateBatchProcessingColumns(): Promise<void> {
+async function migrateBatchProcessingColumns(targetProjectId?: string): Promise<void> {
   try {
-    const client = getBigQueryClient();
+    const client = getOutputBigQueryClient(targetProjectId);
     const dataset = client.dataset(DATASET_ID);
     const table = dataset.table(BATCH_PROCESSING_TABLE_ID);
     const [exists] = await table.exists();
@@ -1215,12 +1236,15 @@ async function migrateBatchProcessingColumns(): Promise<void> {
   }
 }
 
-export async function initializeBatchTable(): Promise<void> {
+export async function initializeBatchTable(targetProjectId?: string): Promise<void> {
   try {
-    await ensureBatchProcessingTable();
-    batchTableInitialized = true;
-    console.log("BigQuery batch_processing table ready.");
-    await migrateBatchProcessingColumns();
+    const key = tableInitKey(BATCH_PROCESSING_TABLE_ID, targetProjectId);
+    if (!initializedTables.has(key)) {
+      await ensureBatchProcessingTable(targetProjectId);
+      initializedTables.add(key);
+      console.log(`BigQuery batch_processing table ready in project ${resolveProjectId(targetProjectId)}.`);
+    }
+    await migrateBatchProcessingColumns(targetProjectId);
   } catch (err: any) {
     console.error("Failed to initialize batch_processing table:", err.message);
   }
@@ -1237,8 +1261,8 @@ export async function queryBlandCalls(filters: {
   requiredTags?: string[];
   excludeTags?: string[];
   processedFilter?: "unprocessed" | "processed" | "all";
-}): Promise<any[]> {
-  const client = getBigQueryClient();
+}, targetProjectId?: string): Promise<any[]> {
+  const client = getOutputBigQueryClient(targetProjectId);
   const conditions: string[] = [];
   const params: Record<string, any> = {};
 
@@ -1324,8 +1348,8 @@ export async function queryBlandCalls(filters: {
   return rows as any[];
 }
 
-export async function getDistinctTags(): Promise<string[]> {
-  const client = getBigQueryClient();
+export async function getDistinctTags(targetProjectId?: string): Promise<string[]> {
+  const client = getOutputBigQueryClient(targetProjectId);
   const query = `
     SELECT DISTINCT tag
     FROM \`${client.projectId}.Bland.tags\`
@@ -1338,7 +1362,8 @@ export async function getDistinctTags(): Promise<string[]> {
 
 export async function fetchAwellContextForCareFlows(
   careFlowIds: string[],
-  contextParams: { name: string; awellDataPointKey: string; awellMappingType?: string; awellPatientProfileField?: string }[]
+  contextParams: { name: string; awellDataPointKey: string; awellMappingType?: string; awellPatientProfileField?: string }[],
+  targetProjectId?: string,
 ): Promise<Record<string, Record<string, string>>> {
   if (!careFlowIds.length || !contextParams.length) return {};
 
@@ -1353,7 +1378,7 @@ export async function fetchAwellContextForCareFlows(
 
   if (dataPointParams.length === 0 && profileParams.length === 0) return {};
 
-  const client = getBigQueryClient();
+  const client = getOutputBigQueryClient(targetProjectId);
   const result: Record<string, Record<string, string>> = {};
 
   for (const param of dataPointParams) {
@@ -1433,14 +1458,16 @@ export async function fetchAwellContextForCareFlows(
 export async function loadBlandCallsToBatch(
   callIds: string[],
   batchLabel: string | null,
-  contextByCareFow?: Record<string, Record<string, string>>
+  contextByCareFow?: Record<string, Record<string, string>>,
+  targetProjectId?: string,
 ): Promise<{ loaded: number; skipped: number }> {
-  if (!batchTableInitialized) {
-    await ensureBatchProcessingTable();
-    batchTableInitialized = true;
+  const key = tableInitKey(BATCH_PROCESSING_TABLE_ID, targetProjectId);
+  if (!initializedTables.has(key)) {
+    await ensureBatchProcessingTable(targetProjectId);
+    initializedTables.add(key);
   }
 
-  const client = getBigQueryClient();
+  const client = getOutputBigQueryClient(targetProjectId);
   const batchId = `batch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
   const existingQuery = `
@@ -1521,8 +1548,8 @@ export async function getBatchItems(filters?: {
   status?: string;
   batchLabel?: string;
   limit?: number;
-}): Promise<any[]> {
-  const client = getBigQueryClient();
+}, targetProjectId?: string): Promise<any[]> {
+  const client = getOutputBigQueryClient(targetProjectId);
   const conditions: string[] = [];
   const params: Record<string, any> = {};
 
@@ -1556,7 +1583,7 @@ export async function getBatchItems(filters?: {
   }));
 }
 
-export async function getBatchSummary(): Promise<{
+export async function getBatchSummary(targetProjectId?: string): Promise<{
   total: number;
   pending: number;
   processing: number;
@@ -1564,7 +1591,7 @@ export async function getBatchSummary(): Promise<{
   failed: number;
   batches: { batch_id: string; batch_label: string | null; count: number; status_counts: Record<string, number> }[];
 }> {
-  const client = getBigQueryClient();
+  const client = getOutputBigQueryClient(targetProjectId);
 
   try {
     const [tableExists] = await client.dataset(DATASET_ID).table(BATCH_PROCESSING_TABLE_ID).exists();
@@ -1613,8 +1640,8 @@ export async function getBatchSummary(): Promise<{
   };
 }
 
-export async function getPendingBatchItems(limit = 10, batchId?: string): Promise<any[]> {
-  const client = getBigQueryClient();
+export async function getPendingBatchItems(limit = 10, batchId?: string, targetProjectId?: string): Promise<any[]> {
+  const client = getOutputBigQueryClient(targetProjectId);
   const batchFilter = batchId ? "AND batch_id = @batchId" : "";
   const query = `
     SELECT batch_id, bland_call_id, transcript, source_type, batch_label, care_flow_id, context_values, bland_created_at
@@ -1629,9 +1656,9 @@ export async function getPendingBatchItems(limit = 10, batchId?: string): Promis
   return rows as any[];
 }
 
-export async function claimPendingBatchItems(blandCallIds: string[]): Promise<number> {
+export async function claimPendingBatchItems(blandCallIds: string[], targetProjectId?: string): Promise<number> {
   if (blandCallIds.length === 0) return 0;
-  const client = getBigQueryClient();
+  const client = getOutputBigQueryClient(targetProjectId);
   const idList = blandCallIds.map(id => `'${id.replace(/'/g, "\\'")}'`).join(",");
   const query = `
     UPDATE \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
@@ -1650,13 +1677,14 @@ export async function updateBatchItemStatus(
   blandCallId: string,
   status: string,
   resultCallId?: string,
-  errorMessage?: string
+  errorMessage?: string,
+  targetProjectId?: string,
 ): Promise<number> {
   if (!VALID_BATCH_STATUSES.has(status)) {
     throw new Error(`Invalid batch status: ${status}`);
   }
 
-  const client = getBigQueryClient();
+  const client = getOutputBigQueryClient(targetProjectId);
   const params: Record<string, any> = {
     status,
     blandCallId,
@@ -1691,9 +1719,10 @@ export async function updateBatchItemStatus(
 export async function bulkUpdateBatchItemStatus(
   callIds: string[],
   status: string,
+  targetProjectId?: string,
 ): Promise<number> {
   if (!VALID_BATCH_STATUSES.has(status) || callIds.length === 0) return 0;
-  const client = getBigQueryClient();
+  const client = getOutputBigQueryClient(targetProjectId);
   const fromStatus = status === "processing" ? "'pending'" : "'pending', 'processing'";
   const idList = callIds.map(id => `'${id.replace(/'/g, "\\'")}'`).join(",");
   const setProcessedAt = (status === "completed" || status === "failed")
@@ -1709,10 +1738,11 @@ export async function bulkUpdateBatchItemStatus(
 }
 
 export async function bulkUpdateBatchResults(
-  results: Array<{ callId: string; success: boolean; resultCallId?: string; error?: string }>
+  results: Array<{ callId: string; success: boolean; resultCallId?: string; error?: string }>,
+  targetProjectId?: string,
 ): Promise<void> {
   if (results.length === 0) return;
-  const client = getBigQueryClient();
+  const client = getOutputBigQueryClient(targetProjectId);
   const succeeded = results.filter(r => r.success);
   const failed = results.filter(r => !r.success);
 
@@ -1747,8 +1777,8 @@ export async function bulkUpdateBatchResults(
   }
 }
 
-export async function recreateBatch(oldBatchId: string): Promise<{ newBatchId: string; count: number }> {
-  const client = getBigQueryClient();
+export async function recreateBatch(oldBatchId: string, targetProjectId?: string): Promise<{ newBatchId: string; count: number }> {
+  const client = getOutputBigQueryClient(targetProjectId);
   const readQuery = `
     SELECT bland_call_id, transcript, source_type, batch_label, care_flow_id, bland_created_at
     FROM \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
@@ -1805,8 +1835,8 @@ export async function recreateBatch(oldBatchId: string): Promise<{ newBatchId: s
   return { newBatchId, count: items.length };
 }
 
-export async function deletePendingBatchItems(): Promise<number> {
-  const client = getBigQueryClient();
+export async function deletePendingBatchItems(targetProjectId?: string): Promise<number> {
+  const client = getOutputBigQueryClient(targetProjectId);
   const query = `
     DELETE FROM \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
     WHERE status = 'pending'
@@ -1816,8 +1846,8 @@ export async function deletePendingBatchItems(): Promise<number> {
   return Number(meta?.dmlStats?.deletedRowCount || meta?.numDmlAffectedRows || 0);
 }
 
-export async function resetFailedBatchItems(batchId?: string): Promise<number> {
-  const client = getBigQueryClient();
+export async function resetFailedBatchItems(batchId?: string, targetProjectId?: string): Promise<number> {
+  const client = getOutputBigQueryClient(targetProjectId);
   const condition = batchId ? `AND batch_id = @batchId` : "";
   const query = `
     UPDATE \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
@@ -1832,8 +1862,8 @@ export async function resetFailedBatchItems(batchId?: string): Promise<number> {
   return Number(retryMeta?.dmlStats?.updatedRowCount || retryMeta?.numDmlAffectedRows || 0);
 }
 
-export async function getCallProcessingRuns(callId: string): Promise<{ run_number: number; processed_at: string; status: string; processing_time_ms: number; total_tokens: number; estimated_cost: number; prompt_version: string | null }[]> {
-  const client = getBigQueryClient();
+export async function getCallProcessingRuns(callId: string, targetProjectId?: string): Promise<{ run_number: number; processed_at: string; status: string; processing_time_ms: number; total_tokens: number; estimated_cost: number; prompt_version: string | null }[]> {
+  const client = getOutputBigQueryClient(targetProjectId);
   const query = `
     SELECT
       ROW_NUMBER() OVER (ORDER BY processed_at ASC) AS run_number,
@@ -1854,8 +1884,8 @@ export async function getCallProcessingRuns(callId: string): Promise<{ run_numbe
   }));
 }
 
-export async function getCallDetail(callId: string, runIndex?: number): Promise<{ callInfo: any | null; observations: CallObservationRow[]; qaPairs: any[]; barriers: any[]; callQA: any[]; totalRuns: number; currentRun: number }> {
-  const client = getBigQueryClient();
+export async function getCallDetail(callId: string, runIndex?: number, targetProjectId?: string): Promise<{ callInfo: any | null; observations: CallObservationRow[]; qaPairs: any[]; barriers: any[]; callQA: any[]; totalRuns: number; currentRun: number }> {
+  const client = getOutputBigQueryClient(targetProjectId);
 
   const allRunsQuery = `
     SELECT *, ROW_NUMBER() OVER (ORDER BY processed_at ASC) AS run_number
@@ -2021,7 +2051,7 @@ export async function getCallDetail(callId: string, runIndex?: number): Promise<
   let reviewTags: string[] = [];
   let reviewNotes: string = "";
   try {
-    const meta = await getCallReviewMeta(callId);
+    const meta = await getCallReviewMeta(callId, targetProjectId);
     if (meta) {
       reviewStatus = meta.review_status;
       reviewTags = meta.tags;

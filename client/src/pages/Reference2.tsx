@@ -23,7 +23,7 @@ export default function Reference2() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-muted-foreground">Guideway Care's Call Observation Extraction system is a multi-tenant API that processes patient call transcripts through Vertex AI Gemini and returns structured clinical analysis. Each client/pathway tenant has its own independent configuration.</p>
+          <p className="text-muted-foreground">Guideway Care's Call Observation Extraction system is a multi-tenant API that processes patient call transcripts through Vertex AI Gemini and returns structured clinical analysis. Each client/pathway tenant has its own independent configuration. The architecture splits data into a <strong className="text-foreground">central project</strong> (all config tables) and optional <strong className="text-foreground">per-client output projects</strong> (call results, reviews, batch processing). When a client/pathway has <code className="text-primary">gcp_project_id</code> set, output data is written to that project's BigQuery; otherwise it falls back to the central project.</p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
             <div className="bg-muted/30 border border-border/50 p-4 rounded-lg">
@@ -120,7 +120,7 @@ export default function Reference2() {
                   <p className="text-primary font-mono text-sm">gcp_project_id</p>
                   <Badge variant="outline" className="text-[10px]">optional</Badge>
                 </div>
-                <p className="text-muted-foreground text-sm mt-1">The Google Cloud project ID for this client's data. Used for per-client GCP project isolation.</p>
+                <p className="text-muted-foreground text-sm mt-1">The Google Cloud project ID for this client's output data. When set, all output tables (call_info, call_observations, etc.) are written to this project's BigQuery. When empty, output falls back to the central project. Config tables always stay in the central project regardless.</p>
               </div>
               <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
                 <div className="flex items-center gap-2">
@@ -342,8 +342,8 @@ gcloud builds submit --config cloudbuild.yaml`}
                 <p className="text-muted-foreground text-xs ml-5 mt-1">Then add the DNS records (CNAME or A) that Cloud Run provides to the client's domain registrar.</p>
               </li>
               <li>
-                <strong className="text-foreground">Per-Client GCP Project (isolated):</strong>
-                <p className="text-muted-foreground text-sm ml-5">Set the <code className="text-primary">gcp_project_id</code> field on the client/pathway record to point to the client's own GCP project. The system can then use client-specific BigQuery datasets and Secret Manager keys.</p>
+                <strong className="text-foreground">Per-Client GCP Project (output isolation):</strong>
+                <p className="text-muted-foreground text-sm ml-5">Set the <code className="text-primary">gcp_project_id</code> field on the client/pathway record to point to the client's own GCP project. All output data (call_info, call_observations, call_qa_pairs, barriers, call_qa_results, call_dispositions, call_reviews, call_review_statuses, batch_processing, known_context_details) is written to that project's BigQuery <code className="text-primary">call_information</code> dataset. Config tables (observations, context_parameters, etc.) always remain in the central project. The central service account must have BigQuery Data Editor + Job User roles on the client's project.</p>
               </li>
               <li>
                 <strong className="text-foreground">Per-Client API Key:</strong>
@@ -420,7 +420,7 @@ gcloud builds submit --config cloudbuild.yaml`}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          <p className="text-muted-foreground">All data is stored in Google BigQuery under the <code className="text-primary">call_information</code> dataset in the <code className="text-primary">encompass-476415</code> project. Tables are auto-created on first use with idempotent schema migrations.</p>
+          <p className="text-muted-foreground">All data is stored in Google BigQuery under the <code className="text-primary">call_information</code> dataset. <strong className="text-foreground">Config tables</strong> always live in the central project (<code className="text-primary">encompass-476415</code>). <strong className="text-foreground">Output tables</strong> are routed to the client's own GCP project when <code className="text-primary">gcp_project_id</code> is set on the client/pathway record, otherwise they fall back to the central project. Tables are auto-created on first use with idempotent schema migrations.</p>
 
           <Separator />
 
@@ -428,6 +428,7 @@ gcloud builds submit --config cloudbuild.yaml`}
             <h3 className="text-foreground font-semibold mb-3 flex items-center gap-2">
               <BarChart3 className="h-4 w-4 text-primary" />
               Output Tables (per-call data)
+              <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20 ml-2">Client Project or Central</Badge>
             </h3>
             <div className="space-y-4">
               <div className="border border-border/50 rounded-lg overflow-hidden">
@@ -504,6 +505,7 @@ gcloud builds submit --config cloudbuild.yaml`}
             <h3 className="text-foreground font-semibold mb-3 flex items-center gap-2">
               <ClipboardList className="h-4 w-4 text-primary" />
               Review Tables
+              <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20 ml-2">Client Project or Central</Badge>
             </h3>
             <div className="space-y-4">
               <div className="border border-border/50 rounded-lg overflow-hidden">
@@ -534,6 +536,7 @@ gcloud builds submit --config cloudbuild.yaml`}
             <h3 className="text-foreground font-semibold mb-3 flex items-center gap-2">
               <Settings className="h-4 w-4 text-primary" />
               Configuration Tables
+              <Badge className="bg-[#96d410]/10 text-[#4d6d08] border-[#96d410]/30 ml-2">Always Central Project</Badge>
             </h3>
             <div className="space-y-4">
               <div className="border border-border/50 rounded-lg overflow-hidden">
@@ -615,6 +618,7 @@ gcloud builds submit --config cloudbuild.yaml`}
             <h3 className="text-foreground font-semibold mb-3 flex items-center gap-2">
               <Server className="h-4 w-4 text-primary" />
               Other Tables
+              <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20 ml-2">Client Project or Central</Badge>
             </h3>
             <div className="space-y-4">
               <div className="border border-border/50 rounded-lg overflow-hidden">
