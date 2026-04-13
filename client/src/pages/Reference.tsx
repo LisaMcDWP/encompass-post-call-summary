@@ -578,7 +578,18 @@ function exportReferencePdf() {
   fieldDesc("data.analysis.barriers", "Array of barriers to care (barrier, context, category, severity, evidence, observation linkage)");
   fieldDesc("data.analysis.call_qa", "Array of Call QA assessments (name, display_name, value, detail, evidence)");
 
-  heading("GCP Deployment Setup");
+  heading("GCP Deployment");
+  subheading("Production URL");
+  para("https://guideway-care-api-855188300685.us-central1.run.app");
+  fieldDesc("GCP Project", "encompass-476415");
+  fieldDesc("Region", "us-central1");
+  fieldDesc("Service", "guideway-care-api");
+  fieldDesc("BigQuery Dataset", "call_information");
+  divider();
+  subheading("How to Deploy");
+  para("From GCP Cloud Shell: cd ~/encompass-post-call-summary && git pull && gcloud builds submit --config cloudbuild.yaml");
+  para("This pulls the latest code, builds a Docker image via Cloud Build, and deploys to Cloud Run.");
+  divider();
   subheading("Prerequisites");
   bulletPoint("Enable APIs: Cloud Run, Cloud Build, Container Registry, Secret Manager, Vertex AI, BigQuery");
   bulletPoint("Store GCP_SERVICE_ACCOUNT_KEY in Secret Manager");
@@ -2394,11 +2405,35 @@ export default function Reference() {
         <Card className="border-border/60 shadow-sm mb-6">
           <CardHeader>
             <CardTitle className="text-foreground flex items-center gap-2">
-              <Key className="h-5 w-5 text-primary" />
-              GCP Deployment Setup
+              <Server className="h-5 w-5 text-primary" />
+              GCP Deployment
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">Production URL</h3>
+              <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`https://guideway-care-api-855188300685.us-central1.run.app`}
+              </pre>
+              <div className="bg-muted/30 border border-border/50 p-3 rounded-lg text-sm mt-3 space-y-1">
+                <p className="text-foreground"><span className="text-primary font-semibold">GCP Project:</span> encompass-476415</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">Region:</span> us-central1</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">Service:</span> guideway-care-api</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">BigQuery Dataset:</span> call_information</p>
+              </div>
+            </div>
+            <Separator />
+            <div>
+              <h3 className="text-foreground font-semibold mb-2">How to Deploy</h3>
+              <p className="text-muted-foreground text-sm mb-2">From GCP Cloud Shell (or any machine with <code className="text-primary">gcloud</code> configured):</p>
+              <pre className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm overflow-x-auto">
+{`cd ~/encompass-post-call-summary
+git pull
+gcloud builds submit --config cloudbuild.yaml`}
+              </pre>
+              <p className="text-muted-foreground text-sm mt-2">This pulls the latest code, builds a Docker image via Cloud Build, and deploys it to Cloud Run. The <code className="text-primary">cloudbuild.yaml</code> handles the full pipeline.</p>
+            </div>
+            <Separator />
             <div>
               <h3 className="text-foreground font-semibold mb-2">Prerequisites</h3>
               <ol className="text-muted-foreground text-sm space-y-2 list-decimal list-inside">
