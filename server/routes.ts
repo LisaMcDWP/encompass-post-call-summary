@@ -66,7 +66,8 @@ export async function registerRoutes(
 
   async function handleAnalyze(req: any, res: any) {
     const startTime = Date.now();
-    const { care_flow_id, processed_datetime, source_type, source_id, source_text, context, client: reqClient, pathway: reqPathway, ...rest } = req.body;
+    let { care_flow_id, processed_datetime, source_type, source_id, source_text, context, client: reqClient, pathway: reqPathway, ...rest } = req.body;
+    if (!care_flow_id) care_flow_id = (req.headers["x-awell-care-flow-id"] as string) || undefined;
     const { source_text: _omit, ...requestMeta } = req.body;
     const requestBodyJson = JSON.stringify(requestMeta);
 
@@ -252,7 +253,8 @@ export async function registerRoutes(
     }
 
     const startTime = Date.now();
-    const { care_flow_id, processed_datetime, source_type, source_id, source_text, context, client: reqClient, pathway: reqPathway, webhook_url, ...rest } = req.body;
+    let { care_flow_id, processed_datetime, source_type, source_id, source_text, context, client: reqClient, pathway: reqPathway, webhook_url, ...rest } = req.body;
+    if (!care_flow_id) care_flow_id = (req.headers["x-awell-care-flow-id"] as string) || undefined;
     const isAsync = req.body.async === true || req.body.async === "true" || !!webhook_url;
     const { source_text: _omit, ...requestMeta } = req.body;
     const requestBodyJson = JSON.stringify(requestMeta);
