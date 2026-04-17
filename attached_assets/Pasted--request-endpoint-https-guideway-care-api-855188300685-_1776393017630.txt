@@ -1,0 +1,61 @@
+{
+  "request": {
+    "endpoint": "https://guideway-care-api-855188300685.us-central1.run.app/gwc_observation_summarization",
+    "method": "POST",
+    "headers": {
+      "Content-Type": "application/json",
+      "X-API-Key": "AIzaSyBRCK2n6wvT9QwxcIQlRXNNpQTN573nXTg",
+      "x-awell-care-flow-definition-id": "PbtKbnHBbFoW",
+      "x-awell-care-flow-start-date": "2026-04-14T15:29:43.353Z",
+      "x-awell-patient-id": "NAeITcK1mui26pvwAgvpE",
+      "x-awell-tenant-id": "RbOSeu8XGLrw",
+      "x-awell-care-flow-id": "bTvvLoqrEKH3"
+    },
+    "body": {
+      "source_text": "assistant: hi, this is hanna, calling from encompass health rehabilitation hospital. is this jacqueline? \n user: North Park.  \n user: No. \n assistant: oh, i see. is jacqueline available to come to the phone? \n user: Jacqueline can't speak. \n user: She can't talk. <Block interruptions enabled. This message was ignored> \n user: She can't hear. <Block interruptions enabled. This message was ignored> \n assistant: oh, i'm sorry to hear that. are you a family member or caregiver for jacqueline? \n user: Yes. This is her caregiver. \n assistant: nice to meet you. i'm a virtual assistant working with her care team. do you have a few minutes to answer a few questions about how she's been doing? \n user: Sure. \n assistant: wonderful. just so you know, this call will be recorded for training, and i'll be sharing what we talk about with her care team. how has she been feeling since she got home? \n user: She's just getting adjusted. \n user: She, \n assistant: got it. has she had to go back to an emergency room, hospital, or skilled nursing facility since she was discharged? \n user: is now settling in she's been away from home for a while, so she's getting adjusted. \n assistant: i understand. has she needed to go back to an emergency room, hospital, or skilled nursing - \n user: No. \n assistant: that's good to hear. i also wan- \n user: No. Not at all. \n assistant: that's good to hear. i also wanted to check on the prescriptions prescribed at discharge from the rehab hospital, have you been able to pick those up yet? \n assistant: are - \n user: Yes. When were they when were they sent? Do you know? \n assistant: i don't have that information, but i'm glad you were able to get them. have you had any trouble taking them or any questions about how to take them? \n user: No. \n assistant: okay. have you had a chance to schedule that follow-up visit with her doctor yet? \n user: It's next week. \n user: next week. \n assistant: oh, that's good to hear. do you happen to know what day next week that appointment is? \n user: It's \n assistant: take your t- \n user: a minute. I'm not sure right off here. \n user: Let me see. \n assistant: no rush at all. just whenever you have a moment. \n user: That's in I think it's the twenty \n assistant: oh, okay. has anyone from the home care team visited jacqueline yet? \n user: Not from the home care, from Amethyst. \n user: Came. \n assistant: got it. so someone from amethyst has visited. have you had any issues with the medical equipment or supp- \n user: Yes. \n assistant: oh, i'm sorry to hear that. i'll definitely pass that along to her care team. have you had any issues with the medical equipment or supplies since she's been home? \n user: Hello? \n assistant: hi, i'm still here. i was asking if you've had any issues with the me- \n user: I didn't \n assistant: oh, i'm so sorry. i didn't mean to cut you off. what were you saying? \n user: I was I was saying I didn't understand what you said. \n assistant: oh, i'm sorry about that. i was asking if you've had any issues with the medical equipment or supplies since jacqueline has been home. \n user: No. \n assistant: okay, that's good. do you have any questions about the discharge paperwork and instructions? \n user: No, ma'am, everything seems to be fine. \n assistant: thank you so much for going through all of that with me. is there anything else you'd like to share with jacqueline's care team? \n user: That when everything they did was wonderful, they were a great team, and I would recommend Encompass to anyone. \n assistant: oh, that is so lovely to hear. i'll make sure to pass that along to the team. is there anything else you'd like to share? \n user: No, ma'am. That'll be all. \n assistant: ...okay, thanks so much... you've been really helpful. i’ll make sure the care team sees this so they can fo- \n user: Thank you. \n assistant: okay, thanks so much... you've been really helpful. i’ll make sure the care team sees this so they can follow up and keep supporting her as needed. you’ve also got her discharge instructions if questions come up. and if anything changes, \n user: Yes. \n assistant: you’ve got options — call her doctor, contact the Encompass Health case management team, stop by urgent care, go to the ER, or call 911 if it’s serious. thank you for choosing Encompass Health Rehabilitation Hospital for your rehabilitation. take care — bye for now. \n agent-action: Ended call",
+      "source_id": "79423589-ed8b-44ad-b2ad-b8d46b19fe08",
+      "home_health_ordered": "true",
+      "dme_or_supplies_ordered": "unknown"
+    }
+  },
+  "responses": [
+    {
+      "date": "2026-04-16T19:21:22.707Z",
+      "status": 408,
+      "body": {
+        "error": "network timeout at: https://guideway-care-api-855188300685.us-central1.run.app/gwc_observation_summarization"
+      }
+    },
+    {
+      "date": "2026-04-16T19:21:51.899Z",
+      "status": 408,
+      "body": {
+        "error": "network timeout at: https://guideway-care-api-855188300685.us-central1.run.app/gwc_observation_summarization"
+      }
+    },
+    {
+      "date": "2026-04-16T19:22:25.819Z",
+      "status": 408,
+      "body": {
+        "error": "network timeout at: https://guideway-care-api-855188300685.us-central1.run.app/gwc_observation_summarization"
+      }
+    },
+    {
+      "date": "2026-04-16T19:23:06.959Z",
+      "status": 408,
+      "body": {
+        "error": "network timeout at: https://guideway-care-api-855188300685.us-central1.run.app/gwc_observation_summarization"
+      }
+    },
+    {
+      "date": "2026-04-16T19:24:04.977Z",
+      "status": 408,
+      "body": {
+        "error": "network timeout at: https://guideway-care-api-855188300685.us-central1.run.app/gwc_observation_summarization"
+      }
+    }
+  ],
+  "id": "3uhUQyJZ4oPk",
+  "status": "Failed",
+  "title": "Get extracted summary & observations "
+}
