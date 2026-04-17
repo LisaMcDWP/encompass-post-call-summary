@@ -276,7 +276,7 @@ export async function registerRoutes(
 
     if (isAsync) {
       console.log(`[AWELL-ASYNC] Accepted job ${resolvedSourceId} processing_id=${processingId} (webhook: ${webhook_url || "none"})`);
-      res.status(202).json({
+      res.status(200).json({
         status: "accepted",
         job_id: resolvedSourceId,
         processing_id: processingId,
