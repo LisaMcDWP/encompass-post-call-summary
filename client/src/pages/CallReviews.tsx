@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, ClipboardCheck, Search, Filter, Tag, FileText, ChevronRight, AlertCircle, CheckCircle2, Clock, Flag, Circle, Eye, X } from "lucide-react";
 import { useLocation } from "wouter";
+import { useClientPathway } from "@/contexts/ClientPathwayContext";
 
 interface CallReviewItem {
   call_id: string;
@@ -92,12 +93,15 @@ export default function CallReviews() {
         : [])
     : [];
 
+  const { selectedCPId } = useClientPathway();
+
   const { data: items, isLoading } = useQuery<CallReviewItem[]>({
-    queryKey: ["/api/calls/review-list", obsNameFilter, obsValueFilter],
+    queryKey: ["/api/calls/review-list", obsNameFilter, obsValueFilter, selectedCPId],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (obsNameFilter) params.set("obsName", obsNameFilter);
       if (obsValueFilter) params.set("obsValue", obsValueFilter);
+      if (selectedCPId) params.set("clientPathwayId", String(selectedCPId));
       const res = await fetch(`/api/calls/review-list?${params}`);
       if (!res.ok) throw new Error("Failed to load review list");
       return res.json();

@@ -1233,11 +1233,12 @@ export default function CallHistory() {
     : [];
 
   const { data: calls, isLoading, isFetching, refetch } = useQuery<CallInfo[]>({
-    queryKey: ["/api/calls", obsNameFilter, obsValueFilter],
+    queryKey: ["/api/calls", obsNameFilter, obsValueFilter, selectedCPId],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (obsNameFilter) params.set("obsName", obsNameFilter);
       if (obsValueFilter) params.set("obsValue", obsValueFilter);
+      if (selectedCPId) params.set("clientPathwayId", String(selectedCPId));
       const res = await fetch(`/api/calls?${params}`);
       if (!res.ok) throw new Error("Failed to load calls");
       return res.json();
@@ -1246,10 +1247,11 @@ export default function CallHistory() {
 
   const callIds = calls?.map(c => c.call_id) || [];
   const { data: reviewStatuses } = useQuery<Record<string, string>>({
-    queryKey: ["/api/calls/review-statuses", callIds.join(",")],
+    queryKey: ["/api/calls/review-statuses", callIds.join(","), selectedCPId],
     queryFn: async () => {
       if (callIds.length === 0) return {};
-      const res = await fetch(`/api/calls/review-statuses?callIds=${callIds.join(",")}`);
+      const cpParam = selectedCPId ? `&clientPathwayId=${selectedCPId}` : "";
+      const res = await fetch(`/api/calls/review-statuses?callIds=${callIds.join(",")}${cpParam}`);
       if (!res.ok) return {};
       return res.json();
     },
