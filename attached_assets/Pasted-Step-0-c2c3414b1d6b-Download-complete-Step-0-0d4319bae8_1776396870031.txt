@@ -1,0 +1,49 @@
+Step #0: c2c3414b1d6b: Download complete
+Step #0: 0d4319bae870: Verifying Checksum
+Step #0: 0d4319bae870: Download complete
+Step #0: e6275fd2e2fd: Verifying Checksum
+Step #0: e6275fd2e2fd: Download complete
+Step #0: c150dd3f5fc9: Verifying Checksum
+Step #0: c150dd3f5fc9: Download complete
+Step #0: de73ef470b7b: Verifying Checksum
+Step #0: de73ef470b7b: Download complete
+Step #0: b267853a2602: Verifying Checksum
+Step #0: b267853a2602: Download complete
+Step #0: c150dd3f5fc9: Pull complete
+Step #0: c2c3414b1d6b: Pull complete
+Step #0: de73ef470b7b: Pull complete
+Step #0: b267853a2602: Pull complete
+Step #0: 554bab0bf8e5: Pull complete
+Step #0: e6275fd2e2fd: Pull complete
+Step #0: 8480aa1086a2: Pull complete
+Step #0: 0d4319bae870: Pull complete
+Step #0: Digest: sha256:8789e1e0752d81088a085689c04fdb7a5b16e8102e353118a4b049bbf05db8ac
+Step #0: Status: Downloaded newer image for node:20
+Step #0: docker.io/library/node:20
+Step #0: npm error code EUSAGE
+Step #0: npm error
+Step #0: npm error The `npm ci` command can only install with an existing package-lock.json or
+Step #0: npm error npm-shrinkwrap.json with lockfileVersion >= 1. Run an install with npm@5 or
+Step #0: npm error later to generate a package-lock.json file, then try again.
+Step #0: npm error
+Step #0: npm error Clean install a project
+Step #0: npm error
+Step #0: npm error Usage:
+Step #0: npm error npm ci
+Step #0: npm error
+Step #0: npm error Options:
+Step #0: npm error [--install-strategy <hoisted|nested|shallow|linked>] [--legacy-bundling]
+Step #0: npm error [--global-style] [--omit <dev|optional|peer> [--omit <dev|optional|peer> ...]]
+Step #0: npm error [--include <prod|dev|optional|peer> [--include <prod|dev|optional|peer> ...]]
+Step #0: npm error [--strict-peer-deps] [--foreground-scripts] [--ignore-scripts] [--no-audit]
+Step #0: npm error [--no-bin-links] [--no-fund] [--dry-run]
+Step #0: npm error [-w|--workspace <workspace-name> [-w|--workspace <workspace-name> ...]]
+Step #0: npm error [-ws|--workspaces] [--include-workspace-root] [--install-links]
+Step #0: npm error
+Step #0: npm error aliases: clean-install, ic, install-clean, isntall-clean
+Step #0: npm error
+Step #0: npm error Run "npm help ci" for more info
+Step #0: npm error A complete log of this run can be found in: /builder/home/.npm/_logs/2026-04-17T03_28_45_863Z-debug-0.log
+Finished Step #0
+ERROR
+ERROR: build step 0 "node:20" failed: step exited with non-zero status: 1
