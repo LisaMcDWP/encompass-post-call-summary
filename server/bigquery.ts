@@ -1504,7 +1504,7 @@ export async function loadBlandCallsToBatch(
   batchLabel: string | null,
   contextByCareFow?: Record<string, Record<string, string>>,
   targetProjectId?: string,
-): Promise<{ loaded: number; skipped: number }> {
+): Promise<{ loaded: number; skipped: number; skippedAlreadyInBatch: number; skippedNoTranscript: number; targetProjectId: string }> {
   const key = tableInitKey(BATCH_PROCESSING_TABLE_ID, targetProjectId);
   if (!initializedTables.has(key)) {
     await ensureBatchProcessingTable(targetProjectId);
@@ -1514,16 +1514,19 @@ export async function loadBlandCallsToBatch(
   const client = getOutputBigQueryClient(targetProjectId);
   const batchId = `batch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
+  console.log(`[batch/load] project=${client.projectId} requested=${callIds.length} sample=${callIds.slice(0,3).join(",")}`);
+
   const existingQuery = `
     SELECT bland_call_id FROM \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
     WHERE bland_call_id IN UNNEST(@callIds) AND status IN ('pending', 'processing', 'completed')
   `;
   const [existingRows] = await client.query({ query: existingQuery, params: { callIds }, location: "US" });
   const existingIds = new Set((existingRows as any[]).map(r => r.bland_call_id));
+  console.log(`[batch/load] existing in batch_processing: ${existingIds.size}`);
 
   const newCallIds = callIds.filter(id => !existingIds.has(id));
   if (newCallIds.length === 0) {
-    return { loaded: 0, skipped: callIds.length };
+    return { loaded: 0, skipped: callIds.length, skippedAlreadyInBatch: existingIds.size, skippedNoTranscript: 0, targetProjectId: client.projectId };
   }
 
   const transcriptQuery = `
@@ -1538,9 +1541,10 @@ export async function loadBlandCallsToBatch(
     AND LENGTH(TRIM(c.concatenated_transcript)) > 0
   `;
   const [transcriptRows] = await client.query({ query: transcriptQuery, params: { callIds: newCallIds }, location: "US" });
+  console.log(`[batch/load] transcript+care_flow_id rows found: ${(transcriptRows as any[]).length} of ${newCallIds.length} new`);
 
   if ((transcriptRows as any[]).length === 0) {
-    return { loaded: 0, skipped: callIds.length };
+    return { loaded: 0, skipped: callIds.length, skippedAlreadyInBatch: existingIds.size, skippedNoTranscript: newCallIds.length, targetProjectId: client.projectId };
   }
 
   const validRows = (transcriptRows as any[]);
@@ -1585,7 +1589,10 @@ export async function loadBlandCallsToBatch(
 
   await client.query({ query: insertQuery, params, types, location: "US" });
 
-  return { loaded: validRows.length, skipped: callIds.length - validRows.length };
+  const totalSkipped = callIds.length - validRows.length;
+  const noTranscript = newCallIds.length - validRows.length;
+  console.log(`[batch/load] inserted ${validRows.length} into batch ${batchId}; alreadyInBatch=${existingIds.size} noTranscript=${noTranscript}`);
+  return { loaded: validRows.length, skipped: totalSkipped, skippedAlreadyInBatch: existingIds.size, skippedNoTranscript: noTranscript, targetProjectId: client.projectId };
 }
 
 export async function getBatchItems(filters?: {

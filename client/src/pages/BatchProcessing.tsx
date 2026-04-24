@@ -161,6 +161,11 @@ export default function BatchProcessing() {
   });
 
   const [searchResults, setSearchResults] = useState<BlandCall[]>([]);
+
+  useEffect(() => {
+    setSearchResults([]);
+    setSelectedCalls(new Set());
+  }, [selectedCPId]);
   const [searching, setSearching] = useState(false);
 
   const batchItemsQuery = useQuery<BatchItem[]>({
@@ -227,9 +232,14 @@ export default function BatchProcessing() {
       return res.json();
     },
     onSuccess: (data) => {
+      const parts: string[] = [`${data.loaded} loaded`];
+      if (data.skippedAlreadyInBatch) parts.push(`${data.skippedAlreadyInBatch} already in batch`);
+      if (data.skippedNoTranscript) parts.push(`${data.skippedNoTranscript} no transcript / care_flow_id`);
+      if (!data.skippedAlreadyInBatch && !data.skippedNoTranscript && data.skipped) parts.push(`${data.skipped} skipped`);
       toast({
-        title: "Calls loaded",
-        description: `${data.loaded} loaded, ${data.skipped} skipped (already in batch)`,
+        title: data.loaded > 0 ? "Calls loaded" : "No calls loaded",
+        description: `${parts.join(", ")} — project: ${data.targetProjectId || "(default)"}`,
+        variant: data.loaded === 0 ? "destructive" : "default",
       });
       setSelectedCalls(new Set());
       queryClient.invalidateQueries({ queryKey: ["/api/batch/summary"] });
