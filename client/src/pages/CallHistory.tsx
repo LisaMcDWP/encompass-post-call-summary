@@ -339,9 +339,10 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
   }, [data?.reviewStatus, data?.reviewTags, data?.reviewNotes]);
 
   const { data: obsConfig } = useQuery<{ name: string; display_order: number }[]>({
-    queryKey: ["/api/observations-order"],
+    queryKey: ["/api/observations-order", selectedCPId],
     queryFn: async () => {
-      const res = await fetch("/api/observations?clientPathwayId=1");
+      if (!selectedCPId) return [];
+      const res = await fetch(`/api/observations?clientPathwayId=${selectedCPId}`);
       if (!res.ok) return [];
       const items = await res.json();
       return items.map((o: any) => ({ name: o.name, display_order: o.displayOrder ?? 999 }));
@@ -1219,7 +1220,8 @@ export default function CallHistory() {
   const { data: obsOptions } = useQuery<ObsConfigItem[]>({
     queryKey: ["/api/observations-filter-options", selectedCPId],
     queryFn: async () => {
-      const res = await fetch(`/api/observations?clientPathwayId=${selectedCPId || 1}`);
+      if (!selectedCPId) return [];
+      const res = await fetch(`/api/observations?clientPathwayId=${selectedCPId}`);
       if (!res.ok) return [];
       return res.json();
     },

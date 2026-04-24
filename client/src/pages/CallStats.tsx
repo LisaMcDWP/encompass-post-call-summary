@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useClientPathway } from "@/contexts/ClientPathwayContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -173,16 +174,20 @@ export default function CallStats() {
   const [range, setRange] = useState<DateRange>("7");
   const [filterClient, setFilterClient] = useState<string>("all");
   const [filterPathway, setFilterPathway] = useState<string>("all");
+  const { selectedCPId } = useClientPathway();
 
   const apiDays = useMemo(() => rangeToDays(range), [range]);
 
   const { data: stats, isLoading } = useQuery<DailyStat[]>({
-    queryKey: ["/api/calls/stats/daily", apiDays],
+    queryKey: ["/api/calls/stats/daily", apiDays, selectedCPId],
     queryFn: async () => {
-      const res = await fetch(`/api/calls/stats/daily?days=${apiDays}`);
+      const params = new URLSearchParams({ days: String(apiDays) });
+      if (selectedCPId) params.set("clientPathwayId", String(selectedCPId));
+      const res = await fetch(`/api/calls/stats/daily?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to load stats");
       return res.json();
     },
+    enabled: !!selectedCPId,
   });
 
   const clients = useMemo(() =>

@@ -78,9 +78,10 @@ export default function CallReviews() {
   const [obsValueFilter, setObsValueFilter] = useState("");
 
   const { data: obsOptions } = useQuery<ObsConfigItem[]>({
-    queryKey: ["/api/observations-review-filter"],
+    queryKey: ["/api/observations-review-filter", selectedCPId],
     queryFn: async () => {
-      const res = await fetch("/api/observations?clientPathwayId=1");
+      if (!selectedCPId) return [];
+      const res = await fetch(`/api/observations?clientPathwayId=${selectedCPId}`);
       if (!res.ok) return [];
       return res.json();
     },
