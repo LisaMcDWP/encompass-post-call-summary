@@ -138,11 +138,25 @@ export default function BatchProcessing() {
   }
 
   const tagsQuery = useQuery<string[]>({
-    queryKey: ["/api/batch/tags"],
+    queryKey: ["/api/batch/tags", selectedCPId],
+    queryFn: async () => {
+      if (!selectedCPId) return [];
+      const res = await fetch(`/api/batch/tags?clientPathwayId=${selectedCPId}`);
+      if (!res.ok) throw new Error("Failed to fetch tags");
+      return res.json();
+    },
+    enabled: !!selectedCPId,
   });
 
   const summaryQuery = useQuery<BatchSummary>({
-    queryKey: ["/api/batch/summary"],
+    queryKey: ["/api/batch/summary", selectedCPId],
+    queryFn: async () => {
+      if (!selectedCPId) return { total: 0, batches: [] } as any;
+      const res = await fetch(`/api/batch/summary?clientPathwayId=${selectedCPId}`);
+      if (!res.ok) throw new Error("Failed to fetch summary");
+      return res.json();
+    },
+    enabled: !!selectedCPId,
     refetchInterval: activeJobId ? 5000 : 10000,
   });
 
@@ -150,15 +164,18 @@ export default function BatchProcessing() {
   const [searching, setSearching] = useState(false);
 
   const batchItemsQuery = useQuery<BatchItem[]>({
-    queryKey: ["/api/batch/items", statusFilter],
+    queryKey: ["/api/batch/items", statusFilter, selectedCPId],
     queryFn: async () => {
+      if (!selectedCPId) return [];
       const params = new URLSearchParams();
       if (statusFilter) params.set("status", statusFilter);
       params.set("limit", "200");
+      params.set("clientPathwayId", String(selectedCPId));
       const res = await fetch(`/api/batch/items?${params}`);
       if (!res.ok) throw new Error("Failed to fetch batch items");
       return res.json();
     },
+    enabled: !!selectedCPId,
     refetchInterval: 10000,
   });
 
