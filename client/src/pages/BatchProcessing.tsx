@@ -94,6 +94,7 @@ export default function BatchProcessing() {
   const [showSearch, setShowSearch] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [processLimit, setProcessLimit] = useState("100");
+  const [processConcurrency, setProcessConcurrency] = useState("5");
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [answeredBy, setAnsweredBy] = useState("human");
   const [minDuration, setMinDuration] = useState("0.01");
@@ -301,13 +302,14 @@ export default function BatchProcessing() {
     const newest = batches?.sort((a: any, b: any) => b.batch_id.localeCompare(a.batch_id))?.[0]?.batch_id;
     if (newest) params.set("batchId", newest);
     if (selectedCPId) params.set("clientPathwayId", String(selectedCPId));
+    if (processConcurrency) params.set("concurrency", processConcurrency);
     const res = await fetch(`/api/batch/process?${params}`, { method: "POST" });
     if (!res.ok) {
       const err = await res.json();
       throw new Error(err.message || "Failed to process batch");
     }
     return res.json();
-  }, [summaryQuery.data, selectedCPId]);
+  }, [summaryQuery.data, selectedCPId, processConcurrency]);
 
   const processMutation = useMutation({
     mutationFn: () => startProcessing(processLimit),
@@ -520,6 +522,19 @@ export default function BatchProcessing() {
             min="1"
             max="500"
             data-testid="input-process-limit"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Label className="text-sm whitespace-nowrap">Parallel:</Label>
+          <Input
+            type="number"
+            value={processConcurrency}
+            onChange={(e) => setProcessConcurrency(e.target.value)}
+            className="w-16"
+            min="1"
+            max="10"
+            data-testid="input-process-concurrency"
+            title="How many calls to process in parallel (1-10)"
           />
         </div>
         <Button

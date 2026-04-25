@@ -1543,6 +1543,7 @@ export async function registerRoutes(
       const targetProjectId = batchCPRecord?.gcp_project_id || undefined;
 
       const batchSize = parseInt(req.query.limit as string) || 5;
+      const concurrency = Math.max(1, Math.min(parseInt(req.query.concurrency as string) || 5, 10));
       const batchId = req.query.batchId as string | undefined;
       const pendingItems = await getPendingBatchItems(batchSize, batchId, targetProjectId);
 
@@ -1583,89 +1584,103 @@ export async function registerRoutes(
       });
 
       (async () => {
-        try {
-          for (let idx = 0; idx < pendingItems.length; idx++) {
-            const item = pendingItems[idx];
-            const callId = item.bland_call_id;
+        const total = pendingItems.length;
+        const processOne = async (item: any, idx: number) => {
+          const callId = item.bland_call_id;
 
-            try {
-              await updateBatchItemStatus(callId, "processing", undefined, undefined, targetProjectId);
-            } catch (claimErr: any) {
-              console.error(`Batch job ${jobId}: failed to claim ${callId}: ${claimErr.message}`);
-              jobState.skipped++;
-              continue;
-            }
-
-            try {
-              const startTime = Date.now();
-              let batchContext: Record<string, string> = {};
-              if (item.context_values) {
-                try { batchContext = JSON.parse(item.context_values); } catch {}
-              }
-              const { analysis, tokenUsage } = await analyzeTranscript(
-                callId,
-                item.transcript.trim(),
-                activeObs,
-                undefined,
-                summaryInstruction || undefined,
-                contextParams,
-                batchContext,
-                observationsGuidance || undefined,
-                barriersGuidance || undefined,
-                callQAPromptsForBatch,
-                batchDispConfig,
-              );
-              const processingTimeMs = Date.now() - startTime;
-
-              const processedAt = new Date().toISOString();
-              const blandTs = item.bland_created_at?.value || item.bland_created_at || null;
-              const callDate = blandTs ? new Date(blandTs).toISOString() : null;
-              await insertCallInfo({
-                callId,
-                careFlowId: item.care_flow_id || null,
-                callDate,
-                sourceType: item.source_type || "bland_call",
-                sourceId: callId,
-                processedAt,
-                processingTimeMs,
-                promptVersion,
-                promptVersionDate,
-                contextValues: Object.keys(batchContext).length > 0 ? batchContext : undefined,
-                transcriptLength: item.transcript.length,
-                summary: analysis.summary,
-                followUpAreas: analysis.follow_up_areas,
-                transitionStatus: analysis.transition_status,
-                promptTokens: tokenUsage.promptTokens,
-                completionTokens: tokenUsage.completionTokens,
-                totalTokens: tokenUsage.totalTokens,
-                estimatedCost: tokenUsage.estimatedCost,
-                status: "success",
-                requestBody: JSON.stringify({ batch_id: item.batch_id, bland_call_id: callId }),
-                responseJson: JSON.stringify(analysis),
-                client: batchCPRecord?.client || null,
-                pathway: batchCPRecord?.pathway || null,
-              }, targetProjectId);
-
-              await insertCallObservations(callId, analysis.observations, targetProjectId);
-              await insertCallQAPairs(callId, analysis.qa_pairs, targetProjectId);
-              await insertCallBarriers(callId, analysis.barriers, targetProjectId);
-              await insertCallQAResults(callId, analysis.call_qa || [], targetProjectId);
-              if (analysis.disposition) {
-                console.log(`Batch job ${jobId}: ${callId} has disposition: ${analysis.disposition.disposition_category} / ${analysis.disposition.disposition_detail}`);
-                await insertCallDisposition(callId, analysis.disposition, targetProjectId);
-              } else {
-                console.log(`Batch job ${jobId}: ${callId} — NO disposition returned by Gemini`);
-              }
-              await updateBatchItemStatus(callId, "completed", callId, undefined, targetProjectId);
-              jobState.completed++;
-              console.log(`Batch job ${jobId}: [${idx + 1}/${pendingItems.length}] ${callId} completed (${processingTimeMs}ms)`);
-            } catch (err: any) {
-              try { await updateBatchItemStatus(callId, "failed", undefined, err.message, targetProjectId); } catch {}
-              jobState.failed++;
-              jobState.errors.push({ callId, error: err.message });
-              console.error(`Batch job ${jobId}: [${idx + 1}/${pendingItems.length}] ${callId} failed: ${err.message}`);
-            }
+          try {
+            await updateBatchItemStatus(callId, "processing", undefined, undefined, targetProjectId);
+          } catch (claimErr: any) {
+            console.error(`Batch job ${jobId}: failed to claim ${callId}: ${claimErr.message}`);
+            jobState.skipped++;
+            return;
           }
+
+          try {
+            const startTime = Date.now();
+            let batchContext: Record<string, string> = {};
+            if (item.context_values) {
+              try { batchContext = JSON.parse(item.context_values); } catch {}
+            }
+            const { analysis, tokenUsage } = await analyzeTranscript(
+              callId,
+              item.transcript.trim(),
+              activeObs,
+              undefined,
+              summaryInstruction || undefined,
+              contextParams,
+              batchContext,
+              observationsGuidance || undefined,
+              barriersGuidance || undefined,
+              callQAPromptsForBatch,
+              batchDispConfig,
+            );
+            const processingTimeMs = Date.now() - startTime;
+
+            const processedAt = new Date().toISOString();
+            const blandTs = item.bland_created_at?.value || item.bland_created_at || null;
+            const callDate = blandTs ? new Date(blandTs).toISOString() : null;
+            await insertCallInfo({
+              callId,
+              careFlowId: item.care_flow_id || null,
+              callDate,
+              sourceType: item.source_type || "bland_call",
+              sourceId: callId,
+              processedAt,
+              processingTimeMs,
+              promptVersion,
+              promptVersionDate,
+              contextValues: Object.keys(batchContext).length > 0 ? batchContext : undefined,
+              transcriptLength: item.transcript.length,
+              summary: analysis.summary,
+              followUpAreas: analysis.follow_up_areas,
+              transitionStatus: analysis.transition_status,
+              promptTokens: tokenUsage.promptTokens,
+              completionTokens: tokenUsage.completionTokens,
+              totalTokens: tokenUsage.totalTokens,
+              estimatedCost: tokenUsage.estimatedCost,
+              status: "success",
+              requestBody: JSON.stringify({ batch_id: item.batch_id, bland_call_id: callId }),
+              responseJson: JSON.stringify(analysis),
+              client: batchCPRecord?.client || null,
+              pathway: batchCPRecord?.pathway || null,
+            }, targetProjectId);
+
+            await insertCallObservations(callId, analysis.observations, targetProjectId);
+            await insertCallQAPairs(callId, analysis.qa_pairs, targetProjectId);
+            await insertCallBarriers(callId, analysis.barriers, targetProjectId);
+            await insertCallQAResults(callId, analysis.call_qa || [], targetProjectId);
+            if (analysis.disposition) {
+              console.log(`Batch job ${jobId}: ${callId} has disposition: ${analysis.disposition.disposition_category} / ${analysis.disposition.disposition_detail}`);
+              await insertCallDisposition(callId, analysis.disposition, targetProjectId);
+            } else {
+              console.log(`Batch job ${jobId}: ${callId} — NO disposition returned by Gemini`);
+            }
+            await updateBatchItemStatus(callId, "completed", callId, undefined, targetProjectId);
+            jobState.completed++;
+            console.log(`Batch job ${jobId}: [${idx + 1}/${total}] ${callId} completed (${processingTimeMs}ms)`);
+          } catch (err: any) {
+            try { await updateBatchItemStatus(callId, "failed", undefined, err.message, targetProjectId); } catch {}
+            jobState.failed++;
+            jobState.errors.push({ callId, error: err.message });
+            console.error(`Batch job ${jobId}: [${idx + 1}/${total}] ${callId} failed: ${err.message}`);
+          }
+        };
+
+        try {
+          let nextIdx = 0;
+          const workers: Promise<void>[] = [];
+          const worker = async () => {
+            while (true) {
+              const idx = nextIdx++;
+              if (idx >= total) return;
+              await processOne(pendingItems[idx], idx);
+            }
+          };
+          const workerCount = Math.min(concurrency, total);
+          console.log(`Batch job ${jobId} starting with concurrency=${workerCount} for ${total} items`);
+          for (let w = 0; w < workerCount; w++) workers.push(worker());
+          await Promise.all(workers);
           jobState.status = "completed";
         } catch (err: any) {
           jobState.status = "failed";
