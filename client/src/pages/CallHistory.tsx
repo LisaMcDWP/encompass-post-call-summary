@@ -34,6 +34,7 @@ interface CallInfo {
   error_message: string | null;
   request_body: Record<string, any> | null;
   request_headers: Record<string, string> | null;
+  response_json: any | null;
   client: string | null;
   pathway: string | null;
 }
@@ -534,8 +535,12 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
             <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 block mb-1.5">API Request Fields</span>
             <div className="bg-muted/20 rounded-lg border border-border/40 divide-y divide-border/30">
               <div className="grid grid-cols-[140px_1fr] text-xs">
-                <span className="text-muted-foreground px-3 py-2 font-medium">Call ID</span>
+                <span className="text-muted-foreground px-3 py-2 font-medium">Job ID</span>
                 <span className="font-mono px-3 py-2" data-testid="detail-call-id-field">{info.call_id}</span>
+              </div>
+              <div className="grid grid-cols-[140px_1fr] text-xs">
+                <span className="text-muted-foreground px-3 py-2 font-medium">Processing ID</span>
+                <span className="font-mono px-3 py-2" data-testid="detail-processing-id">{info.processing_id || <span className="text-muted-foreground/50 italic">not set</span>}</span>
               </div>
               <div className="grid grid-cols-[140px_1fr] text-xs">
                 <span className="text-muted-foreground px-3 py-2 font-medium">Care Flow ID</span>
@@ -609,6 +614,19 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
                 className="bg-[#172938] text-gray-300 p-4 rounded-lg text-xs overflow-x-auto max-h-48 overflow-y-auto mt-1"
                 data-testid="detail-request-body"
               >{JSON.stringify(info.request_body, null, 2)}</pre>
+            </details>
+          )}
+
+          {info.response_json && (
+            <details className="group">
+              <summary className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 cursor-pointer hover:text-muted-foreground mb-1.5 list-none flex items-center gap-1">
+                <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
+                Response JSON
+              </summary>
+              <pre
+                className="bg-[#172938] text-gray-300 p-4 rounded-lg text-xs overflow-x-auto max-h-96 overflow-y-auto mt-1"
+                data-testid="detail-response-json"
+              >{typeof info.response_json === "string" ? info.response_json : JSON.stringify(info.response_json, null, 2)}</pre>
             </details>
           )}
 
