@@ -181,9 +181,10 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
   });
 
   const { data: savedReviews } = useQuery<any[]>({
-    queryKey: ["/api/calls/reviews", callId],
+    queryKey: ["/api/calls/reviews", callId, selectedCPId],
     queryFn: async () => {
-      const res = await fetch(`/api/calls/${callId}/reviews`);
+      const cpParam = selectedCPId ? `?clientPathwayId=${selectedCPId}` : "";
+      const res = await fetch(`/api/calls/${callId}/reviews${cpParam}`);
       if (!res.ok) return [];
       return res.json();
     },
@@ -231,7 +232,7 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
       const res = await fetch(`/api/calls/${callId}/reviews`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reviews: reviewStates }),
+        body: JSON.stringify({ reviews: reviewStates, clientPathwayId: selectedCPId }),
       });
       if (!res.ok) throw new Error("Failed");
       setReviewDirty(false);
@@ -249,7 +250,7 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
       const res = await fetch(`/api/calls/${callId}/review-status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reviewStatus: newStatus }),
+        body: JSON.stringify({ reviewStatus: newStatus, clientPathwayId: selectedCPId }),
       });
       if (!res.ok) throw new Error("Failed");
       setCallReviewStatus(newStatus);
@@ -282,7 +283,7 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
       const res = await fetch(`/api/calls/${callId}/review-meta`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tags: reviewTags, notes: reviewNotesText }),
+        body: JSON.stringify({ tags: reviewTags, notes: reviewNotesText, clientPathwayId: selectedCPId }),
       });
       if (!res.ok) throw new Error("Failed");
       setMetaDirty(false);
@@ -301,6 +302,7 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
       const res = await fetch(`/api/calls/${callId}/reprocess`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientPathwayId: selectedCPId }),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -317,9 +319,13 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
   };
 
   const { data, isLoading, isError } = useQuery<CallDetail>({
-    queryKey: ["/api/calls", callId, selectedRun],
+    queryKey: ["/api/calls", callId, selectedRun, selectedCPId],
     queryFn: async () => {
-      const url = selectedRun !== undefined ? `/api/calls/${callId}?run=${selectedRun}` : `/api/calls/${callId}`;
+      const params = new URLSearchParams();
+      if (selectedRun !== undefined) params.set("run", String(selectedRun));
+      if (selectedCPId) params.set("clientPathwayId", String(selectedCPId));
+      const qs = params.toString();
+      const url = qs ? `/api/calls/${callId}?${qs}` : `/api/calls/${callId}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error("Failed to load call detail");
       return res.json();
