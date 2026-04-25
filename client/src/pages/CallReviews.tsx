@@ -71,6 +71,7 @@ interface ObsConfigItem {
 
 export default function CallReviews() {
   const [, navigate] = useLocation();
+  const { selectedCPId } = useClientPathway();
   const [statusFilter, setStatusFilter] = useState<ReviewStatusFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [tagFilter, setTagFilter] = useState<string | null>(null);
@@ -93,8 +94,6 @@ export default function CallReviews() {
         ? selectedObs.value.map((v: any) => typeof v === "object" ? v.label : v)
         : [])
     : [];
-
-  const { selectedCPId } = useClientPathway();
 
   const { data: items, isLoading } = useQuery<CallReviewItem[]>({
     queryKey: ["/api/calls/review-list", obsNameFilter, obsValueFilter, selectedCPId],
