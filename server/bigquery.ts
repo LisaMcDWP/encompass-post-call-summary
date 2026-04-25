@@ -1366,7 +1366,7 @@ export async function queryBlandCalls(filters: {
            v.variable_value as care_flow_id,
            ARRAY_AGG(DISTINCT t.tag IGNORE NULLS) as tags
     FROM \`${client.projectId}.Bland.calls\` c
-    INNER JOIN \`${client.projectId}.Bland.variables\` v
+    LEFT JOIN \`${client.projectId}.Bland.variables\` v
       ON c.call_id = v.call_id AND v.variable_name = 'awell_care_flow_id'
     LEFT JOIN \`${client.projectId}.Bland.tags\` t
       ON c.call_id = t.call_id AND t.tag IS NOT NULL AND t.tag != ''
@@ -1534,7 +1534,7 @@ export async function loadBlandCallsToBatch(
            v.variable_value as care_flow_id,
            c.created_at as bland_created_at
     FROM \`${client.projectId}.Bland.calls\` c
-    INNER JOIN \`${client.projectId}.Bland.variables\` v
+    LEFT JOIN \`${client.projectId}.Bland.variables\` v
       ON c.call_id = v.call_id AND v.variable_name = 'awell_care_flow_id'
     WHERE c.call_id IN UNNEST(@callIds)
     AND c.concatenated_transcript IS NOT NULL
