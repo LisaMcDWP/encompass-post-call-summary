@@ -52,6 +52,54 @@ const emptyForm = {
   promptGuidance: "",
 };
 
+const VALID_COLORS = new Set(["GREEN", "YELLOW", "RED", "BLUE", "GRAY"]);
+
+function parseObservationProposal(text: string): typeof emptyForm | null {
+  const grab = (label: string): string | null => {
+    const re = new RegExp(`\\*\\*${label}:\\*\\*\\s*([^\\n]+)`, "i");
+    const m = text.match(re);
+    return m ? m[1].trim() : null;
+  };
+  const name = grab("Name");
+  const displayName = grab("Display Name");
+  if (!name || !displayName) return null;
+  const description = grab("Description") || "";
+  const domainRaw = (grab("Domain") || "general").toLowerCase();
+  const domain = DOMAIN_OPTIONS.includes(domainRaw) ? domainRaw : "general";
+  const valueTypeRaw = (grab("Value Type") || "enum").toLowerCase();
+  const valueType = VALUE_TYPE_OPTIONS.includes(valueTypeRaw) ? valueTypeRaw : "enum";
+  const promptGuidance = grab("Prompt Guidance") || "";
+  let value: EnumValue[] = [];
+  if (valueType === "enum") {
+    const valuesLine = grab("Values");
+    if (valuesLine) {
+      value = valuesLine
+        .split(",")
+        .map(s => s.trim())
+        .filter(Boolean)
+        .map(part => {
+          const m = part.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
+          if (m) {
+            const label = m[1].trim();
+            const color = m[2].trim().toUpperCase();
+            return { label, color: (VALID_COLORS.has(color) ? color : "GRAY") as EnumValue["color"] };
+          }
+          return { label: part, color: "GRAY" as const };
+        });
+    }
+  }
+  return {
+    name: name.replace(/[`*]/g, "").trim(),
+    displayName: displayName.replace(/[`*]/g, "").trim(),
+    description,
+    domain,
+    valueType,
+    value,
+    isActive: true,
+    promptGuidance,
+  };
+}
+
 export default function Observations() {
   const { selectedCPId } = useClientPathway();
   const [observations, setObservations] = useState<Observation[]>([]);
@@ -407,11 +455,41 @@ export default function Observations() {
                         }`}
                       >
                         {msg.role === "assistant" ? (
-                          <div className="whitespace-pre-wrap text-[13px] leading-relaxed" dangerouslySetInnerHTML={{
-                            __html: msg.text
-                              .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                              .replace(/\n/g, '<br/>')
-                          }} />
+                          <>
+                            <div className="whitespace-pre-wrap text-[13px] leading-relaxed" dangerouslySetInnerHTML={{
+                              __html: msg.text
+                                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                                .replace(/\n/g, '<br/>')
+                            }} />
+                            {(() => {
+                              const proposal = parseObservationProposal(msg.text);
+                              if (!proposal) return null;
+                              const exists = observations.some(o => o.name === proposal.name);
+                              return (
+                                <div className="mt-2 pt-2 border-t border-border/40 flex items-center gap-2">
+                                  <Button
+                                    size="sm"
+                                    className="h-7 bg-primary hover:bg-primary/90 text-white text-xs"
+                                    onClick={() => {
+                                      setEditingId(null);
+                                      setForm(proposal);
+                                      setNewEnumLabel("");
+                                      setIsDialogOpen(true);
+                                    }}
+                                    data-testid={`button-apply-suggestion-${i}`}
+                                  >
+                                    <Plus className="h-3 w-3 mr-1" />
+                                    {exists ? "Edit & save as new" : "Add this observation"}
+                                  </Button>
+                                  {exists && (
+                                    <span className="text-[11px] text-yellow-700">
+                                      "{proposal.name}" already exists
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </>
                         ) : (
                           <span>{msg.text}</span>
                         )}
