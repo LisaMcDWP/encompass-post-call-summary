@@ -278,167 +278,218 @@ export async function registerRoutes(
 
     if (isAsync) {
       console.log(`[AWELL-ASYNC] Accepted job ${resolvedSourceId} processing_id=${processingId} (webhook: ${webhook_url || "none"})`);
-      res.status(200).json({
-        status: "accepted",
-        job_id: resolvedSourceId,
-        processing_id: processingId,
-        message: "Processing started. Retrieve results via GET /gwc_observation_summarization/:job_id" + (webhook_url ? " or wait for webhook callback." : "."),
-      });
+      let targetProjectId: string | undefined;
+      try {
+        let cpId = clientPathwayId;
+        if (!cpId) {
+          const allCPs = await storage.getClientPathways();
+          if (reqClient && reqPathway) {
+            const match = allCPs.find((cp: any) => cp.client === reqClient && cp.pathway === reqPathway);
+            if (match) cpId = match.id;
+          }
+          if (!cpId && allCPs.length > 0) cpId = allCPs[0].id;
+        }
+        if (!cpId) {
+          return res.status(400).json({ status: "error", message: "No client/pathway configuration found." });
+        }
 
-      (async () => {
-        let targetProjectId: string | undefined;
-        try {
-          let cpId = clientPathwayId;
-          if (!cpId) {
-            const allCPs = await storage.getClientPathways();
-            if (reqClient && reqPathway) {
-              const match = allCPs.find((cp: any) => cp.client === reqClient && cp.pathway === reqPathway);
-              if (match) cpId = match.id;
+        const cpRecord = await storage.getClientPathway(cpId);
+        const resolvedClient = reqClient || cpRecord?.client || null;
+        const resolvedPathway = reqPathway || cpRecord?.pathway || null;
+        targetProjectId = cpRecord?.gcp_project_id || undefined;
+
+        const [
+          { prompt: _p, promptVersion, promptVersionDate },
+          activeObs,
+          summaryInstruction,
+          observationsGuidance,
+          barriersGuidance,
+          contextParams,
+          callQAPrompts,
+          asyncDispCats,
+          asyncDispDets,
+        ] = await Promise.all([
+          getPromptWithVersion(cpId),
+          storage.getActiveObservations(cpId),
+          storage.getSetting(cpId, "summary_instruction"),
+          storage.getSetting(cpId, "observations_prompt_guidance"),
+          storage.getSetting(cpId, "barriers_prompt_guidance"),
+          storage.getActiveContextParameters(cpId),
+          storage.getActiveCallQAPrompts(cpId),
+          storage.getDispositionCategories(cpId),
+          storage.getDispositionDetails(cpId),
+        ]);
+        const asyncDispConfig: DispositionConfig = { categories: asyncDispCats, details: asyncDispDets };
+
+        const contextValues: Record<string, string> = {};
+        const contextSource = (context && typeof context === "object") ? context : rest;
+        for (const param of contextParams) {
+          if (contextSource[param.name] !== undefined && contextSource[param.name] !== null) {
+            contextValues[param.name] = String(contextSource[param.name]);
+          }
+        }
+
+        console.log(`[AWELL-ASYNC] Running fast Gemini analysis inline for ${resolvedSourceId}`);
+        const { analysis: fastAnalysis, tokenUsage: fastTokenUsage } = await analyzeTranscriptFast(
+          resolvedSourceId, source_text.trim(), activeObs,
+          summaryInstruction || undefined, contextParams, contextValues,
+          observationsGuidance || undefined, asyncDispConfig,
+        );
+        const processingTime = Date.now() - startTime;
+        const processedAt = new Date().toISOString();
+        console.log(`[AWELL-ASYNC] Fast Gemini completed for ${resolvedSourceId} in ${processingTime}ms — sending response`);
+
+        res.status(202).json({
+          status: "accepted",
+          job_id: resolvedSourceId,
+          processing_id: processingId,
+          message: "Initial analysis returned. Full results (qa_pairs, barriers, call_qa) will follow via " + (webhook_url ? "webhook callback." : "GET /gwc_observation_summarization/" + resolvedSourceId + "."),
+          data: {
+            care_flow_id: care_flow_id || null,
+            processed_datetime: processed_datetime || processedAt,
+            source_type: source_type || null,
+            source_id: resolvedSourceId,
+            context: contextValues,
+            processedAt,
+            processingTimeMs: processingTime,
+            prompt_version: promptVersion,
+            prompt_version_date: promptVersionDate,
+            analysis: {
+              summary: fastAnalysis.summary,
+              observations: fastAnalysis.observations,
+              observations_summary_formatted: fastAnalysis.transition_status,
+              followup_formatted: fastAnalysis.follow_up_areas,
+              disposition: fastAnalysis.disposition,
+            },
+            tokenUsage: fastTokenUsage,
+          },
+        });
+
+        (async () => {
+          const bgStart = Date.now();
+          try {
+            const bgResult = await analyzeTranscriptBackground(
+              resolvedSourceId, source_text.trim(), activeObs, callQAPrompts,
+              barriersGuidance || undefined,
+            );
+            const bgTime = Date.now() - bgStart;
+            console.log(`[AWELL-ASYNC-BG] Background Gemini completed for ${resolvedSourceId} in ${bgTime}ms`);
+
+            const fullAnalysis = {
+              ...fastAnalysis,
+              qa_pairs: bgResult.qa_pairs,
+              barriers: bgResult.barriers,
+              call_qa: bgResult.call_qa,
+            };
+            const combinedTokenUsage = {
+              promptTokens: fastTokenUsage.promptTokens + bgResult.tokenUsage.promptTokens,
+              completionTokens: fastTokenUsage.completionTokens + bgResult.tokenUsage.completionTokens,
+              totalTokens: fastTokenUsage.totalTokens + bgResult.tokenUsage.totalTokens,
+              estimatedCost: fastTokenUsage.estimatedCost + bgResult.tokenUsage.estimatedCost,
+            };
+
+            await Promise.all([
+              insertCallInfo({
+                callId: resolvedSourceId, processingId, careFlowId: care_flow_id || null,
+                processedDatetime: processed_datetime || processedAt, sourceType: source_type || null,
+                sourceId: resolvedSourceId, processedAt, processingTimeMs: processingTime,
+                promptVersion, promptVersionDate, contextValues,
+                transcriptLength: source_text.length, summary: fullAnalysis.summary || "",
+                followUpAreas: fullAnalysis.follow_up_areas || "", transitionStatus: fullAnalysis.transition_status || "",
+                promptTokens: combinedTokenUsage.promptTokens, completionTokens: combinedTokenUsage.completionTokens,
+                totalTokens: combinedTokenUsage.totalTokens, estimatedCost: combinedTokenUsage.estimatedCost,
+                status: "success", requestBody: requestBodyJson, requestHeaders: requestHeadersJson,
+                responseJson: JSON.stringify(fullAnalysis),
+                client: resolvedClient, pathway: resolvedPathway,
+              }, targetProjectId),
+              insertCallObservations(resolvedSourceId, fullAnalysis.observations || [], targetProjectId),
+              insertCallQAPairs(resolvedSourceId, bgResult.qa_pairs, targetProjectId),
+              insertCallBarriers(resolvedSourceId, bgResult.barriers, targetProjectId),
+              insertCallQAResults(resolvedSourceId, bgResult.call_qa, targetProjectId),
+              ...(fastAnalysis.disposition ? [insertCallDisposition(resolvedSourceId, fastAnalysis.disposition, targetProjectId)] : []),
+            ]);
+            console.log(`[AWELL-ASYNC-BG] BigQuery writes completed for ${resolvedSourceId}`);
+
+            if (webhook_url) {
+              const webhookPayload = {
+                status: "completed",
+                job_id: resolvedSourceId,
+                processing_id: processingId,
+                data: {
+                  care_flow_id: care_flow_id || null,
+                  processed_datetime: processed_datetime || processedAt,
+                  source_type: source_type || null,
+                  source_id: resolvedSourceId,
+                  context: contextValues,
+                  processedAt,
+                  processingTimeMs: processingTime,
+                  prompt_version: promptVersion,
+                  prompt_version_date: promptVersionDate,
+                  analysis: {
+                    summary: fullAnalysis.summary,
+                    observations: fullAnalysis.observations,
+                    observations_summary_formatted: fullAnalysis.transition_status,
+                    followup_formatted: fullAnalysis.follow_up_areas,
+                    qa_pairs: fullAnalysis.qa_pairs,
+                    barriers: fullAnalysis.barriers,
+                    call_qa: fullAnalysis.call_qa,
+                  },
+                  tokenUsage: combinedTokenUsage,
+                },
+              };
+
+              const maxRetries = 3;
+              for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                try {
+                  const webhookRes = await fetch(webhook_url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(webhookPayload),
+                  });
+                  console.log(`[AWELL-ASYNC-BG] Webhook callback to ${webhook_url} returned ${webhookRes.status} (attempt ${attempt})`);
+                  if (webhookRes.ok) break;
+                  if (attempt < maxRetries) await new Promise(r => setTimeout(r, 2000 * attempt));
+                } catch (whErr: any) {
+                  console.error(`[AWELL-ASYNC-BG] Webhook callback failed (attempt ${attempt}): ${whErr.message}`);
+                  if (attempt < maxRetries) await new Promise(r => setTimeout(r, 2000 * attempt));
+                }
+              }
             }
-            if (!cpId && allCPs.length > 0) cpId = allCPs[0].id;
-          }
-          if (!cpId) {
-            console.error(`[AWELL-ASYNC] No client/pathway config for ${resolvedSourceId}`);
-            return;
-          }
-
-          const cpRecord = await storage.getClientPathway(cpId);
-          const resolvedClient = reqClient || cpRecord?.client || null;
-          const resolvedPathway = reqPathway || cpRecord?.pathway || null;
-          targetProjectId = cpRecord?.gcp_project_id || undefined;
-
-          const [
-            { prompt: _p, promptVersion, promptVersionDate },
-            activeObs,
-            summaryInstruction,
-            observationsGuidance,
-            barriersGuidance,
-            contextParams,
-            callQAPrompts,
-          ] = await Promise.all([
-            getPromptWithVersion(cpId),
-            storage.getActiveObservations(cpId),
-            storage.getSetting(cpId, "summary_instruction"),
-            storage.getSetting(cpId, "observations_prompt_guidance"),
-            storage.getSetting(cpId, "barriers_prompt_guidance"),
-            storage.getActiveContextParameters(cpId),
-            storage.getActiveCallQAPrompts(cpId),
-          ]);
-
-          const contextValues: Record<string, string> = {};
-          const contextSource = (context && typeof context === "object") ? context : rest;
-          for (const param of contextParams) {
-            if (contextSource[param.name] !== undefined && contextSource[param.name] !== null) {
-              contextValues[param.name] = String(contextSource[param.name]);
-            }
-          }
-
-          const asyncDispCats = await storage.getDispositionCategories(cpId);
-          const asyncDispDets = await storage.getDispositionDetails(cpId);
-          const asyncDispConfig: DispositionConfig = { categories: asyncDispCats, details: asyncDispDets };
-
-          console.log(`[AWELL-ASYNC] Starting full Gemini analysis for ${resolvedSourceId}`);
-          const { analysis, tokenUsage } = await analyzeTranscript(
-            resolvedSourceId, source_text.trim(), activeObs,
-            undefined,
-            summaryInstruction || undefined, contextParams, contextValues,
-            observationsGuidance || undefined, barriersGuidance || undefined,
-            callQAPrompts, asyncDispConfig,
-          );
-          const processingTime = Date.now() - startTime;
-          const processedAt = new Date().toISOString();
-
-          console.log(`[AWELL-ASYNC] Gemini completed for ${resolvedSourceId} in ${processingTime}ms — writing to BigQuery`);
-
-          await Promise.all([
+          } catch (bgErr: any) {
+            console.error(`[AWELL-ASYNC-BG] Background processing FAILED for ${resolvedSourceId}:`, bgErr.message);
             insertCallInfo({
               callId: resolvedSourceId, processingId, careFlowId: care_flow_id || null,
               processedDatetime: processed_datetime || processedAt, sourceType: source_type || null,
               sourceId: resolvedSourceId, processedAt, processingTimeMs: processingTime,
               promptVersion, promptVersionDate, contextValues,
-              transcriptLength: source_text.length, summary: analysis.summary || "",
-              followUpAreas: analysis.follow_up_areas || "", transitionStatus: analysis.transition_status || "",
-              promptTokens: tokenUsage.promptTokens, completionTokens: tokenUsage.completionTokens,
-              totalTokens: tokenUsage.totalTokens, estimatedCost: tokenUsage.estimatedCost,
-              status: "success", requestBody: requestBodyJson, requestHeaders: requestHeadersJson,
-              responseJson: JSON.stringify(analysis),
+              transcriptLength: source_text.length, summary: fastAnalysis.summary || "",
+              followUpAreas: fastAnalysis.follow_up_areas || "", transitionStatus: fastAnalysis.transition_status || "",
+              promptTokens: fastTokenUsage.promptTokens, completionTokens: fastTokenUsage.completionTokens,
+              totalTokens: fastTokenUsage.totalTokens, estimatedCost: fastTokenUsage.estimatedCost,
+              status: "success_partial", requestBody: requestBodyJson, requestHeaders: requestHeadersJson,
+              responseJson: JSON.stringify(fastAnalysis),
               client: resolvedClient, pathway: resolvedPathway,
-            }, targetProjectId),
-            insertCallObservations(resolvedSourceId, analysis.observations || [], targetProjectId),
-            insertCallQAPairs(resolvedSourceId, analysis.qa_pairs || [], targetProjectId),
-            insertCallBarriers(resolvedSourceId, analysis.barriers || [], targetProjectId),
-            insertCallQAResults(resolvedSourceId, analysis.call_qa || [], targetProjectId),
-            ...(analysis.disposition ? [insertCallDisposition(resolvedSourceId, analysis.disposition, targetProjectId)] : []),
-          ]);
-
-          console.log(`[AWELL-ASYNC] BigQuery writes completed for ${resolvedSourceId}`);
-
-          if (webhook_url) {
-            const webhookPayload = {
-              status: "completed",
-              job_id: resolvedSourceId,
-              processing_id: processingId,
-              data: {
-                care_flow_id: care_flow_id || null,
-                processed_datetime: processed_datetime || processedAt,
-                source_type: source_type || null,
-                source_id: resolvedSourceId,
-                context: contextValues,
-                processedAt,
-                processingTimeMs: processingTime,
-                prompt_version: promptVersion,
-                prompt_version_date: promptVersionDate,
-                analysis: {
-                  summary: analysis.summary,
-                  observations: analysis.observations,
-                  observations_summary_formatted: analysis.transition_status,
-                  followup_formatted: analysis.follow_up_areas,
-                  qa_pairs: analysis.qa_pairs,
-                  barriers: analysis.barriers,
-                  call_qa: analysis.call_qa,
-                },
-                tokenUsage,
-              },
-            };
-
-            const maxRetries = 3;
-            for (let attempt = 1; attempt <= maxRetries; attempt++) {
-              try {
-                const webhookRes = await fetch(webhook_url, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(webhookPayload),
-                });
-                console.log(`[AWELL-ASYNC] Webhook callback to ${webhook_url} returned ${webhookRes.status} (attempt ${attempt})`);
-                if (webhookRes.ok) break;
-                if (attempt < maxRetries) await new Promise(r => setTimeout(r, 2000 * attempt));
-              } catch (whErr: any) {
-                console.error(`[AWELL-ASYNC] Webhook callback failed (attempt ${attempt}): ${whErr.message}`);
-                if (attempt < maxRetries) await new Promise(r => setTimeout(r, 2000 * attempt));
-              }
+              errorMessage: `Background processing failed: ${bgErr.message}`,
+            }, targetProjectId).catch(() => {});
+            insertCallObservations(resolvedSourceId, fastAnalysis.observations || [], targetProjectId).catch(() => {});
+            if (fastAnalysis.disposition) {
+              insertCallDisposition(resolvedSourceId, fastAnalysis.disposition, targetProjectId).catch(() => {});
             }
           }
-        } catch (err: any) {
-          console.error(`[AWELL-ASYNC] Processing FAILED for ${resolvedSourceId}:`, err.message);
-          const processingTime = Date.now() - startTime;
-          insertCallInfo({
-            callId: resolvedSourceId, careFlowId: care_flow_id || null,
-            processedAt: new Date().toISOString(), processingTimeMs: processingTime,
-            transcriptLength: source_text.length, status: "error",
-            errorMessage: err.message, requestBody: requestBodyJson, requestHeaders: requestHeadersJson,
-          }, targetProjectId).catch(() => {});
-
-          if (webhook_url) {
-            try {
-              await fetch(webhook_url, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ status: "failed", job_id: resolvedSourceId, error: err.message }),
-              });
-            } catch {}
-          }
+        })();
+      } catch (err: any) {
+        console.error(`[AWELL-ASYNC] Processing FAILED for ${resolvedSourceId}:`, err.message);
+        const processingTime = Date.now() - startTime;
+        insertCallInfo({
+          callId: resolvedSourceId, careFlowId: care_flow_id || null,
+          processedAt: new Date().toISOString(), processingTimeMs: processingTime,
+          transcriptLength: source_text.length, status: "error",
+          errorMessage: err.message, requestBody: requestBodyJson, requestHeaders: requestHeadersJson,
+        }, targetProjectId).catch(() => {});
+        if (!res.headersSent) {
+          return res.status(500).json({ status: "error", job_id: resolvedSourceId, message: err.message });
         }
-      })();
+      }
       return;
     }
 
