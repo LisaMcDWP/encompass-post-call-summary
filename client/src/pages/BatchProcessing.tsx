@@ -197,6 +197,7 @@ export default function BatchProcessing() {
       if (excludeTags.length > 0) params.set("excludeTags", excludeTags.join(","));
       if (processedFilter !== "all") params.set("processedFilter", processedFilter);
       params.set("limit", searchLimit || "50");
+      if (selectedCPId) params.set("clientPathwayId", String(selectedCPId));
 
       const res = await fetch(`/api/batch/bland-calls?${params}`);
       if (!res.ok) throw new Error("Search failed");
