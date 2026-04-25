@@ -1,0 +1,334 @@
+{
+  "care_flow_id": null,
+  "processed_datetime": "2026-04-25T16:50:30.981Z",
+  "source_type": "bland_call",
+  "source_id": "79423589-ed8b-44ad-b2ad-b8d46b19fe08",
+  "context": {
+    "home_health_ordered": "true",
+    "dme_or_supplies_ordered": "unknown",
+    "patient_first_name": "Jacqueline"
+  },
+  "processedAt": "2026-04-25T16:50:30.981Z",
+  "processingTimeMs": 24489,
+  "prompt_version": 75,
+  "prompt_version_date": "2026-04-13T01:15:45.154Z",
+  "analysis": {
+    "summary": "The caregiver for Jacqueline reports that Jacqueline is just getting adjusted and settling in since returning home. There has been no disposition change, and she has not returned to an emergency room, hospital, or skilled nursing facility. The caregiver confirmed that discharge prescriptions were picked up and there are no issues or questions regarding medication adherence. A follow-up appointment is scheduled for next week. A home care team member from Amethyst has visited Jacqueline, and there are no issues with medical equipment or supplies. The caregiver has no questions about discharge instructions and provided positive feedback about the care team.",
+    "observations": [
+      {
+        "name": "overall_feeling",
+        "display_name": "Overall Feeling",
+        "domain": "clinical",
+        "value_type": "enum",
+        "value": "Neutral",
+        "detail": "Caregiver reports Jacqueline is "just getting adjusted" and "settling in" after being away from home for a while.",
+        "evidence": "She's just getting adjusted. She is now settling in she's been away from home for a while, so she's getting adjusted.",
+        "confidence": "high"
+      },
+      {
+        "name": "disposition_change",
+        "display_name": "Disposition Change",
+        "domain": "clinical",
+        "value_type": "enum",
+        "value": "No disposition change",
+        "detail": "Caregiver reports Jacqueline has not had to go back to an emergency room, hospital, or skilled nursing facility since discharge.",
+        "evidence": "No. Not at all.",
+        "confidence": "high"
+      },
+      {
+        "name": "current_care_location",
+        "display_name": "Current care location",
+        "domain": "general",
+        "value_type": "enum",
+        "value": "Home",
+        "detail": "The patient is currently at home, as confirmed by the caregiver reporting no disposition change since getting home.",
+        "evidence": "She's just getting adjusted. She is now settling in she's been away from home for a while, so she's getting adjusted.",
+        "confidence": "high"
+      },
+      {
+        "name": "prescription_pickup",
+        "display_name": "Prescription Pickup",
+        "domain": "medication",
+        "value_type": "enum",
+        "value": "Picked Up",
+        "detail": "Caregiver confirms that Jacqueline's discharge prescriptions have been picked up.",
+        "evidence": "Yes. When were they when were they sent? Do you know?",
+        "confidence": "high"
+      },
+      {
+        "name": "medication_adherence",
+        "display_name": "Medication Adherence",
+        "domain": "medication",
+        "value_type": "enum",
+        "value": "No Issues",
+        "detail": "Caregiver reports no trouble taking medications and no questions about how to take them.",
+        "evidence": "No.",
+        "confidence": "high"
+      },
+      {
+        "name": "followup_appointment",
+        "display_name": "Follow-up Appointment",
+        "domain": "appointment",
+        "value_type": "enum",
+        "value": "Scheduled",
+        "detail": "Caregiver states Jacqueline has a follow-up appointment scheduled for next week.",
+        "evidence": "It's next week.",
+        "confidence": "high"
+      },
+      {
+        "name": "home_health_visit",
+        "display_name": "Home Health Visit",
+        "domain": "clinical",
+        "value_type": "enum",
+        "value": "Completed",
+        "detail": "Caregiver reports that someone from 'Amethyst' has visited Jacqueline.",
+        "evidence": "Not from the home care, from Amethyst. Came. Yes.",
+        "confidence": "high"
+      },
+      {
+        "name": "discharge_instructions",
+        "display_name": "Discharge Instructions",
+        "domain": "discharge",
+        "value_type": "enum",
+        "value": "No Questions",
+        "detail": "Caregiver reports no questions about the discharge paperwork and instructions, stating everything seems fine.",
+        "evidence": "No, ma'am, everything seems to be fine.",
+        "confidence": "high"
+      },
+      {
+        "name": "dme_supplies",
+        "display_name": "DME or Supplies Delivered",
+        "domain": "equipment",
+        "value_type": "enum",
+        "value": "Delivered",
+        "detail": "Caregiver reports no issues with medical equipment or supplies since Jacqueline has been home, implying they were delivered and are functioning.",
+        "evidence": "No.",
+        "confidence": "high"
+      },
+      {
+        "name": "experience_comments",
+        "display_name": "Experience Comments",
+        "domain": "experience",
+        "value_type": "enum",
+        "value": "Positive",
+        "detail": "Caregiver expressed positive feedback, stating that everything the care team did was wonderful, they were a great team, and would recommend Encompass to anyone.",
+        "evidence": "That when everything they did was wonderful, they were a great team, and I would recommend Encompass to anyone.",
+        "confidence": "high"
+      },
+      {
+        "name": "participant_role",
+        "display_name": "Participant role",
+        "domain": "general",
+        "value_type": "enum",
+        "value": "care giver",
+        "detail": "The person on the call identified herself as Jacqueline's caregiver.",
+        "evidence": "Yes. This is her caregiver.",
+        "confidence": "high"
+      }
+    ],
+    "observations_summary_formatted": "Overall Feeling: Neutral
+Caregiver reports Jacqueline is "just getting adjusted" and "settling in" after being away from home for a while.
+
+Disposition Change: No disposition change
+Caregiver reports Jacqueline has not had to go back to an emergency room, hospital, or skilled nursing facility since discharge.
+
+Current care location: Home
+The patient is currently at home, as confirmed by the caregiver reporting no disposition change since getting home.
+
+Prescription Pickup: Picked Up
+Caregiver confirms that Jacqueline's discharge prescriptions have been picked up.
+
+Medication Adherence: No Issues
+Caregiver reports no trouble taking medications and no questions about how to take them.
+
+Follow-up Appointment: Scheduled
+Caregiver states Jacqueline has a follow-up appointment scheduled for next week.
+
+Home Health Visit: Completed
+Caregiver reports that someone from 'Amethyst' has visited Jacqueline.
+
+Discharge Instructions: No Questions
+Caregiver reports no questions about the discharge paperwork and instructions, stating everything seems fine.
+
+DME or Supplies Delivered: Delivered
+Caregiver reports no issues with medical equipment or supplies since Jacqueline has been home, implying they were delivered and are functioning.
+
+Experience Comments: Positive
+Caregiver expressed positive feedback, stating that everything the care team did was wonderful, they were a great team, and would recommend Encompass to anyone.
+
+Participant role: care giver
+The person on the call identified herself as Jacqueline's caregiver.
+
+",
+    "followup_formatted": "
+No follow-up areas identified.
+
+"
+  },
+  "tokenUsage": {
+    "promptTokens": 7323,
+    "completionTokens": 2651,
+    "totalTokens": 11947,
+    "estimatedCost": 0.00268905
+  }
+}
+
+View less
+summary
+The caregiver for Jacqueline reports that Jacqueline is just getting adjusted and settling in since returning home. There has been no disposition change, and she has not returned to an emergency room, hospital, or skilled nursing facility. The caregiver confirmed that discharge prescriptions were picked up and there are no issues or questions regarding medication adherence. A follow-up appointment is scheduled for next week. A home care team member from Amethyst has visited Jacqueline, and there are no issues with medical equipment or supplies. The caregiver has no questions about discharge instructions and provided positive feedback about the care team.
+
+View more
+observationsSummaryFormatted
+Overall Feeling: Neutral
+Caregiver reports Jacqueline is "just getting adjusted" and "settling in" after being away from home for a while.
+
+Disposition Change: No disposition change
+Caregiver reports Jacqueline has not had to go back to an emergency room, hospital, or skilled nursing facility since discharge.
+
+Current care location: Home
+The patient is currently at home, as confirmed by the caregiver reporting no disposition change since getting home.
+
+Prescription Pickup: Picked Up
+Caregiver confirms that Jacqueline's discharge prescriptions have been picked up.
+
+Medication Adherence: No Issues
+Caregiver reports no trouble taking medications and no questions about how to take them.
+
+Follow-up Appointment: Scheduled
+Caregiver states Jacqueline has a follow-up appointment scheduled for next week.
+
+Home Health Visit: Completed
+Caregiver reports that someone from 'Amethyst' has visited Jacqueline.
+
+Discharge Instructions: No Questions
+Caregiver reports no questions about the discharge paperwork and instructions, stating everything seems fine.
+
+DME or Supplies Delivered: Delivered
+Caregiver reports no issues with medical equipment or supplies since Jacqueline has been home, implying they were delivered and are functioning.
+
+Experience Comments: Positive
+Caregiver expressed positive feedback, stating that everything the care team did was wonderful, they were a great team, and would recommend Encompass to anyone.
+
+Participant role: care giver
+The person on the call identified herself as Jacqueline's caregiver.
+
+
+View more
+followupFormatted
+No follow-up areas identified.
+
+
+observations
+[
+  {
+    "name": "overall_feeling",
+    "display_name": "Overall Feeling",
+    "domain": "clinical",
+    "value_type": "enum",
+    "value": "Neutral",
+    "detail": "Caregiver reports Jacqueline is "just getting adjusted" and "settling in" after being away from home for a while.",
+    "evidence": "She's just getting adjusted. She is now settling in she's been away from home for a while, so she's getting adjusted.",
+    "confidence": "high"
+  },
+  {
+    "name": "disposition_change",
+    "display_name": "Disposition Change",
+    "domain": "clinical",
+    "value_type": "enum",
+    "value": "No disposition change",
+    "detail": "Caregiver reports Jacqueline has not had to go back to an emergency room, hospital, or skilled nursing facility since discharge.",
+    "evidence": "No. Not at all.",
+    "confidence": "high"
+  },
+  {
+    "name": "current_care_location",
+    "display_name": "Current care location",
+    "domain": "general",
+    "value_type": "enum",
+    "value": "Home",
+    "detail": "The patient is currently at home, as confirmed by the caregiver reporting no disposition change since getting home.",
+    "evidence": "She's just getting adjusted. She is now settling in she's been away from home for a while, so she's getting adjusted.",
+    "confidence": "high"
+  },
+  {
+    "name": "prescription_pickup",
+    "display_name": "Prescription Pickup",
+    "domain": "medication",
+    "value_type": "enum",
+    "value": "Picked Up",
+    "detail": "Caregiver confirms that Jacqueline's discharge prescriptions have been picked up.",
+    "evidence": "Yes. When were they when were they sent? Do you know?",
+    "confidence": "high"
+  },
+  {
+    "name": "medication_adherence",
+    "display_name": "Medication Adherence",
+    "domain": "medication",
+    "value_type": "enum",
+    "value": "No Issues",
+    "detail": "Caregiver reports no trouble taking medications and no questions about how to take them.",
+    "evidence": "No.",
+    "confidence": "high"
+  },
+  {
+    "name": "followup_appointment",
+    "display_name": "Follow-up Appointment",
+    "domain": "appointment",
+    "value_type": "enum",
+    "value": "Scheduled",
+    "detail": "Caregiver states Jacqueline has a follow-up appointment scheduled for next week.",
+    "evidence": "It's next week.",
+    "confidence": "high"
+  },
+  {
+    "name": "home_health_visit",
+    "display_name": "Home Health Visit",
+    "domain": "clinical",
+    "value_type": "enum",
+    "value": "Completed",
+    "detail": "Caregiver reports that someone from 'Amethyst' has visited Jacqueline.",
+    "evidence": "Not from the home care, from Amethyst. Came. Yes.",
+    "confidence": "high"
+  },
+  {
+    "name": "discharge_instructions",
+    "display_name": "Discharge Instructions",
+    "domain": "discharge",
+    "value_type": "enum",
+    "value": "No Questions",
+    "detail": "Caregiver reports no questions about the discharge paperwork and instructions, stating everything seems fine.",
+    "evidence": "No, ma'am, everything seems to be fine.",
+    "confidence": "high"
+  },
+  {
+    "name": "dme_supplies",
+    "display_name": "DME or Supplies Delivered",
+    "domain": "equipment",
+    "value_type": "enum",
+    "value": "Delivered",
+    "detail": "Caregiver reports no issues with medical equipment or supplies since Jacqueline has been home, implying they were delivered and are functioning.",
+    "evidence": "No.",
+    "confidence": "high"
+  },
+  {
+    "name": "experience_comments",
+    "display_name": "Experience Comments",
+    "domain": "experience",
+    "value_type": "enum",
+    "value": "Positive",
+    "detail": "Caregiver expressed positive feedback, stating that everything the care team did was wonderful, they were a great team, and would recommend Encompass to anyone.",
+    "evidence": "That when everything they did was wonderful, they were a great team, and I would recommend Encompass to anyone.",
+    "confidence": "high"
+  },
+  {
+    "name": "participant_role",
+    "display_name": "Participant role",
+    "domain": "general",
+    "value_type": "enum",
+    "value": "care giver",
+    "detail": "The person on the call identified herself as Jacqueline's caregiver.",
+    "evidence": "Yes. This is her caregiver.",
+    "confidence": "high"
+  }
+]
+
