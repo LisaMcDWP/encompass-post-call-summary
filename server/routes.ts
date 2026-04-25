@@ -253,6 +253,10 @@ export async function registerRoutes(
     }
 
     const startTime = Date.now();
+    if (req.body && typeof req.body === "object" && req.body.body && typeof req.body.body === "object") {
+      const { body: nested, ...outer } = req.body;
+      req.body = { ...outer, ...nested };
+    }
     let { care_flow_id, processed_datetime, source_type, source_id, source_text, context, client: reqClient, pathway: reqPathway, webhook_url, ...rest } = req.body;
     if (!care_flow_id) care_flow_id = (req.headers["x-awell-care-flow-id"] as string) || undefined;
     const isAsync = req.body.async === true || req.body.async === "true" || !!webhook_url;
@@ -548,6 +552,8 @@ export async function registerRoutes(
         processing_id: processingId,
         message: "Sync response includes summary, observations, and transition status. Use GET /gwc_observation_summarization/" + resolvedSourceId + " to retrieve full results (qa_pairs, barriers, call_qa) after background processing completes.",
         data: {
+          job_id: resolvedSourceId,
+          processing_id: processingId,
           care_flow_id: care_flow_id || null,
           processed_datetime: processed_datetime || new Date().toISOString(),
           source_type: source_type || null,
@@ -562,6 +568,7 @@ export async function registerRoutes(
             observations: fastAnalysis.observations,
             observations_summary_formatted: fastAnalysis.transition_status,
             followup_formatted: fastAnalysis.follow_up_areas,
+            disposition: fastAnalysis.disposition,
           },
           tokenUsage: fastTokenUsage,
         },
