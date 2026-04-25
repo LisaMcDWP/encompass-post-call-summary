@@ -1,0 +1,103 @@
+ "data": {
+        "care_flow_id": null,
+        "processed_datetime": "2026-04-25T16:53:41.296Z",
+        "source_type": null,
+        "source_id": "deploy-verify-001",
+        "context": {},
+        "processedAt": "2026-04-25T16:53:41.296Z",
+        "processingTimeMs": 24998,
+        "prompt_version": 7,
+        "prompt_version_date": "2026-04-24T05:07:19.646Z",
+        "analysis": {
+            "summary": "The provided transcript is extremely brief, stating only \"Quick test transcript.\" As such, no patient interaction or information was gathered during this call. All topics regarding the patient's status, medication, appointments, or equipment remain undiscussed.",
+            "observations": [
+                {
+                    "name": "overall_feeling",
+                    "display_name": "Overall Feeling",
+                    "domain": "clinical",
+                    "value_type": "enum",
+                    "value": "Not Discussed",
+                    "detail": "The patient's overall feeling was not discussed during the interaction.",
+                    "evidence": null,
+                    "confidence": "high"
+                },
+                {
+                    "name": "disposition_change",
+                    "display_name": "Disposition Change",
+                    "domain": "clinical",
+                    "value_type": "enum",
+                    "value": "Not Discussed",
+                    "detail": "There was no discussion regarding any potential changes in the patient's disposition, such as visits to a skilled nursing facility, emergency department, or hospital.",
+                    "evidence": null,
+                    "confidence": "high"
+                },
+                {
+                    "name": "prescription_pickup",
+                    "display_name": "Prescription Pickup",
+                    "domain": "medication",
+                    "value_type": "enum",
+                    "value": "Not Discussed",
+                    "detail": "The topic of prescription pickup was not addressed during the call.",
+                    "evidence": null,
+                    "confidence": "high"
+                },
+                {
+                    "name": "medication_adherence",
+                    "display_name": "Medication Adherence",
+                    "domain": "medication",
+                    "value_type": "enum",
+                    "value": "N/A",
+                    "detail": "Medication adherence was not discussed. Since prescription pickup was also not discussed, this topic is not applicable.",
+                    "evidence": null,
+                    "confidence": "high"
+                },
+                {
+                    "name": "followup_appointment",
+                    "display_name": "Follow-up Appointment",
+                    "domain": "appointment",
+                    "value_type": "enum",
+                    "value": "Not Discussed",
+                    "detail": "The scheduling or completion of any follow-up appointments was not discussed.",
+                    "evidence": null,
+                    "confidence": "high"
+                },
+                {
+                    "name": "dme_supplies",
+                    "display_name": "DME or Supplies Delivered",
+                    "domain": "equipment",
+                    "value_type": "enum",
+                    "value": "Not Discussed",
+                    "detail": "The delivery status of DME or supplies was not discussed. Context indicates DME or supplies were not provided as ordered.",
+                    "evidence": null,
+                    "confidence": "high"
+                },
+                {
+                    "name": "home_health_visit",
+                    "display_name": "Home Health Visit",
+                    "domain": "clinical",
+                    "value_type": "enum",
+                    "value": "Not Discussed",
+                    "detail": "The status of any home health visits was not discussed. Context indicates home health was not provided as ordered.",
+                    "evidence": null,
+                    "confidence": "high"
+                }
+            ],
+            "observations_summary_formatted": "<b>Overall Feeling:</b> <span style='display:inline-block;padding:1px 8px;border-radius:9999px;font-size:11px;font-weight:600;background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;'>Not Discussed</span><br>The patient's overall feeling was not discussed during the interaction.<br><br><b>Disposition Change:</b> <span style='display:inline-block;padding:1px 8px;border-radius:9999px;font-size:11px;font-weight:600;background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;'>Not Discussed</span><br>There was no discussion regarding any potential changes in the patient's disposition, such as visits to a skilled nursing facility, emergency department, or hospital.<br><br><b>Prescription Pickup:</b> <span style='display:inline-block;padding:1px 8px;border-radius:9999px;font-size:11px;font-weight:600;background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;'>Not Discussed</span><br>The topic of prescription pickup was not addressed during the call.<br><br><b>Medication Adherence:</b> <span style='display:inline-block;padding:1px 8px;border-radius:9999px;font-size:11px;font-weight:600;background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;'>N/A</span><br>Medication adherence was not discussed. Since prescription pickup was also not discussed, this topic is not applicable.<br><br><b>Follow-up Appointment:</b> <span style='display:inline-block;padding:1px 8px;border-radius:9999px;font-size:11px;font-weight:600;background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;'>Not Discussed</span><br>The scheduling or completion of any follow-up appointments was not discussed.<br><br><b>DME or Supplies Delivered:</b> <span style='display:inline-block;padding:1px 8px;border-radius:9999px;font-size:11px;font-weight:600;background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;'>Not Discussed</span><br>The delivery status of DME or supplies was not discussed. Context indicates DME or supplies were not provided as ordered.<br><br><b>Home Health Visit:</b> <span style='display:inline-block;padding:1px 8px;border-radius:9999px;font-size:11px;font-weight:600;background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;'>Not Discussed</span><br>The status of any home health visits was not discussed. Context indicates home health was not provided as ordered.<br><br>",
+            "followup_formatted": "<p>No follow-up areas identified.</p>",
+            "disposition": {
+                "disposition_category": "connected",
+                "disposition_category_display": "Connected",
+                "disposition_detail": "not_interested",
+                "disposition_detail_display": "Not Interested / Declined",
+                "confidence": "low",
+                "evidence": "Quick test transcript.",
+                "detail": "The transcript is too brief to indicate a meaningful interaction, suggesting a connection was made but the call was immediately terminated or deemed irrelevant by the person who answered."
+            }
+        },
+        "tokenUsage": {
+            "promptTokens": 3145,
+            "completionTokens": 1669,
+            "totalTokens": 6819,
+            "estimatedCost": 0.00147315
+        }
+    }
