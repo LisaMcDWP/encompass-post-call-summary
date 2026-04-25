@@ -12,6 +12,7 @@ import { useClientPathway } from "@/contexts/ClientPathwayContext";
 
 interface CallInfo {
   call_id: string;
+  processing_id: string | null;
   care_flow_id: string | null;
   processed_datetime: string | null;
   call_date: string | null;

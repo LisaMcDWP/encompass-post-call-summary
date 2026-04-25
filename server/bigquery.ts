@@ -1987,8 +1987,13 @@ export async function getCallDetail(callId: string, runIndex?: number, targetPro
         if (Object.keys(extracted).length > 0) contextValues = extracted;
       } catch {}
     }
+    let responseJsonParsed: any = null;
+    if ((row as any).response_json) {
+      try { responseJsonParsed = JSON.parse((row as any).response_json); } catch { responseJsonParsed = (row as any).response_json; }
+    }
     return {
       call_id: row.call_id,
+      processing_id: (row as any).processing_id || null,
       care_flow_id: row.care_flow_id,
       processed_datetime: extractTimestamp(row.processed_datetime),
       call_date: extractTimestamp(row.call_date),
@@ -2011,6 +2016,7 @@ export async function getCallDetail(callId: string, runIndex?: number, targetPro
       error_message: row.error_message,
       request_body: row.request_body ? JSON.parse(row.request_body) : null,
       request_headers: row.request_headers ? JSON.parse(row.request_headers) : null,
+      response_json: responseJsonParsed,
       client: row.client || null,
       pathway: row.pathway || null,
     };
