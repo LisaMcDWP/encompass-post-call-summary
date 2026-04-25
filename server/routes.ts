@@ -345,6 +345,8 @@ export async function registerRoutes(
           processing_id: processingId,
           message: "Initial analysis returned. Full results (qa_pairs, barriers, call_qa) will follow via " + (webhook_url ? "webhook callback." : "GET /gwc_observation_summarization/" + resolvedSourceId + "."),
           data: {
+            job_id: resolvedSourceId,
+            processing_id: processingId,
             care_flow_id: care_flow_id || null,
             processed_datetime: processed_datetime || processedAt,
             source_type: source_type || null,
