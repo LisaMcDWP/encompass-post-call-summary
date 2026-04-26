@@ -6,7 +6,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ClientPathwayProvider } from "@/contexts/ClientPathwayContext";
 import AppLayout from "@/components/AppLayout";
 import NotFound from "@/pages/not-found";
-import Home from "@/pages/Home";
 import Reference from "@/pages/Reference";
 import Observations from "@/pages/Observations";
 import ActivationObjectives from "@/pages/ActivationObjectives";
@@ -32,7 +31,7 @@ function Router() {
   return (
     <AppLayout>
       <Switch>
-        <Route path="/" component={Home} />
+        <Route path="/" component={SummaryPrompt} />
         <Route path="/calls" component={CallHistory} />
         <Route path="/overview" component={ProjectOverview} />
         <Route path="/observations" component={Observations} />

@@ -1516,7 +1516,7 @@ export default function CallHistory() {
           </div>
           <h3 className="text-xl font-semibold mb-2">No Calls Yet</h3>
           <p className="text-sm text-muted-foreground max-w-md mx-auto">
-            Process a transcript through the API Playground to see calls appear here.
+            Process a transcript through the API to see calls appear here.
           </p>
         </Card>
       )}
