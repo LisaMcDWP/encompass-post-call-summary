@@ -472,28 +472,41 @@ function rowToActivationObjective(row: any): ActivationObjective {
   let stages: ActivationObjectiveStage[] = [];
   let thresholds: ActivationObjectiveThreshold[] = [];
   let interactionsRaw: any[] = [];
-  let extractedEnumValues: string[] = [];
+  let rawExtracted: any[] = [];
   let stageMappings: any[] = [];
   try { if (row.stages) stages = JSON.parse(row.stages); } catch {}
   try { if (row.thresholds) thresholds = JSON.parse(row.thresholds); } catch {}
   try { if (row.interactions) interactionsRaw = JSON.parse(row.interactions); } catch {}
-  try { if (row.extracted_enum_values) extractedEnumValues = JSON.parse(row.extracted_enum_values); } catch {}
+  try { if (row.extracted_enum_values) rawExtracted = JSON.parse(row.extracted_enum_values); } catch {}
   try { if (row.stage_mappings) stageMappings = JSON.parse(row.stage_mappings); } catch {}
 
   // Backward-compat: legacy rows stored extractedEnumValues + stageMappings inside each
   // interaction config. Hoist from the first interaction that has them if the new
   // objective-level columns are empty.
-  if (extractedEnumValues.length === 0 || stageMappings.length === 0) {
+  if (rawExtracted.length === 0 || stageMappings.length === 0) {
     for (const cfg of interactionsRaw) {
-      if (extractedEnumValues.length === 0 && Array.isArray(cfg?.extractedEnumValues) && cfg.extractedEnumValues.length > 0) {
-        extractedEnumValues = cfg.extractedEnumValues;
+      if (rawExtracted.length === 0 && Array.isArray(cfg?.extractedEnumValues) && cfg.extractedEnumValues.length > 0) {
+        rawExtracted = cfg.extractedEnumValues;
       }
       if (stageMappings.length === 0 && Array.isArray(cfg?.stageMappings) && cfg.stageMappings.length > 0) {
         stageMappings = cfg.stageMappings;
       }
-      if (extractedEnumValues.length > 0 && stageMappings.length > 0) break;
+      if (rawExtracted.length > 0 && stageMappings.length > 0) break;
     }
   }
+
+  // Normalize: legacy values were plain strings; new shape is {label, color}.
+  const VALID_COLORS = new Set(["GREEN", "YELLOW", "RED", "BLUE", "GRAY"]);
+  const extractedEnumValues: { label: string; color: "GREEN" | "YELLOW" | "RED" | "BLUE" | "GRAY" }[] = rawExtracted
+    .map((v: any) => {
+      if (typeof v === "string") return { label: v, color: "GRAY" as const };
+      if (v && typeof v === "object" && typeof v.label === "string") {
+        const color = typeof v.color === "string" && VALID_COLORS.has(v.color) ? v.color : "GRAY";
+        return { label: v.label, color: color as "GREEN" | "YELLOW" | "RED" | "BLUE" | "GRAY" };
+      }
+      return null;
+    })
+    .filter((v): v is { label: string; color: "GREEN" | "YELLOW" | "RED" | "BLUE" | "GRAY" } => v !== null);
 
   // Strip legacy fields from per-interaction configs so the typed shape matches.
   const interactions: ActivationObjectiveInteractionConfig[] = interactionsRaw.map((c: any) => ({

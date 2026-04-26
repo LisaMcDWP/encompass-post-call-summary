@@ -225,6 +225,12 @@ export const activationObjectiveStageMappingSchema = z.object({
 });
 export type ActivationObjectiveStageMapping = z.infer<typeof activationObjectiveStageMappingSchema>;
 
+export const observationEnumValueSchema = z.object({
+  label: z.string().min(1),
+  color: z.enum(["GREEN", "YELLOW", "RED", "BLUE", "GRAY"]).default("GRAY"),
+});
+export type ObservationEnumValue = z.infer<typeof observationEnumValueSchema>;
+
 export const activationObjectiveInclusionRulesSchema = z.object({
   requirePcpAssigned: z.boolean().default(false),
   requireCompletedWithPatientOrCaregiver: z.boolean().default(true),
@@ -277,7 +283,15 @@ export const insertActivationObjectiveSchema = z.object({
   achievedStageId: z.string().default(""),
   thresholds: z.array(activationObjectiveThresholdSchema).default([]),
   observationName: z.string().default(""),
-  extractedEnumValues: z.array(z.string()).default([]),
+  extractedEnumValues: z.preprocess(
+    (val) => {
+      if (!Array.isArray(val)) return val;
+      return val.map((v) =>
+        typeof v === "string" ? { label: v, color: "GRAY" } : v
+      );
+    },
+    z.array(observationEnumValueSchema).default([])
+  ),
   stageMappings: z.array(activationObjectiveStageMappingSchema).default([]),
   interactions: z.array(activationObjectiveInteractionConfigSchema).default([]),
   isActive: z.boolean().default(true),
@@ -299,7 +313,7 @@ export interface ActivationObjective {
   achievedStageId: string;
   thresholds: ActivationObjectiveThreshold[];
   observationName: string;
-  extractedEnumValues: string[];
+  extractedEnumValues: ObservationEnumValue[];
   stageMappings: ActivationObjectiveStageMapping[];
   interactions: ActivationObjectiveInteractionConfig[];
   isActive: boolean;

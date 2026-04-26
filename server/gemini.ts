@@ -148,7 +148,9 @@ export function resolveObjectiveTasks(ctx: ActivationObjectivesContext | undefin
     if (!anchorDate) continue;
     const { interaction, config } = pickApplicableInteraction(obj, ctx.contextValues, ctx.activeInteractions);
     if (!interaction || !config) continue;
-    const allowed = (obj.extractedEnumValues || []).filter((v) => v && v.trim());
+    const allowed = (obj.extractedEnumValues || [])
+      .map((v) => v?.label || "")
+      .filter((v) => v && v.trim());
     if (allowed.length === 0) continue;
     const callDayOffset = diffDaysISO(anchorDate, ctx.callDate);
     tasks.push({ objective: obj, interaction, config, anchorDate, callDayOffset });
@@ -160,6 +162,7 @@ function buildActivationObjectivesPromptBlock(tasks: ResolvedObjectiveTask[]): s
   if (tasks.length === 0) return "";
   const lines = tasks.map((t) => {
     const allowed = (t.objective.extractedEnumValues || [])
+      .map((v) => v?.label || "")
       .filter((v) => v && v.trim())
       .map((v) => `"${v}"`)
       .join(", ");
