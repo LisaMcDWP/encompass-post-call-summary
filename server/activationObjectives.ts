@@ -136,76 +136,38 @@ export function computeActivationObjectiveResults(args: {
   const extByKey = new Map<string, ActivationObjectiveExtraction>();
   for (const ex of extractions || []) {
     if (!ex || !ex.objective_name) continue;
-    extByKey.set(`${ex.objective_name}::${ex.interaction_key || ""}`, ex);
+    const objName = String(ex.objective_name).trim();
+    const intKey = String(ex.interaction_key || "").trim();
+    if (!objName) continue;
+    extByKey.set(`${objName}::${intKey}`, ex);
   }
 
   for (const obj of objectives) {
     if (!obj.isActive) continue;
 
-    // Anchor date is OPTIONAL: if missing, we still extract & stage-map but skip
-    // window/threshold math. Only the time-based on-track band becomes unknown.
+    // Rule: every active objective is evaluated on every call. Anchor date and
+    // interaction routing are both OPTIONAL — they only refine the result.
     const anchorDate = contextValues[obj.anchorContextKey] ?? null;
-
-    const { interaction, config, interactionKeyValue, reason: pickReason } = pickInteractionForObjective(obj, contextValues, activeInteractions);
-
-    if (!interaction || !config) {
-      const keyName = obj.interactionContextKey || "interaction_key";
-      let reason: string;
-      switch (pickReason) {
-        case "missing_key":
-          reason = `No interaction key in context (missing key "${keyName}") and no default interaction configured for this objective`;
-          break;
-        case "unknown_key":
-          reason = `Unknown interaction key "${interactionKeyValue}" (no active interaction with this key) and no default interaction configured for this objective`;
-          break;
-        case "not_configured":
-          reason = `Interaction key "${interactionKeyValue}" is not configured for this objective and no default interaction is set`;
-          break;
-        case "default_broken":
-          reason = `Default interaction for this objective references an interaction that no longer exists or is inactive`;
-          break;
-        default:
-          reason = `Could not resolve an interaction for this objective`;
-      }
-      // Even when no interaction is routed, we may still have objective-level
-      // observation topics that should always be extracted. Look up the
-      // observation-only extraction (interaction_key="") and surface any values.
-      const fallbackTopicIds = obj.observationTopicIds || [];
-      let fallbackObservations: CallActivationObjectiveObservation[] = [];
-      if (fallbackTopicIds.length > 0) {
-        const ext = extByKey.get(`${obj.name}::`) || null;
-        const extractedObs = ext?.observations || [];
-        const extObsByName = new Map<string, typeof extractedObs[number]>();
-        for (const eo of extractedObs) {
-          if (eo && eo.topic_name) extObsByName.set(eo.topic_name, eo);
-        }
-        fallbackObservations = fallbackTopicIds
-          .map((id) => {
-            const topic = obsById.get(id);
-            if (!topic) return null;
-            const eo = extObsByName.get(topic.name);
-            const value = eo?.value && String(eo.value).trim() ? String(eo.value).trim() : null;
-            return {
-              topicId: topic.id,
-              name: topic.name,
-              displayName: topic.displayName,
-              value,
-              evidence: eo?.evidence || null,
-            };
-          })
-          .filter((o): o is CallActivationObjectiveObservation => !!o);
-      }
-      results.push(makeIneligibleResult(callId, callDate, obj, anchorDate, processedAt, reason, interaction, fallbackObservations));
-      continue;
-    }
+    const { interaction, config } = pickInteractionForObjective(obj, contextValues, activeInteractions);
 
     const targetDate = anchorDate ? addDaysISO(anchorDate, obj.windowDays) : null;
     const daysRemaining = anchorDate && targetDate ? diffDaysISO(callDate, targetDate) : null;
-    // When daysRemaining is unknown (no anchor), still use the default band if configured.
+    // When daysRemaining is unknown (no anchor), use the default band as the fallback.
     const band = daysRemaining !== null
       ? pickBand(obj.thresholds || [], daysRemaining)
       : findDefaultBand(obj.thresholds || []);
-    const ext = extByKey.get(`${obj.name}::${interaction.key}`) || extByKey.get(`${obj.name}::`) || null;
+
+    // Look up the model's extraction. Prefer the per-interaction key when
+    // matched, otherwise fall back to the objective-level entry. Keys are
+    // trimmed on both sides to defend against minor LLM whitespace drift.
+    const objNameKey = (obj.name || "").trim();
+    const intKeyTrimmed = (interaction?.key || "").trim();
+    const ext = (intKeyTrimmed ? extByKey.get(`${objNameKey}::${intKeyTrimmed}`) : null)
+      || extByKey.get(`${objNameKey}::`)
+      || null;
+    if (!ext) {
+      console.warn(`[activationObjectives] no extraction found for objective="${obj.name}" interaction_key="${intKeyTrimmed}" (call=${callId}). Available keys:`, Array.from(extByKey.keys()));
+    }
     const extractedValue = ext?.extracted_value && ext.extracted_value.trim() ? ext.extracted_value.trim() : null;
 
     let currentStage: ActivationObjectiveStage | null = null;
@@ -222,7 +184,7 @@ export function computeActivationObjectiveResults(args: {
     if (extractedValue === null) {
       onTrack = null;
       onTrackStatus = "not_assessed";
-    } else if (config.canResolveObjective && currentStage && obj.achievedStageId && currentStage.id === obj.achievedStageId) {
+    } else if (config?.canResolveObjective && currentStage && obj.achievedStageId && currentStage.id === obj.achievedStageId) {
       onTrack = true;
       onTrackStatus = "achieved";
     } else if (band && currentStage) {
@@ -237,16 +199,18 @@ export function computeActivationObjectiveResults(args: {
       onTrackStatus = "unmapped_value";
     }
 
-    const configuredTopicIds = Array.from(new Set([
-      ...(obj.observationTopicIds || []),
-      ...(config.observationTopicIds || []),
-    ]));
+    // Topics extracted = union of objective-level + every interaction config's topics.
+    const allTopicIds = new Set<number>();
+    for (const id of obj.observationTopicIds || []) allTopicIds.add(id);
+    for (const cfg of obj.interactions || []) {
+      for (const id of cfg.observationTopicIds || []) allTopicIds.add(id);
+    }
     const extractedObs = ext?.observations || [];
     const extObsByName = new Map<string, typeof extractedObs[number]>();
     for (const eo of extractedObs) {
       if (eo && eo.topic_name) extObsByName.set(eo.topic_name, eo);
     }
-    const observationsResult: CallActivationObjectiveObservation[] = configuredTopicIds
+    const observationsResult: CallActivationObjectiveObservation[] = Array.from(allTopicIds)
       .map((id) => {
         const topic = obsById.get(id);
         if (!topic) return null;
@@ -266,9 +230,9 @@ export function computeActivationObjectiveResults(args: {
       callId,
       objectiveId: obj.id,
       objectiveName: obj.name,
-      interactionId: interaction.id,
-      interactionKey: interaction.key,
-      interactionName: interaction.name,
+      interactionId: interaction?.id ?? null,
+      interactionKey: interaction?.key ?? "",
+      interactionName: interaction?.name ?? "",
       callDate,
       anchorEventDate: anchorDate,
       targetDate,
@@ -288,39 +252,4 @@ export function computeActivationObjectiveResults(args: {
   }
 
   return results;
-}
-
-function makeIneligibleResult(
-  callId: string,
-  callDate: string,
-  obj: ActivationObjective,
-  anchorDate: string | null,
-  processedAt: string,
-  reason: string,
-  interaction?: ActivationInteraction | null,
-  observations: CallActivationObjectiveObservation[] = [],
-): CallActivationObjectiveResult {
-  return {
-    callId,
-    objectiveId: obj.id,
-    objectiveName: obj.name,
-    interactionId: interaction?.id ?? null,
-    interactionKey: interaction?.key ?? "",
-    interactionName: interaction?.name ?? "",
-    callDate,
-    anchorEventDate: anchorDate,
-    targetDate: null,
-    daysRemaining: null,
-    bandLabel: null,
-    extractedValue: null,
-    currentStageId: null,
-    currentStageName: null,
-    onTrack: null,
-    onTrackStatus: "ineligible",
-    isEligible: false,
-    exclusionReason: reason,
-    rationale: "",
-    observations,
-    processedAt,
-  };
 }

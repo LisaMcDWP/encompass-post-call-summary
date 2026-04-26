@@ -171,37 +171,33 @@ export function resolveObjectiveTasks(ctx: ActivationObjectivesContext | undefin
   }
   for (const obj of ctx.objectives) {
     if (!obj.isActive) continue;
-    // Anchor date is OPTIONAL: if missing, we still build the extraction task
-    // but the prompt simply won't reference a window/day-offset.
+
+    // Rule: every active objective is extracted on every call. Anchor date and
+    // interaction routing are both OPTIONAL — they only refine context.
     const anchorDate = ctx.contextValues?.[obj.anchorContextKey] ?? null;
     const callDayOffset = anchorDate ? diffDaysISO(anchorDate, ctx.callDate) : null;
-
-    const objectiveLevelTopicIds = obj.observationTopicIds || [];
     const { interaction, config } = pickApplicableInteraction(obj, ctx.contextValues, ctx.activeInteractions);
 
-    if (interaction && config) {
-      const allowed = (obj.extractedEnumValues || [])
-        .map((v) => v?.label || "")
-        .filter((v) => v && v.trim());
-      if (allowed.length === 0) continue;
-      const mergedTopicIds = Array.from(new Set([
-        ...objectiveLevelTopicIds,
-        ...((config.observationTopicIds) || []),
-      ]));
-      const observationTopics = mergedTopicIds
-        .map((id) => obsById.get(id))
-        .filter((o): o is Observation => !!o);
-      tasks.push({ objective: obj, interaction, config, anchorDate, callDayOffset, observationTopics });
-    } else if (objectiveLevelTopicIds.length > 0) {
-      // No interaction routed for this call, but the objective declares
-      // topics to extract regardless — emit an observation-only task.
-      const observationTopics = objectiveLevelTopicIds
-        .map((id) => obsById.get(id))
-        .filter((o): o is Observation => !!o);
-      if (observationTopics.length > 0) {
-        tasks.push({ objective: obj, interaction: null, config: null, anchorDate, callDayOffset, observationTopics });
-      }
+    // Topics extracted = union of objective-level topics + every interaction
+    // config's topics (so we get the full observation set regardless of
+    // whether a specific interaction was matched).
+    const allTopicIds = new Set<number>();
+    for (const id of obj.observationTopicIds || []) allTopicIds.add(id);
+    for (const cfg of obj.interactions || []) {
+      for (const id of cfg.observationTopicIds || []) allTopicIds.add(id);
     }
+    const observationTopics = Array.from(allTopicIds)
+      .map((id) => obsById.get(id))
+      .filter((o): o is Observation => !!o);
+
+    // Skip the objective only when there's literally nothing to extract:
+    // no enum allowed values AND no observation topics.
+    const allowed = (obj.extractedEnumValues || [])
+      .map((v) => v?.label || "")
+      .filter((v) => v && v.trim());
+    if (allowed.length === 0 && observationTopics.length === 0) continue;
+
+    tasks.push({ objective: obj, interaction, config, anchorDate, callDayOffset, observationTopics });
   }
   return tasks;
 }
@@ -224,6 +220,9 @@ function buildActivationObjectivesPromptBlock(tasks: ResolvedObjectiveTask[]): s
       : t.anchorDate
         ? `Window: ${t.objective.windowDays} days from ${t.objective.anchorContextKey}=${t.anchorDate}.`
         : `Anchor date (${t.objective.anchorContextKey}) not provided in request context — assess based on call content alone.`;
+    const interactionPart = t.interaction
+      ? `interaction_key="${t.interaction.key}" (${t.interaction.name})`
+      : `interaction_key="" (no specific interaction routed — assess from call content)`;
     const obsBlock = t.observationTopics.length > 0
       ? `\n    Observation topics for this objective (output one entry per topic in the observations array):\n` +
         t.observationTopics.map((o) => {
@@ -236,14 +235,13 @@ function buildActivationObjectivesPromptBlock(tasks: ResolvedObjectiveTask[]): s
           return `      - topic_name="${o.name}" (${o.displayName}) — ${allowedVals}.${hint}`;
         }).join("\n")
       : "";
-    if (!t.interaction || !t.config) {
-      // Observation-only task: no interaction routed for this call, no extracted_value to pick.
-      return `  • objective_name="${t.objective.name}" (${t.objective.displayName}) | interaction_key="" (no interaction routed — OBSERVATION-ONLY task) | ${dayPart} | extracted_value MUST be null for this task.${guidanceLine}${obsBlock}`;
-    }
-    return `  • objective_name="${t.objective.name}" (${t.objective.displayName}) | interaction_key="${t.interaction.key}" (${t.interaction.name}) | ${dayPart} | Allowed values: ${allowed}, or null if not discussed.${guidanceLine}${hintsBlock}${obsBlock}`;
+    const allowedPart = allowed
+      ? `Allowed values: ${allowed}, or null if not discussed.`
+      : `extracted_value MUST be null (no enum values configured for this objective).`;
+    return `  • objective_name="${t.objective.name}" (${t.objective.displayName}) | ${interactionPart} | ${dayPart} | ${allowedPart}${guidanceLine}${hintsBlock}${obsBlock}`;
   });
   return `\n###ACTIVATION OBJECTIVES (${tasks.length} task${tasks.length === 1 ? "" : "s"})
-For each task below, decide the patient's current status for that activation objective based ONLY on what was discussed in this call. Choose the single best match from the allowed values for that task, or null if the topic was not discussed in enough detail to assess. Do NOT invent values that are not in the allowed list. For OBSERVATION-ONLY tasks (interaction_key=""), set extracted_value to null and rationale to ""; only fill the observations array. For tasks that list observation topics, also extract a value for each listed topic into the per-objective observations array — copy the topic_name exactly.
+For each task below, decide the patient's current status for that activation objective based ONLY on what was discussed in this call. Choose the single best match from the allowed values for that task, or null if the topic was not discussed in enough detail to assess. Do NOT invent values that are not in the allowed list. For tasks that list observation topics, also extract a value for each listed topic into the per-objective observations array — copy the topic_name exactly.
 ${lines.join("\n")}
 `;
 }
