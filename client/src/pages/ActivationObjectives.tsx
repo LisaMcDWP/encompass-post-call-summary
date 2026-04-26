@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Pencil, Trash2, X, Save, Loader2, Target, Calendar,
   ArrowRight, GripVertical, ChevronDown, ChevronUp, Clock, AlertCircle, MessageSquare, ClipboardCheck,
-  ArrowUp, ArrowDown,
+  ArrowUp, ArrowDown, Sparkles, Send,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useClientPathway } from "@/contexts/ClientPathwayContext";
@@ -195,6 +195,10 @@ export default function ActivationObjectives() {
   const [form, setForm] = useState<Omit<ActivationObjective, "id">>(emptyForm());
   const [saving, setSaving] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiMessage, setAiMessage] = useState("");
+  const [aiHistory, setAiHistory] = useState<{ role: string; text: string }[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
 
   useEffect(() => {
     if (!selectedCPId) return;
@@ -501,6 +505,152 @@ export default function ActivationObjectives() {
 
   // ----------------------------------------
 
+  async function sendAiMessage() {
+    if (!aiMessage.trim() || aiLoading || !selectedCPId) return;
+    const userMsg = aiMessage.trim();
+    setAiMessage("");
+    const newHistory = [...aiHistory, { role: "user", text: userMsg }];
+    setAiHistory(newHistory);
+    setAiLoading(true);
+    try {
+      const res = await fetch("/api/activation-objectives/ai-suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: userMsg, history: aiHistory, clientPathwayId: selectedCPId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setAiHistory([...newHistory, { role: "assistant", text: data.response }]);
+      } else {
+        setAiHistory([...newHistory, { role: "assistant", text: "Error: " + (data.error || "Failed to get response") }]);
+      }
+    } catch {
+      setAiHistory([...newHistory, { role: "assistant", text: "Error: Failed to connect to AI assistant." }]);
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  function parseObjectiveProposal(text: string): Omit<ActivationObjective, "id"> | null {
+    const get = (label: string) => {
+      const re = new RegExp(`\\*\\*${label}:\\*\\*\\s*(.+?)(?=\\n\\*\\*|$)`, "is");
+      const m = text.match(re);
+      return m ? m[1].trim() : "";
+    };
+    const name = get("Name");
+    const displayName = get("Display Name");
+    if (!name || !displayName) return null;
+
+    const description = get("Description");
+    const anchorEvent = (get("Anchor Event") || "discharge").toLowerCase().split(/\s|,|\|/)[0];
+    const validAnchors: AnchorEventType[] = ["discharge", "enrollment", "procedure", "custom"];
+    const anchorEventType = (validAnchors.includes(anchorEvent as AnchorEventType) ? anchorEvent : "discharge") as AnchorEventType;
+    const anchorContextKey = get("Anchor Context Key");
+    const windowDaysRaw = get("Window Days");
+    const windowDays = parseInt(windowDaysRaw, 10) || 7;
+    const observationName = get("Observation Name");
+
+    const stagesRaw = get("Stages");
+    let parsedStages: Stage[] = [];
+    if (stagesRaw) {
+      parsedStages = stagesRaw.split(";").map((s, i) => {
+        const [n, d] = s.split("|").map(x => x.trim());
+        if (!n) return null;
+        return {
+          id: `stage_${Date.now()}_${i}`,
+          name: n.toLowerCase().replace(/[^a-z0-9_]+/g, "_"),
+          displayName: d || n,
+          description: "",
+          order: i + 1,
+        };
+      }).filter(Boolean) as Stage[];
+    }
+    if (parsedStages.length === 0) {
+      parsedStages = emptyForm().stages;
+    }
+
+    const achievedRaw = get("Achieved Stage");
+    const achievedStageId =
+      parsedStages.find(s => s.name === achievedRaw.toLowerCase().replace(/[^a-z0-9_]+/g, "_"))?.id
+      || parsedStages[parsedStages.length - 1]?.id
+      || "";
+
+    const valuesRaw = get("Extracted Values");
+    const validColors: EnumColor[] = ["GREEN", "YELLOW", "RED", "BLUE", "GRAY"];
+    let extractedEnumValues: EnumValue[] = [];
+    if (valuesRaw) {
+      extractedEnumValues = valuesRaw.split(",").map(part => {
+        const m = part.trim().match(/^(.+?)\s*\(([A-Z]+)\)$/);
+        if (!m) return { label: part.trim(), color: "GRAY" as EnumColor, promptHint: "" };
+        const color = (validColors.includes(m[2] as EnumColor) ? m[2] : "GRAY") as EnumColor;
+        return { label: m[1].trim(), color, promptHint: "" };
+      }).filter(v => v.label);
+    }
+
+    const mappingsRaw = get("Stage Mappings");
+    let stageMappings: StageMapping[] = [];
+    if (mappingsRaw) {
+      stageMappings = mappingsRaw.split(";").map(part => {
+        const [val, st] = part.split("->").map(x => x.trim());
+        if (!val || !st) return null;
+        const stage = parsedStages.find(s => s.name === st.toLowerCase().replace(/[^a-z0-9_]+/g, "_"))
+          || parsedStages.find(s => s.displayName.toLowerCase() === st.toLowerCase());
+        if (!stage) return null;
+        return { extractedValue: val, stageId: stage.id };
+      }).filter(Boolean) as StageMapping[];
+    }
+
+    // If the model omitted "Extracted Values" but provided "Stage Mappings",
+    // infer the enum values from the mapping keys so the objective is usable
+    // for extraction. Also infer color from the achieved-stage convention.
+    if (extractedEnumValues.length === 0 && stageMappings.length > 0) {
+      const seen = new Set<string>();
+      extractedEnumValues = stageMappings
+        .map(sm => {
+          const key = sm.extractedValue.trim().toLowerCase();
+          if (seen.has(key)) return null;
+          seen.add(key);
+          const stageOrder = parsedStages.find(s => s.id === sm.stageId)?.order ?? 0;
+          const totalStages = parsedStages.length || 1;
+          let color: EnumColor = "GRAY";
+          if (stageOrder === totalStages) color = "GREEN";
+          else if (stageOrder >= Math.ceil(totalStages / 2)) color = "YELLOW";
+          else if (stageOrder > 0) color = "RED";
+          return { label: sm.extractedValue.trim(), color, promptHint: "" };
+        })
+        .filter(Boolean) as EnumValue[];
+    }
+
+    const promptGuidance = get("Prompt Guidance");
+
+    return {
+      name,
+      displayName,
+      description,
+      anchorEventType,
+      anchorContextKey,
+      windowDays,
+      stages: parsedStages,
+      achievedStageId,
+      thresholds: DEFAULT_THRESHOLDS(parsedStages),
+      observationName,
+      extractedEnumValues,
+      stageMappings,
+      interactions: [],
+      interactionContextKey: "interaction_key",
+      isActive: true,
+      displayOrder: 0,
+      promptGuidance,
+      observationTopicIds: [],
+    };
+  }
+
+  function applyProposal(proposal: Omit<ActivationObjective, "id">) {
+    setForm(proposal);
+    setEditingId("new");
+    setAiOpen(false);
+  }
+
   const isEditing = editingId !== null;
   const anchorContextOptions = useMemo(() =>
     contextParams.filter(p => p.dataType === "date" || p.name.toLowerCase().includes("date")), [contextParams]);
@@ -528,11 +678,161 @@ export default function ActivationObjectives() {
           </p>
         </div>
         {!isEditing && (
-          <Button onClick={startNew} data-testid="button-new-objective">
-            <Plus className="h-4 w-4 mr-2" /> New Objective
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setAiOpen(!aiOpen)}
+              className={aiOpen ? "border-primary text-primary" : ""}
+              data-testid="button-ai-assistant"
+            >
+              <Sparkles className="h-4 w-4 mr-2" /> AI Assistant
+            </Button>
+            <Button onClick={startNew} data-testid="button-new-objective">
+              <Plus className="h-4 w-4 mr-2" /> New Objective
+            </Button>
+          </div>
         )}
       </div>
+
+      {!isEditing && aiOpen && (
+        <Card className="border-primary/30 shadow-md bg-gradient-to-br from-primary/5 to-background" data-testid="panel-ai-assistant">
+          <CardContent className="py-4 px-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                <span className="text-sm font-semibold text-foreground">AI Activation Objective Assistant</span>
+                <span className="text-[10px] text-muted-foreground">(powered by Gemini)</span>
+              </div>
+              <div className="flex gap-1.5">
+                {aiHistory.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setAiHistory([])}
+                    className="h-7 text-xs text-muted-foreground"
+                    data-testid="button-ai-clear"
+                  >
+                    Clear
+                  </Button>
+                )}
+                <Button variant="ghost" size="sm" onClick={() => setAiOpen(false)} className="h-7 w-7 p-0" data-testid="button-ai-close">
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            {aiHistory.length === 0 && (
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">Ask me to suggest new activation objectives, improve stages or prompt guidance, review your setup, or propose stage mappings. I can see your current objectives, observations, interactions, and context parameters.</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    "Review my current activation objectives and suggest improvements",
+                    "Suggest a new activation objective for medication adherence",
+                    "Recommend stage mappings for my existing objectives",
+                    "What activation objectives am I missing?",
+                  ].map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      className="text-[11px] px-2.5 py-1 rounded-full border border-primary/20 text-primary hover:bg-primary/10 transition-colors"
+                      onClick={() => setAiMessage(suggestion)}
+                      data-testid="button-ai-suggestion"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {aiHistory.length > 0 && (
+              <div
+                className="space-y-3 max-h-80 overflow-y-auto pr-1"
+                ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}
+                data-testid="ai-chat-history"
+              >
+                {aiHistory.map((msg, i) => (
+                  <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                    <div
+                      className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
+                        msg.role === "user"
+                          ? "bg-primary text-white"
+                          : "bg-muted/50 border border-border/50 text-foreground"
+                      }`}
+                    >
+                      {msg.role === "assistant" ? (
+                        <>
+                          <div
+                            className="whitespace-pre-wrap text-[13px] leading-relaxed"
+                            dangerouslySetInnerHTML={{
+                              __html: msg.text
+                                .replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]!))
+                                .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+                                .replace(/\n/g, "<br/>"),
+                            }}
+                          />
+                          {(() => {
+                            const proposal = parseObjectiveProposal(msg.text);
+                            if (!proposal) return null;
+                            const exists = items.some(o => o.name === proposal.name);
+                            return (
+                              <div className="mt-2 pt-2 border-t border-border/40 flex items-center gap-2">
+                                <Button
+                                  size="sm"
+                                  className="h-7 bg-primary hover:bg-primary/90 text-white text-xs"
+                                  onClick={() => applyProposal(proposal)}
+                                  data-testid={`button-apply-suggestion-${i}`}
+                                >
+                                  <Plus className="h-3 w-3 mr-1" />
+                                  {exists ? "Open as new (name conflicts)" : "Use as new objective"}
+                                </Button>
+                                {exists && (
+                                  <span className="text-[11px] text-yellow-700">
+                                    "{proposal.name}" already exists
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </>
+                      ) : (
+                        <span>{msg.text}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {aiLoading && (
+                  <div className="flex justify-start">
+                    <div className="bg-muted/50 border border-border/50 rounded-lg px-3 py-2 text-sm flex items-center gap-2">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <span className="text-xs text-muted-foreground">Thinking...</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <Input
+                value={aiMessage}
+                onChange={e => setAiMessage(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void sendAiMessage(); } }}
+                placeholder="Ask about activation objectives..."
+                disabled={aiLoading}
+                className="text-sm"
+                data-testid="input-ai-message"
+              />
+              <Button
+                onClick={() => void sendAiMessage()}
+                disabled={aiLoading || !aiMessage.trim()}
+                className="bg-primary hover:bg-primary/90"
+                data-testid="button-ai-send"
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {loading && (
         <div className="flex items-center justify-center p-8 text-muted-foreground">

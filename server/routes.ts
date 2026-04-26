@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { analyzeTranscript, analyzeTranscriptFast, analyzeTranscriptBackground, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, aiObservationAssistant, type DispositionConfig, type ActivationObjectivesContext, type ActivationObjectiveExtraction } from "./gemini";
+import { analyzeTranscript, analyzeTranscriptFast, analyzeTranscriptBackground, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, aiObservationAssistant, aiActivationObjectiveAssistant, type DispositionConfig, type ActivationObjectivesContext, type ActivationObjectiveExtraction } from "./gemini";
 import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBarriers, insertCallQAResults, insertCallDisposition, insertCallActivationObjectives, getCallActivationObjectives, ensureCallBarriersTable, ensureCallQATable, getCallBarriers, getCallInfoList, getCallDetail, getCallStatsByDay, queryBlandCalls, loadBlandCallsToBatch, fetchAwellContextForCareFlows, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, bulkUpdateBatchItemStatus, bulkUpdateBatchResults, resetFailedBatchItems, deletePendingBatchItems, recreateBatch, getDistinctTags, upsertCallReviews, getCallReviews, upsertCallReviewStatus, upsertCallReviewMeta, getCallReviewStatusesBulk, ensureCallReviewStatusesTable, getCallReviewList } from "./bigquery";
 import { computeActivationObjectiveResults } from "./activationObjectives";
 import { randomUUID, createHash } from "crypto";
@@ -986,6 +986,32 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/activation-objectives/ai-suggest", async (req, res) => {
+    try {
+      const { message, history, clientPathwayId } = req.body;
+      if (!message || typeof message !== "string") {
+        return res.status(400).json({ error: "Message is required" });
+      }
+      if (!clientPathwayId) return res.status(400).json({ error: "clientPathwayId is required" });
+      const cpId = Number(clientPathwayId);
+      const [objectives, observations, interactions, contextParameters] = await Promise.all([
+        storage.getActivationObjectives(cpId),
+        storage.getObservations(cpId),
+        storage.getActivationInteractions(cpId),
+        storage.getContextParameters(cpId),
+      ]);
+      const response = await aiActivationObjectiveAssistant(
+        { objectives, observations, interactions, contextParameters },
+        message,
+        history || [],
+      );
+      return res.json({ response });
+    } catch (error: any) {
+      console.error("AI activation objective assistant error:", error.message);
+      return res.status(500).json({ error: "AI assistant failed: " + error.message });
     }
   });
 

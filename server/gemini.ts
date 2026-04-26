@@ -994,3 +994,128 @@ Be concise, practical, and focused on post-discharge patient care transitions. K
   const text = response.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, I couldn't generate a response.";
   return text;
 }
+
+export async function aiActivationObjectiveAssistant(
+  context: {
+    objectives: ActivationObjective[];
+    observations: Observation[];
+    interactions: ActivationInteraction[];
+    contextParameters: ContextParameter[];
+  },
+  userMessage: string,
+  conversationHistory: { role: string; text: string }[] = []
+): Promise<string> {
+  const ai = getVertexAI();
+  const model = ai.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+  const objectivesSnapshot = context.objectives.map(o => ({
+    name: o.name,
+    displayName: o.displayName,
+    description: o.description,
+    anchorEventType: o.anchorEventType,
+    anchorContextKey: o.anchorContextKey,
+    windowDays: o.windowDays,
+    stages: (o.stages || []).map(s => ({ name: s.name, displayName: s.displayName, description: s.description, order: s.order })),
+    achievedStageId: o.achievedStageId,
+    observationName: o.observationName,
+    extractedEnumValues: o.extractedEnumValues,
+    stageMappings: o.stageMappings,
+    observationTopicIds: o.observationTopicIds,
+    isActive: o.isActive,
+    promptGuidance: o.promptGuidance,
+  }));
+
+  const observationsSnapshot = context.observations.map(o => ({
+    id: o.id,
+    name: o.name,
+    displayName: o.displayName,
+    valueType: o.valueType,
+    value: o.value,
+    isActive: o.isActive,
+  }));
+
+  const interactionsSnapshot = context.interactions.map(i => ({
+    id: i.id,
+    key: i.key,
+    name: i.name,
+    description: i.description,
+    expectedDayOffset: i.expectedDayOffset,
+    isActive: i.isActive,
+  }));
+
+  const contextParamsSnapshot = context.contextParameters.map(p => ({
+    name: p.name,
+    displayName: p.displayName,
+    dataType: p.dataType,
+  }));
+
+  const systemPrompt = `You are an AI assistant helping a healthcare operations team configure activation objectives for a post-call analytics system.
+
+Activation objectives are program-level goals tied to a patient anchor event (e.g. discharge). Each objective has:
+- name (snake_case key) and displayName (human-readable)
+- description
+- anchorEventType (discharge | enrollment | procedure | custom) and anchorContextKey (the date field used to anchor the timeline)
+- windowDays (target completion window from the anchor)
+- stages (ordered progress stages: name, displayName, description, order) and achievedStageId
+- observationName (the patient-facing observation that drives the objective, e.g. "Follow-up status")
+- extractedEnumValues: array of {label, color, promptHint} where color is GREEN/YELLOW/RED/BLUE/GRAY
+- stageMappings: array of {extractedValue, stageId} that maps an extracted value to a stage
+- observationTopicIds: ids of observations from the observations catalogue this objective relies on
+- promptGuidance (extra instructions for Gemini)
+- isActive
+
+Current activation objectives configured:
+${JSON.stringify(objectivesSnapshot, null, 2)}
+
+Available observation topics in the catalogue (use these ids if you reference observationTopicIds):
+${JSON.stringify(observationsSnapshot, null, 2)}
+
+Available activation interactions (touchpoints):
+${JSON.stringify(interactionsSnapshot, null, 2)}
+
+Available context parameters (anchorContextKey usually points at a date field):
+${JSON.stringify(contextParamsSnapshot, null, 2)}
+
+Your role:
+1. Suggest new activation objectives relevant to post-discharge/care-transition programs
+2. Improve descriptions, prompt guidance, stage names, and stage mappings on existing objectives
+3. Recommend better anchor events / window days based on clinical best practice
+4. Suggest extracted enum values + colors for the underlying observation
+5. Flag missing or weak mappings between extracted values and stages
+
+When proposing a NEW objective, format it clearly so the user can apply it. Use this exact block (one per proposal, English values only):
+**Name:** snake_case_name
+**Display Name:** Human Readable Name
+**Description:** What this objective measures
+**Anchor Event:** discharge | enrollment | procedure | custom
+**Anchor Context Key:** name_of_date_field
+**Window Days:** 7
+**Observation Name:** Human-readable observation
+**Stages:** stage_one | Display One; stage_two | Display Two; stage_three | Display Three
+**Achieved Stage:** stage_three
+**Extracted Values:** Value A (GREEN), Value B (YELLOW), Value C (RED)
+**Stage Mappings:** Value A -> stage_three; Value B -> stage_two; Value C -> stage_one
+**Prompt Guidance:** Specific guidance for the AI extracting the observation...
+
+Be concise, practical, and grounded in the user's existing setup. Keep responses short and actionable.`;
+
+  const contents: any[] = [];
+  contents.push({ role: "user", parts: [{ text: systemPrompt + "\n\nUser: " + (conversationHistory.length === 0 ? userMessage : conversationHistory[0]?.text || userMessage) }] });
+
+  if (conversationHistory.length > 0) {
+    for (let i = 0; i < conversationHistory.length; i++) {
+      const msg = conversationHistory[i];
+      if (i === 0) continue;
+      contents.push({
+        role: msg.role === "assistant" ? "model" : "user",
+        parts: [{ text: msg.text }],
+      });
+    }
+    contents.push({ role: "user", parts: [{ text: userMessage }] });
+  }
+
+  const result = await model.generateContent({ contents });
+  const response = result.response;
+  const text = response.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, I couldn't generate a response.";
+  return text;
+}
