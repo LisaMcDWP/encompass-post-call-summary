@@ -2060,6 +2060,27 @@ export async function resetFailedBatchItems(batchId?: string, targetProjectId?: 
   return Number(retryMeta?.dmlStats?.updatedRowCount || retryMeta?.numDmlAffectedRows || 0);
 }
 
+export async function resetStaleProcessingRows(targetProjectId?: string): Promise<number> {
+  const key = tableInitKey(BATCH_PROCESSING_TABLE_ID, targetProjectId);
+  if (!initializedTables.has(key)) {
+    try {
+      await ensureBatchProcessingTable(targetProjectId);
+      initializedTables.add(key);
+    } catch {
+      return 0;
+    }
+  }
+  const client = getOutputBigQueryClient(targetProjectId);
+  const query = `
+    UPDATE \`${client.projectId}.${DATASET_ID}.${BATCH_PROCESSING_TABLE_ID}\`
+    SET status = 'pending', error_message = NULL, processed_at = NULL, result_call_id = NULL
+    WHERE status = 'processing'
+  `;
+  const result = await client.query({ query, location: "US" });
+  const meta = (result as any)[2] || {};
+  return Number(meta?.dmlStats?.updatedRowCount || meta?.numDmlAffectedRows || 0);
+}
+
 export async function getCallProcessingRuns(callId: string, targetProjectId?: string): Promise<{ run_number: number; processed_at: string; status: string; processing_time_ms: number; total_tokens: number; estimated_cost: number; prompt_version: string | null }[]> {
   const client = getOutputBigQueryClient(targetProjectId);
   const query = `

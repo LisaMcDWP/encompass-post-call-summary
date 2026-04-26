@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { analyzeTranscript, analyzeTranscriptFast, analyzeTranscriptBackground, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, aiObservationAssistant, aiActivationObjectiveAssistant, type DispositionConfig, type ActivationObjectivesContext, type ActivationObjectiveExtraction } from "./gemini";
-import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBarriers, insertCallQAResults, insertCallDisposition, insertCallActivationObjectives, getCallActivationObjectives, ensureCallBarriersTable, ensureCallQATable, getCallBarriers, getCallInfoList, getCallDetail, getCallStatsByDay, queryBlandCalls, loadBlandCallsToBatch, fetchAwellContextForCareFlows, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, bulkUpdateBatchItemStatus, bulkUpdateBatchResults, resetFailedBatchItems, deletePendingBatchItems, recreateBatch, getDistinctTags, upsertCallReviews, getCallReviews, upsertCallReviewStatus, upsertCallReviewMeta, getCallReviewStatusesBulk, ensureCallReviewStatusesTable, getCallReviewList } from "./bigquery";
+import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBarriers, insertCallQAResults, insertCallDisposition, insertCallActivationObjectives, getCallActivationObjectives, ensureCallBarriersTable, ensureCallQATable, getCallBarriers, getCallInfoList, getCallDetail, getCallStatsByDay, queryBlandCalls, loadBlandCallsToBatch, fetchAwellContextForCareFlows, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, bulkUpdateBatchItemStatus, bulkUpdateBatchResults, resetFailedBatchItems, resetStaleProcessingRows, deletePendingBatchItems, recreateBatch, getDistinctTags, upsertCallReviews, getCallReviews, upsertCallReviewStatus, upsertCallReviewMeta, getCallReviewStatusesBulk, ensureCallReviewStatusesTable, getCallReviewList } from "./bigquery";
 import { computeActivationObjectiveResults } from "./activationObjectives";
 import { randomUUID, createHash } from "crypto";
 import { storage } from "./storage";
@@ -1870,6 +1870,47 @@ export async function registerRoutes(
     errors: { callId: string; error: string }[];
   }
   const activeBatchJobs = new Map<string, BatchJobState>();
+
+  async function sweepStaleProcessingRows(reason: string): Promise<void> {
+    try {
+      const hasRunning = Array.from(activeBatchJobs.values()).some(j => j.status === "running");
+      if (hasRunning) {
+        console.log(`[sweeper] Skipping stale-row sweep (${reason}) — a batch job is running on this instance.`);
+        return;
+      }
+      const cps = await storage.getClientPathways();
+      const seen = new Set<string>();
+      seen.add("__central__");
+      let totalReset = 0;
+      const targets: Array<string | undefined> = [undefined];
+      for (const cp of cps) {
+        const pid = cp.gcp_project_id || undefined;
+        const key = pid || "__central__";
+        if (seen.has(key)) continue;
+        seen.add(key);
+        targets.push(pid);
+      }
+      for (const pid of targets) {
+        try {
+          const n = await resetStaleProcessingRows(pid);
+          if (n > 0) {
+            console.log(`[sweeper] Reset ${n} stale 'processing' row(s) in project ${pid || "(default)"}.`);
+            totalReset += n;
+          }
+        } catch (err: any) {
+          console.warn(`[sweeper] Sweep failed for project ${pid || "(default)"}: ${err.message}`);
+        }
+      }
+      if (totalReset === 0) {
+        console.log(`[sweeper] Sweep ok (${reason}) — no stale rows found.`);
+      }
+    } catch (err: any) {
+      console.error("[sweeper] Unexpected sweeper error:", err.message);
+    }
+  }
+
+  setTimeout(() => { void sweepStaleProcessingRows("startup"); }, 5000);
+  setInterval(() => { void sweepStaleProcessingRows("interval"); }, 10 * 60 * 1000);
 
   app.get("/api/batch/job-status", (req, res) => {
     const jobId = req.query.jobId as string;
