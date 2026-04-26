@@ -87,7 +87,11 @@ interface ActivationInteraction {
   key: string;
   name: string;
   description: string;
+  interactionType: "scheduled" | "ad_hoc" | "continuous";
   expectedDayOffset: number | null;
+  parentInteractionId: number | null;
+  intervalDays: number | null;
+  startAfterObjectiveId: number | null;
   isActive: boolean;
   displayOrder: number;
 }
@@ -2129,7 +2133,7 @@ function ObjectiveEditor(p: EditorProps) {
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="__none__"><span className="text-muted-foreground italic">No hint</span></SelectItem>
-                                {p.interactions.filter(x => x.isActive).map(x => (
+                                {p.interactions.filter(x => x.isActive && x.interactionType !== "continuous").map(x => (
                                   <SelectItem key={x.id} value={String(x.id)}>{x.name}</SelectItem>
                                 ))}
                               </SelectContent>
@@ -2348,7 +2352,8 @@ function AddInteractionPicker({
   onAdd: (id: number) => void;
 }) {
   const configuredIds = new Set(configured.map(c => c.interactionId));
-  const available = interactions.filter(i => !configuredIds.has(i.id) && i.isActive);
+  // Continuous interactions are not evaluated against this objective's window, so they're not configurable per-objective.
+  const available = interactions.filter(i => !configuredIds.has(i.id) && i.isActive && i.interactionType !== "continuous");
   const [pendingId, setPendingId] = useState<string>("");
 
   if (interactions.length === 0) return null;

@@ -6,9 +6,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Save, X, Loader2, MessageSquare } from "lucide-react";
+import { Plus, Pencil, Trash2, Save, X, Loader2, MessageSquare, Calendar, GitBranch, Repeat } from "lucide-react";
 import { useClientPathway } from "@/contexts/ClientPathwayContext";
+
+type InteractionType = "scheduled" | "ad_hoc" | "continuous";
 
 interface ActivationInteraction {
   id: number;
@@ -16,28 +19,66 @@ interface ActivationInteraction {
   key: string;
   name: string;
   description: string;
+  interactionType: InteractionType;
   expectedDayOffset: number | null;
+  parentInteractionId: number | null;
+  intervalDays: number | null;
+  startAfterObjectiveId: number | null;
   isActive: boolean;
   displayOrder: number;
 }
 
+interface ObjectiveLite {
+  id: number;
+  displayName: string;
+  windowDays: number;
+}
+
 type FormState = Omit<ActivationInteraction, "id" | "clientPathwayId">;
+
+const NONE_VALUE = "__none__";
 
 function emptyForm(): FormState {
   return {
     key: "",
     name: "",
     description: "",
+    interactionType: "scheduled",
     expectedDayOffset: null,
+    parentInteractionId: null,
+    intervalDays: null,
+    startAfterObjectiveId: null,
     isActive: true,
     displayOrder: 0,
   };
 }
 
+const TYPE_META: Record<InteractionType, { label: string; icon: typeof Calendar; description: string; badgeClass: string }> = {
+  scheduled: {
+    label: "Scheduled",
+    icon: Calendar,
+    description: "Defined touchpoint at a specific day offset (e.g. Day 4 call). On-track band evaluation applies.",
+    badgeClass: "bg-blue-100 text-blue-800 border-blue-200",
+  },
+  ad_hoc: {
+    label: "Ad hoc",
+    icon: GitBranch,
+    description: "Triggered by something surfaced in a prior call. Inherits band from the actual call date; extraction is typically narrower.",
+    badgeClass: "bg-amber-100 text-amber-900 border-amber-200",
+  },
+  continuous: {
+    label: "Continuous",
+    icon: Repeat,
+    description: "Recurring engagement (e.g. weekly check-in) that begins after an objective resolves. Not evaluated against the originating objective window.",
+    badgeClass: "bg-purple-100 text-purple-900 border-purple-200",
+  },
+};
+
 export default function ActivationInteractions() {
   const { selectedCPId } = useClientPathway();
   const { toast } = useToast();
   const [items, setItems] = useState<ActivationInteraction[]>([]);
+  const [objectives, setObjectives] = useState<ObjectiveLite[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<number | "new" | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm());
@@ -54,8 +95,19 @@ export default function ActivationInteractions() {
     if (!selectedCPId) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/activation-interactions?clientPathwayId=${selectedCPId}`);
-      if (res.ok) setItems(await res.json());
+      const [resInteractions, resObjectives] = await Promise.all([
+        fetch(`/api/activation-interactions?clientPathwayId=${selectedCPId}`),
+        fetch(`/api/activation-objectives?clientPathwayId=${selectedCPId}`),
+      ]);
+      if (resInteractions.ok) setItems(await resInteractions.json());
+      if (resObjectives.ok) {
+        const objs = await resObjectives.json();
+        setObjectives((Array.isArray(objs) ? objs : []).map((o: any) => ({
+          id: o.id,
+          displayName: o.displayName,
+          windowDays: o.windowDays,
+        })));
+      }
     } catch (err: any) {
       toast({ title: "Failed to load", description: err.message, variant: "destructive" });
     } finally {
@@ -89,12 +141,26 @@ export default function ActivationInteractions() {
       toast({ title: "Invalid key", description: "Key must use lowercase letters, numbers, and underscores only.", variant: "destructive" });
       return;
     }
+    if (form.interactionType === "continuous" && (form.intervalDays == null || form.intervalDays <= 0)) {
+      toast({ title: "Cadence required", description: "Continuous interactions need an interval (in days).", variant: "destructive" });
+      return;
+    }
+
+    // Normalize: clear fields that don't apply to the chosen type so we don't carry stale data.
+    const normalized: FormState = {
+      ...form,
+      expectedDayOffset: form.interactionType === "scheduled" ? form.expectedDayOffset : null,
+      parentInteractionId: form.interactionType === "ad_hoc" ? form.parentInteractionId : null,
+      intervalDays: form.interactionType === "continuous" ? form.intervalDays : null,
+      startAfterObjectiveId: form.interactionType === "continuous" ? form.startAfterObjectiveId : null,
+    };
+
     setSaving(true);
     try {
       const isNew = editingId === "new";
       const url = isNew ? "/api/activation-interactions" : `/api/activation-interactions/${editingId}`;
       const method = isNew ? "POST" : "PUT";
-      const body = JSON.stringify({ ...form, clientPathwayId: selectedCPId });
+      const body = JSON.stringify({ ...normalized, clientPathwayId: selectedCPId });
       const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -138,6 +204,13 @@ export default function ActivationInteractions() {
   }
 
   const isEditing = editingId !== null;
+  const itemsById = new Map(items.map(i => [i.id, i]));
+  const objectivesById = new Map(objectives.map(o => [o.id, o]));
+
+  // Ad hoc: parent picker shows scheduled + ad_hoc interactions (not other continuous, not self).
+  const parentCandidates = items.filter(
+    i => i.id !== editingId && i.interactionType !== "continuous" && i.isActive,
+  );
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -148,9 +221,9 @@ export default function ActivationInteractions() {
             Activation Interactions
           </h1>
           <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
-            Reusable touchpoints across your pathway (e.g. Day 4 call, Day 7 call, follow-up SMS). Activation
-            objectives reference these via dropdown — the interaction key is supplied by the API caller in the
-            request context for each call.
+            Reusable touchpoints across your pathway. Each interaction has a type — scheduled (fixed day),
+            ad hoc (follow-up triggered by another call), or continuous (recurring engagement after an objective resolves).
+            The interaction key is supplied by the API caller in the request context for each call.
           </p>
         </div>
         {!isEditing && (
@@ -216,32 +289,158 @@ export default function ActivationInteractions() {
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="expectedDayOffset">Expected day offset</Label>
-                <Input
-                  id="expectedDayOffset"
-                  type="number"
-                  value={form.expectedDayOffset ?? ""}
-                  onChange={e => updateForm({ expectedDayOffset: e.target.value === "" ? null : parseInt(e.target.value) })}
-                  placeholder="e.g. 4"
-                  data-testid="input-day-offset"
-                />
-                <p className="text-[11px] text-muted-foreground mt-1">
-                  Optional reference only. Used for display and operational reporting.
-                </p>
-              </div>
-              <div>
-                <Label htmlFor="displayOrder">Display order</Label>
-                <Input
-                  id="displayOrder"
-                  type="number"
-                  value={form.displayOrder}
-                  onChange={e => updateForm({ displayOrder: parseInt(e.target.value) || 0 })}
-                  data-testid="input-display-order"
-                />
-              </div>
+            <div>
+              <Label htmlFor="interactionType">Interaction type <span className="text-destructive">*</span></Label>
+              <Select
+                value={form.interactionType}
+                onValueChange={(v) => updateForm({ interactionType: v as InteractionType })}
+              >
+                <SelectTrigger id="interactionType" data-testid="select-interaction-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(TYPE_META) as InteractionType[]).map(t => {
+                    const meta = TYPE_META[t];
+                    const Icon = meta.icon;
+                    return (
+                      <SelectItem key={t} value={t} data-testid={`option-type-${t}`}>
+                        <span className="inline-flex items-center gap-2">
+                          <Icon className="h-3.5 w-3.5" />
+                          {meta.label}
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground mt-1">{TYPE_META[form.interactionType].description}</p>
             </div>
+
+            {form.interactionType === "scheduled" && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-testid="section-scheduled-fields">
+                <div>
+                  <Label htmlFor="expectedDayOffset">Expected day offset</Label>
+                  <Input
+                    id="expectedDayOffset"
+                    type="number"
+                    value={form.expectedDayOffset ?? ""}
+                    onChange={e => updateForm({ expectedDayOffset: e.target.value === "" ? null : parseInt(e.target.value) })}
+                    placeholder="e.g. 4"
+                    data-testid="input-day-offset"
+                  />
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Days from the anchor event when this touchpoint is expected.
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="displayOrder">Display order</Label>
+                  <Input
+                    id="displayOrder"
+                    type="number"
+                    value={form.displayOrder}
+                    onChange={e => updateForm({ displayOrder: parseInt(e.target.value) || 0 })}
+                    data-testid="input-display-order"
+                  />
+                </div>
+              </div>
+            )}
+
+            {form.interactionType === "ad_hoc" && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-testid="section-adhoc-fields">
+                <div>
+                  <Label htmlFor="parentInteractionId">Triggered by</Label>
+                  <Select
+                    value={form.parentInteractionId == null ? NONE_VALUE : String(form.parentInteractionId)}
+                    onValueChange={(v) => updateForm({ parentInteractionId: v === NONE_VALUE ? null : parseInt(v) })}
+                  >
+                    <SelectTrigger id="parentInteractionId" data-testid="select-parent-interaction">
+                      <SelectValue placeholder="Select a parent interaction" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NONE_VALUE}>(unspecified)</SelectItem>
+                      {parentCandidates.map(p => (
+                        <SelectItem key={p.id} value={String(p.id)} data-testid={`option-parent-${p.id}`}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Which interaction's call typically surfaces the trigger for this follow-up.
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="displayOrder">Display order</Label>
+                  <Input
+                    id="displayOrder"
+                    type="number"
+                    value={form.displayOrder}
+                    onChange={e => updateForm({ displayOrder: parseInt(e.target.value) || 0 })}
+                    data-testid="input-display-order"
+                  />
+                </div>
+              </div>
+            )}
+
+            {form.interactionType === "continuous" && (
+              <div className="space-y-4" data-testid="section-continuous-fields">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="intervalDays">Cadence (days) <span className="text-destructive">*</span></Label>
+                    <Input
+                      id="intervalDays"
+                      type="number"
+                      min={1}
+                      value={form.intervalDays ?? ""}
+                      onChange={e => updateForm({ intervalDays: e.target.value === "" ? null : parseInt(e.target.value) })}
+                      placeholder="7"
+                      data-testid="input-interval-days"
+                    />
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Days between recurrences. e.g. 7 for weekly check-ins.
+                    </p>
+                  </div>
+                  <div>
+                    <Label htmlFor="displayOrder">Display order</Label>
+                    <Input
+                      id="displayOrder"
+                      type="number"
+                      value={form.displayOrder}
+                      onChange={e => updateForm({ displayOrder: parseInt(e.target.value) || 0 })}
+                      data-testid="input-display-order"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="startAfterObjectiveId">Start after objective resolves</Label>
+                  <Select
+                    value={form.startAfterObjectiveId == null ? NONE_VALUE : String(form.startAfterObjectiveId)}
+                    onValueChange={(v) => updateForm({ startAfterObjectiveId: v === NONE_VALUE ? null : parseInt(v) })}
+                  >
+                    <SelectTrigger id="startAfterObjectiveId" data-testid="select-start-after-objective">
+                      <SelectValue placeholder="Select an objective" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NONE_VALUE}>(unspecified)</SelectItem>
+                      {objectives.map(o => (
+                        <SelectItem key={o.id} value={String(o.id)} data-testid={`option-start-objective-${o.id}`}>
+                          {o.displayName} <span className="text-muted-foreground">({o.windowDays}d window)</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Continuous engagement begins once this objective is resolved (achieved or not). The continuous
+                    interaction's own assessment frame will be configured separately — see future work.
+                  </p>
+                </div>
+                <div className="rounded-md border border-dashed bg-muted/30 p-3 text-[12px] text-muted-foreground">
+                  <strong className="text-foreground">Note:</strong> continuous interactions are not configured per
+                  objective and do not contribute to band-based on-track scoring. They will get their own assessment
+                  configuration in a follow-up release.
+                </div>
+              </div>
+            )}
 
             <div className="flex items-center gap-2 pt-2">
               <Button onClick={saveForm} disabled={saving} data-testid="button-save">
@@ -268,35 +467,65 @@ export default function ActivationInteractions() {
 
       {!isEditing && items.length > 0 && (
         <div className="space-y-2">
-          {items.map(it => (
-            <Card key={it.id} data-testid={`card-interaction-${it.id}`}>
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <h3 className="font-semibold text-base" data-testid={`text-interaction-name-${it.id}`}>{it.name}</h3>
-                      <Badge variant="outline" className="font-mono text-[11px]">{it.key}</Badge>
-                      {it.expectedDayOffset != null && (
-                        <Badge variant="secondary" className="text-[11px]">Day {it.expectedDayOffset}</Badge>
+          {items.map(it => {
+            const meta = TYPE_META[it.interactionType];
+            const TypeIcon = meta.icon;
+            const parent = it.parentInteractionId != null ? itemsById.get(it.parentInteractionId) : null;
+            const startObj = it.startAfterObjectiveId != null ? objectivesById.get(it.startAfterObjectiveId) : null;
+            return (
+              <Card key={it.id} data-testid={`card-interaction-${it.id}`}>
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <h3 className="font-semibold text-base" data-testid={`text-interaction-name-${it.id}`}>{it.name}</h3>
+                        <Badge variant="outline" className={`text-[11px] ${meta.badgeClass}`} data-testid={`badge-type-${it.id}`}>
+                          <TypeIcon className="h-3 w-3 mr-1" /> {meta.label}
+                        </Badge>
+                        <Badge variant="outline" className="font-mono text-[11px]">{it.key}</Badge>
+                        {it.interactionType === "scheduled" && it.expectedDayOffset != null && (
+                          <Badge variant="secondary" className="text-[11px]">Day {it.expectedDayOffset}</Badge>
+                        )}
+                        {it.interactionType === "continuous" && it.intervalDays != null && (
+                          <Badge variant="secondary" className="text-[11px]">every {it.intervalDays}d</Badge>
+                        )}
+                        {!it.isActive && <Badge variant="secondary">Inactive</Badge>}
+                      </div>
+                      {it.description && (
+                        <p className="text-sm text-muted-foreground mt-1">{it.description}</p>
                       )}
-                      {!it.isActive && <Badge variant="secondary">Inactive</Badge>}
+                      {it.interactionType === "scheduled" && (
+                        <p className="text-[11px] text-muted-foreground mt-1" data-testid={`text-scheduled-${it.id}`}>
+                          {it.expectedDayOffset != null
+                            ? <>Expected on Day {it.expectedDayOffset} from the anchor event.</>
+                            : <em>No expected day set.</em>}
+                        </p>
+                      )}
+                      {it.interactionType === "ad_hoc" && (
+                        <p className="text-[11px] text-muted-foreground mt-1" data-testid={`text-parent-${it.id}`}>
+                          Triggered by: {parent ? parent.name : <em>unspecified</em>}
+                        </p>
+                      )}
+                      {it.interactionType === "continuous" && (
+                        <p className="text-[11px] text-muted-foreground mt-1" data-testid={`text-start-after-${it.id}`}>
+                          {it.intervalDays != null ? <>Every {it.intervalDays} day{it.intervalDays === 1 ? "" : "s"}, starting after </> : <>Starts after </>}
+                          {startObj ? `${startObj.displayName} resolves` : <em>unspecified objective</em>}.
+                        </p>
+                      )}
                     </div>
-                    {it.description && (
-                      <p className="text-sm text-muted-foreground mt-1">{it.description}</p>
-                    )}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button size="sm" variant="outline" onClick={() => startEdit(it)} data-testid={`button-edit-${it.id}`}>
+                        <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => deleteInteraction(it.id)} data-testid={`button-delete-${it.id}`}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Button size="sm" variant="outline" onClick={() => startEdit(it)} data-testid={`button-edit-${it.id}`}>
-                      <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => deleteInteraction(it.id)} data-testid={`button-delete-${it.id}`}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

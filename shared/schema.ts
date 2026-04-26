@@ -242,15 +242,56 @@ export const activationObjectiveInclusionRulesSchema = z.object({
 });
 export type ActivationObjectiveInclusionRules = z.infer<typeof activationObjectiveInclusionRulesSchema>;
 
-export const insertActivationInteractionSchema = z.object({
+export const activationInteractionTypeSchema = z.enum(["scheduled", "ad_hoc", "continuous"]);
+export type ActivationInteractionType = z.infer<typeof activationInteractionTypeSchema>;
+
+// Base object shape (no cross-field rules) — exposed so partial-update validators can derive from it.
+export const baseActivationInteractionSchema = z.object({
   key: z.string().min(1).regex(/^[a-z0-9_]+$/, "Key must use lowercase letters, numbers, and underscores"),
   name: z.string().min(1),
   description: z.string().default(""),
+  // Type model:
+  //  - scheduled: defined touchpoint at expectedDayOffset (band evaluation applies)
+  //  - ad_hoc: triggered by something surfaced in a prior call (band evaluation applies, narrower extraction)
+  //  - continuous: recurring engagement after the initial window (NOT evaluated against the originating objective window)
+  interactionType: activationInteractionTypeSchema.default("scheduled"),
+  // Scheduled-only: expected day offset from the anchor event.
   expectedDayOffset: z.number().int().nullable().default(null),
+  // Ad hoc-only: which interaction's call typically triggers this follow-up.
+  parentInteractionId: z.number().int().nullable().default(null),
+  // Continuous-only: cadence in days between recurrences (e.g. 7 = weekly).
+  intervalDays: z.number().int().positive().nullable().default(null),
+  // Continuous-only: continuous engagement begins after this objective resolves.
+  startAfterObjectiveId: z.number().int().nullable().default(null),
   isActive: z.boolean().default(true),
   displayOrder: z.number().int().default(0),
 });
+
+// Full insert schema: enforces cross-field rules and normalizes incompatible fields to null.
+export const insertActivationInteractionSchema = baseActivationInteractionSchema.superRefine((val, ctx) => {
+  if (val.interactionType === "continuous" && (val.intervalDays == null || val.intervalDays <= 0)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["intervalDays"],
+      message: "Continuous interactions require a positive intervalDays (cadence in days).",
+    });
+  }
+}).transform((val) => {
+  switch (val.interactionType) {
+    case "scheduled":
+      return { ...val, parentInteractionId: null, intervalDays: null, startAfterObjectiveId: null };
+    case "ad_hoc":
+      return { ...val, expectedDayOffset: null, intervalDays: null, startAfterObjectiveId: null };
+    case "continuous":
+      return { ...val, expectedDayOffset: null, parentInteractionId: null };
+  }
+});
 export type InsertActivationInteraction = z.infer<typeof insertActivationInteractionSchema>;
+
+// Partial-update schema for PUT — call sites should merge with the existing record and re-validate
+// through `insertActivationInteractionSchema` to keep cross-field rules enforced.
+export const updateActivationInteractionSchema = baseActivationInteractionSchema.partial();
+export type UpdateActivationInteraction = z.infer<typeof updateActivationInteractionSchema>;
 
 export interface ActivationInteraction {
   id: number;
@@ -258,7 +299,11 @@ export interface ActivationInteraction {
   key: string;
   name: string;
   description: string;
+  interactionType: ActivationInteractionType;
   expectedDayOffset: number | null;
+  parentInteractionId: number | null;
+  intervalDays: number | null;
+  startAfterObjectiveId: number | null;
   isActive: boolean;
   displayOrder: number;
 }

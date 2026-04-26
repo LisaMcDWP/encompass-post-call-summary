@@ -5,7 +5,7 @@ import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBa
 import { computeActivationObjectiveResults } from "./activationObjectives";
 import { randomUUID, createHash } from "crypto";
 import { storage } from "./storage";
-import { insertObservationSchema, enumValueSchema, insertContextParameterSchema, insertCallQAPromptSchema, insertDispositionCategorySchema, insertDispositionDetailSchema, insertCallReviewItemSchema, insertActivationObjectiveSchema, insertActivationInteractionSchema, type ActivationObjective } from "@shared/schema";
+import { insertObservationSchema, enumValueSchema, insertContextParameterSchema, insertCallQAPromptSchema, insertDispositionCategorySchema, insertDispositionDetailSchema, insertCallReviewItemSchema, insertActivationObjectiveSchema, insertActivationInteractionSchema, updateActivationInteractionSchema, type ActivationObjective } from "@shared/schema";
 import { z } from "zod";
 
 function ensureInteractionContextKeys(
@@ -962,13 +962,30 @@ export async function registerRoutes(
   app.put("/api/activation-interactions/:id", async (req, res) => {
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
-    const parsed = insertActivationInteractionSchema.partial().safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ message: parsed.error.errors.map(e => e.message).join(", "), errors: parsed.error.errors });
+    // Phase 1: validate the partial payload against the base schema, then merge with the existing
+    // record and re-validate through the full insert schema so cross-field rules (e.g. continuous
+    // requires intervalDays > 0) and field normalization apply on PUT too.
+    const partialParsed = updateActivationInteractionSchema.safeParse(req.body);
+    if (!partialParsed.success) {
+      return res.status(400).json({
+        message: partialParsed.error.errors.map((e: z.ZodIssue) => e.message).join(", "),
+        errors: partialParsed.error.errors,
+      });
     }
     const cpId = Number(req.body.clientPathwayId || req.query.clientPathwayId) || undefined;
     try {
-      const item = await storage.updateActivationInteraction(id, parsed.data, cpId);
+      const existing = await storage.getActivationInteraction(id, cpId);
+      if (!existing) return res.status(404).json({ message: "Activation interaction not found" });
+      const { id: _id, clientPathwayId: _cpId, ...existingFields } = existing;
+      const merged = { ...existingFields, ...partialParsed.data };
+      const validated = insertActivationInteractionSchema.safeParse(merged);
+      if (!validated.success) {
+        return res.status(400).json({
+          message: validated.error.errors.map((e: z.ZodIssue) => e.message).join(", "),
+          errors: validated.error.errors,
+        });
+      }
+      const item = await storage.updateActivationInteraction(id, validated.data, cpId);
       if (!item) return res.status(404).json({ message: "Activation interaction not found" });
       res.json(item);
     } catch (error: any) {

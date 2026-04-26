@@ -578,7 +578,11 @@ async function ensureActivationInteractionsTable(): Promise<void> {
         \`key\` STRING NOT NULL,
         name STRING NOT NULL,
         description STRING,
+        interaction_type STRING,
         expected_day_offset INT64,
+        parent_interaction_id INT64,
+        interval_days INT64,
+        start_after_objective_id INT64,
         is_active BOOL NOT NULL,
         display_order INT64 NOT NULL
       )`,
@@ -592,21 +596,59 @@ async function ensureActivationInteractionsTable(): Promise<void> {
     }
   }
 
+  // Idempotent migration: add new columns if missing (legacy tables predate type model).
+  // Hard-fail on unexpected errors so CRUD never silently runs against an unexpected schema.
+  const migrationColumns: { col: string; type: string }[] = [
+    { col: "interaction_type", type: "STRING" },
+    { col: "parent_interaction_id", type: "INT64" },
+    { col: "interval_days", type: "INT64" },
+    { col: "start_after_objective_id", type: "INT64" },
+  ];
+  for (const { col, type } of migrationColumns) {
+    try {
+      await client.query({
+        query: `ALTER TABLE \`${fullTable}\` ADD COLUMN IF NOT EXISTS ${col} ${type}`,
+      });
+      console.log(`Schema migration ok for ${ACTIVATION_INTERACTIONS_TABLE_ID}: ensured column ${col}`);
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      if (/already exists/i.test(msg)) {
+        // Benign on engines that don't support ADD COLUMN IF NOT EXISTS.
+        continue;
+      }
+      console.error(`Schema migration FAILED for ${ACTIVATION_INTERACTIONS_TABLE_ID}.${col}: ${msg}`);
+      throw err;
+    }
+  }
+
   activationInteractionsTableInitialized = true;
 }
 
+function readNullableInt(v: any): number | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "object" && v !== null) {
+    const inner = (v as any).value;
+    if (inner === null || inner === undefined) return null;
+    return Number(inner);
+  }
+  return Number(v);
+}
+
 function rowToActivationInteraction(row: any): ActivationInteraction {
+  const rawType = row.interaction_type;
+  const interactionType: ActivationInteraction["interactionType"] =
+    rawType === "ad_hoc" || rawType === "continuous" ? rawType : "scheduled";
   return {
     id: row.id,
     clientPathwayId: row.client_pathway_id,
     key: row.key,
     name: row.name,
     description: row.description || "",
-    expectedDayOffset: row.expected_day_offset === null || row.expected_day_offset === undefined
-      ? null
-      : (typeof row.expected_day_offset === "object" && row.expected_day_offset !== null
-          ? Number(row.expected_day_offset.value ?? row.expected_day_offset)
-          : Number(row.expected_day_offset)),
+    interactionType,
+    expectedDayOffset: readNullableInt(row.expected_day_offset),
+    parentInteractionId: readNullableInt(row.parent_interaction_id),
+    intervalDays: readNullableInt(row.interval_days),
+    startAfterObjectiveId: readNullableInt(row.start_after_objective_id),
     isActive: row.is_active,
     displayOrder: row.display_order,
   };
@@ -1562,21 +1604,31 @@ export class BigQueryStorage implements IStorage {
       throw new Error(`Interaction key '${data.key}' already exists for this Client Pathway`);
     }
 
+    const interactionType = data.interactionType ?? "scheduled";
     const row = {
       id,
       client_pathway_id: clientPathwayId,
       key: data.key,
       name: data.name,
       description: data.description || "",
+      interaction_type: interactionType,
       expected_day_offset: data.expectedDayOffset === undefined ? null : data.expectedDayOffset,
+      parent_interaction_id: data.parentInteractionId === undefined ? null : data.parentInteractionId,
+      interval_days: data.intervalDays === undefined ? null : data.intervalDays,
+      start_after_objective_id: data.startAfterObjectiveId === undefined ? null : data.startAfterObjectiveId,
       is_active: data.isActive !== false,
       display_order: data.displayOrder ?? 0,
     };
 
     await client.query({
-      query: `INSERT INTO ${table} (id, client_pathway_id, \`key\`, name, description, expected_day_offset, is_active, display_order) VALUES (@id, @client_pathway_id, @key, @name, @description, @expected_day_offset, @is_active, @display_order)`,
+      query: `INSERT INTO ${table} (id, client_pathway_id, \`key\`, name, description, interaction_type, expected_day_offset, parent_interaction_id, interval_days, start_after_objective_id, is_active, display_order) VALUES (@id, @client_pathway_id, @key, @name, @description, @interaction_type, @expected_day_offset, @parent_interaction_id, @interval_days, @start_after_objective_id, @is_active, @display_order)`,
       params: row,
-      types: { expected_day_offset: "INT64" },
+      types: {
+        expected_day_offset: "INT64",
+        parent_interaction_id: "INT64",
+        interval_days: "INT64",
+        start_after_objective_id: "INT64",
+      },
     });
 
     return rowToActivationInteraction(row);
@@ -1602,10 +1654,29 @@ export class BigQueryStorage implements IStorage {
     if (data.key !== undefined) { setClauses.push("`key` = @key"); params.key = data.key; }
     if (data.name !== undefined) { setClauses.push("name = @name"); params.name = data.name; }
     if (data.description !== undefined) { setClauses.push("description = @description"); params.description = data.description; }
+    if (data.interactionType !== undefined) {
+      setClauses.push("interaction_type = @interaction_type");
+      params.interaction_type = data.interactionType;
+    }
     if (data.expectedDayOffset !== undefined) {
       setClauses.push("expected_day_offset = @expected_day_offset");
       params.expected_day_offset = data.expectedDayOffset;
       types.expected_day_offset = "INT64";
+    }
+    if (data.parentInteractionId !== undefined) {
+      setClauses.push("parent_interaction_id = @parent_interaction_id");
+      params.parent_interaction_id = data.parentInteractionId;
+      types.parent_interaction_id = "INT64";
+    }
+    if (data.intervalDays !== undefined) {
+      setClauses.push("interval_days = @interval_days");
+      params.interval_days = data.intervalDays;
+      types.interval_days = "INT64";
+    }
+    if (data.startAfterObjectiveId !== undefined) {
+      setClauses.push("start_after_objective_id = @start_after_objective_id");
+      params.start_after_objective_id = data.startAfterObjectiveId;
+      types.start_after_objective_id = "INT64";
     }
     if (data.isActive !== undefined) { setClauses.push("is_active = @is_active"); params.is_active = data.isActive; }
     if (data.displayOrder !== undefined) { setClauses.push("display_order = @display_order"); params.display_order = data.displayOrder; }
