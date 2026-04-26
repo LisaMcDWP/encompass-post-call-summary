@@ -376,14 +376,44 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
     }
   }, [data?.reviewStatus, data?.reviewTags, data?.reviewNotes]);
 
-  const { data: obsConfig } = useQuery<{ name: string; display_order: number }[]>({
+  const { data: obsConfig } = useQuery<{ id: number; name: string; displayName: string; display_order: number; valueColors: Record<string, string> }[]>({
     queryKey: ["/api/observations-order", selectedCPId],
     queryFn: async () => {
       if (!selectedCPId) return [];
       const res = await fetch(`/api/observations?clientPathwayId=${selectedCPId}`);
       if (!res.ok) return [];
       const items = await res.json();
-      return items.map((o: any) => ({ name: o.name, display_order: o.displayOrder ?? 999 }));
+      return items.map((o: any) => {
+        const valueColors: Record<string, string> = {};
+        for (const v of (o.value || [])) {
+          if (v && typeof v.label === "string") {
+            const key = v.label.trim().toLowerCase();
+            valueColors[key] = (v.color || "GRAY").toUpperCase();
+          }
+        }
+        return {
+          id: o.id,
+          name: o.name,
+          displayName: o.displayName || o.name,
+          display_order: o.displayOrder ?? 999,
+          valueColors,
+        };
+      });
+    },
+  });
+
+  const { data: aoConfig } = useQuery<Array<{ id: number; displayName: string; description: string }>>({
+    queryKey: ["/api/activation-objectives-meta", selectedCPId],
+    queryFn: async () => {
+      if (!selectedCPId) return [];
+      const res = await fetch(`/api/activation-objectives?clientPathwayId=${selectedCPId}`);
+      if (!res.ok) return [];
+      const items = await res.json();
+      return items.map((o: any) => ({
+        id: o.id,
+        displayName: o.displayName || o.name,
+        description: o.description || "",
+      }));
     },
   });
 
@@ -420,6 +450,21 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
         return orderA - orderB;
       })
     : obsRaw;
+
+  const ENUM_COLOR_STYLES: Record<string, { bg: string; fg: string; border: string }> = {
+    GREEN:  { bg: "#dcfce7", fg: "#166534", border: "#bbf7d0" },
+    YELLOW: { bg: "#fef9c3", fg: "#854d0e", border: "#fde68a" },
+    RED:    { bg: "#fee2e2", fg: "#991b1b", border: "#fecaca" },
+    BLUE:   { bg: "#dbeafe", fg: "#1e40af", border: "#bfdbfe" },
+    GRAY:   { bg: "#f1f5f9", fg: "#475569", border: "#cbd5e1" },
+  };
+  const colorForObsValue = (topicId: number, value: string | null): { bg: string; fg: string; border: string } => {
+    if (!value) return ENUM_COLOR_STYLES.GRAY;
+    const topic = (obsConfig || []).find(o => o.id === topicId);
+    const key = value.trim().toLowerCase();
+    const colorKey = (topic?.valueColors?.[key] || "GRAY").toUpperCase();
+    return ENUM_COLOR_STYLES[colorKey] || ENUM_COLOR_STYLES.GRAY;
+  };
   const qaPairs = data.qaPairs || [];
   const barriers = data.barriers || [];
   const callQA = data.callQA || [];
@@ -1013,6 +1058,9 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
                                      ao.on_track === false ? "#991b1b" : "#475569";
                   const onTrackBorder = ao.on_track === true ? "#bbf7d0" :
                                         ao.on_track === false ? "#fecaca" : "#cbd5e1";
+                  const aoMeta = (aoConfig || []).find(o => o.id === ao.objective_id);
+                  const aoTitle = aoMeta?.displayName || ao.objective_name;
+                  const aoDescription = aoMeta?.description || "";
                   return (
                     <div
                       key={ao.objective_id}
@@ -1021,9 +1069,12 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
                     >
                       <div className="flex items-start justify-between gap-3 flex-wrap">
                         <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-sm">{ao.objective_name}</div>
+                          <div className="font-semibold text-sm" data-testid={`text-ao-title-${ao.objective_id}`}>{aoTitle}</div>
+                          {aoDescription && (
+                            <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed" data-testid={`text-ao-description-${ao.objective_id}`}>{aoDescription}</p>
+                          )}
                           {(ao.interaction_name || ao.interaction_key) && (
-                            <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5 flex-wrap">
+                            <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5 flex-wrap">
                               <span>Interaction:</span>
                               {ao.interaction_name && <span className="font-medium text-foreground">{ao.interaction_name}</span>}
                               {ao.interaction_key && (
@@ -1091,20 +1142,31 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
                       )}
 
                       {ao.observations && ao.observations.length > 0 && (
-                        <div className="mt-1 pt-2 border-t border-border/40 space-y-1">
+                        <div className="mt-1 pt-2 border-t border-border/40 space-y-1.5">
                           <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Observations</p>
-                          <div className="space-y-1">
-                            {ao.observations.map((obs) => (
-                              <div key={`${ao.objective_id}-${obs.topicId}`} className="flex items-start gap-2 text-xs" data-testid={`obs-${ao.objective_id}-${obs.topicId}`}>
-                                <span className="text-muted-foreground shrink-0">{obs.displayName}:</span>
-                                <span className="font-medium text-foreground">
-                                  {obs.value || <span className="italic text-muted-foreground">not detected</span>}
-                                </span>
-                                {obs.evidence && (
-                                  <span className="text-muted-foreground italic truncate">— "{obs.evidence}"</span>
-                                )}
-                              </div>
-                            ))}
+                          <div className="space-y-1.5">
+                            {ao.observations.map((obs) => {
+                              const c = colorForObsValue(obs.topicId, obs.value);
+                              return (
+                                <div key={`${ao.objective_id}-${obs.topicId}`} className="flex items-center gap-2 text-xs flex-wrap" data-testid={`obs-${ao.objective_id}-${obs.topicId}`}>
+                                  <span className="text-muted-foreground shrink-0">{obs.displayName}:</span>
+                                  {obs.value ? (
+                                    <span
+                                      className="inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full border"
+                                      style={{ backgroundColor: c.bg, color: c.fg, borderColor: c.border }}
+                                      data-testid={`obs-value-${ao.objective_id}-${obs.topicId}`}
+                                    >
+                                      {obs.value}
+                                    </span>
+                                  ) : (
+                                    <span className="italic text-muted-foreground">not detected</span>
+                                  )}
+                                  {obs.evidence && (
+                                    <span className="text-muted-foreground italic truncate">— "{obs.evidence}"</span>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       )}
