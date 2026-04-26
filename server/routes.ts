@@ -1645,17 +1645,31 @@ export async function registerRoutes(
 
       (async () => {
         const total = pendingItems.length;
+        const batchResults: Array<{ callId: string; success: boolean; resultCallId?: string; error?: string }> = [];
+        const flushFinalStatuses = async () => {
+          if (batchResults.length === 0) return;
+          try {
+            await bulkUpdateBatchResults(batchResults, targetProjectId);
+            console.log(`Batch job ${jobId}: bulk-finalized ${batchResults.length} items in batch_processing`);
+          } catch (flushErr: any) {
+            console.error(`Batch job ${jobId}: bulk finalize failed: ${flushErr.message}`);
+          }
+        };
+
+        const allCallIds = pendingItems.map((it: any) => it.bland_call_id);
+        try {
+          const claimed = await bulkUpdateBatchItemStatus(allCallIds, "processing", targetProjectId);
+          console.log(`Batch job ${jobId}: bulk-claimed ${claimed}/${allCallIds.length} items as processing`);
+        } catch (claimErr: any) {
+          console.error(`Batch job ${jobId}: bulk-claim failed: ${claimErr.message}`);
+          jobState.status = "failed";
+          jobState.finishedAt = new Date().toISOString();
+          setTimeout(() => activeBatchJobs.delete(jobId), 30 * 60 * 1000);
+          return;
+        }
+
         const processOne = async (item: any, idx: number) => {
           const callId = item.bland_call_id;
-
-          try {
-            await updateBatchItemStatus(callId, "processing", undefined, undefined, targetProjectId);
-          } catch (claimErr: any) {
-            console.error(`Batch job ${jobId}: failed to claim ${callId}: ${claimErr.message}`);
-            jobState.skipped++;
-            return;
-          }
-
           try {
             const startTime = Date.now();
             let batchContext: Record<string, string> = {};
@@ -1716,11 +1730,11 @@ export async function registerRoutes(
             } else {
               console.log(`Batch job ${jobId}: ${callId} — NO disposition returned by Gemini`);
             }
-            await updateBatchItemStatus(callId, "completed", callId, undefined, targetProjectId);
+            batchResults.push({ callId, success: true, resultCallId: callId });
             jobState.completed++;
             console.log(`Batch job ${jobId}: [${idx + 1}/${total}] ${callId} completed (${processingTimeMs}ms)`);
           } catch (err: any) {
-            try { await updateBatchItemStatus(callId, "failed", undefined, err.message, targetProjectId); } catch {}
+            batchResults.push({ callId, success: false, error: err.message });
             jobState.failed++;
             jobState.errors.push({ callId, error: err.message });
             console.error(`Batch job ${jobId}: [${idx + 1}/${total}] ${callId} failed: ${err.message}`);
@@ -1746,6 +1760,8 @@ export async function registerRoutes(
           jobState.status = "failed";
           console.error("Batch job failed:", err.message || err);
           console.error("Batch job stack:", err.stack);
+        } finally {
+          await flushFinalStatuses();
         }
         jobState.finishedAt = new Date().toISOString();
         console.log(`Batch job ${jobId} finished: ${jobState.completed} completed, ${jobState.failed} failed, ${jobState.skipped} skipped out of ${jobState.total}`);
