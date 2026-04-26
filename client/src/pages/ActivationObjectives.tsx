@@ -832,15 +832,15 @@ function ObjectiveEditor(p: EditorProps) {
         <CardContent className="p-5 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
+              <Label htmlFor="ao-display">Display name *</Label>
+              <Input id="ao-display" value={p.form.displayName} onChange={e => p.updateForm({ displayName: e.target.value })}
+                placeholder="PCP follow-up — activation objective" data-testid="input-display-name" />
+            </div>
+            <div>
               <Label htmlFor="ao-name">Internal name *</Label>
               <Input id="ao-name" value={p.form.name} onChange={e => p.updateForm({ name: e.target.value })}
                 placeholder="pcp_followup_7day" data-testid="input-name" />
               <p className="text-[11px] text-muted-foreground mt-1">Snake_case identifier used in BigQuery and code.</p>
-            </div>
-            <div>
-              <Label htmlFor="ao-display">Display name *</Label>
-              <Input id="ao-display" value={p.form.displayName} onChange={e => p.updateForm({ displayName: e.target.value })}
-                placeholder="PCP follow-up — activation objective" data-testid="input-display-name" />
             </div>
           </div>
           <div>
