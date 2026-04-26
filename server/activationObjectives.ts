@@ -216,11 +216,13 @@ export function computeActivationObjectiveResults(args: {
         if (!topic) return null;
         const eo = extObsByName.get(topic.name);
         const value = eo?.value && String(eo.value).trim() ? String(eo.value).trim() : null;
+        const detail = eo?.detail && String(eo.detail).trim() ? String(eo.detail).trim() : null;
         return {
           topicId: topic.id,
           name: topic.name,
           displayName: topic.displayName,
           value,
+          detail,
           evidence: eo?.evidence || null,
         };
       })

@@ -407,5 +407,6 @@ export interface CallActivationObjectiveObservation {
   name: string;
   displayName: string;
   value: string | null;
+  detail: string | null;
   evidence: string | null;
 }

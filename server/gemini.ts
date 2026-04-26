@@ -84,6 +84,7 @@ export interface DispositionResult {
 export interface ActivationObjectiveObservationExtraction {
   topic_name: string;
   value: string | null;
+  detail: string | null;
   evidence: string | null;
 }
 
@@ -260,6 +261,7 @@ function buildActivationObjectivesJsonField(tasks: ResolvedObjectiveTask[]): str
         {
           "topic_name": "COPY exactly from the topic_name in the task line",
           "value": "One of the allowed values for that topic, or null if not discussed",
+          "detail": "Brief 1-2 sentence summary of what was observed for this topic. Do NOT copy the topic hint. Use null if not discussed.",
           "evidence": "Direct quote from the transcript supporting the value, or null"
         }
       ]
@@ -271,7 +273,7 @@ function buildActivationObjectivesGuideline(tasks: ResolvedObjectiveTask[]): str
   if (tasks.length === 0) return "";
   const obsCount = tasks.reduce((sum, t) => sum + t.observationTopics.length, 0);
   const obsLine = obsCount > 0
-    ? ` For each task that lists observation topics, also output one entry per topic in that task's observations array — copy topic_name exactly and pick value from that topic's allowed values, or null if not discussed.`
+    ? ` For each task that lists observation topics, also output one entry per topic in that task's observations array — copy topic_name exactly and pick value from that topic's allowed values, or null if not discussed. For each topic also write a 1-2 sentence detail summarizing what was observed (do NOT copy the topic hint), or null if the topic was not discussed.`
     : "";
   return `\n- activation_objectives: Output EXACTLY ${tasks.length} object(s), one per task in the ACTIVATION OBJECTIVES section. Use the exact objective_name and interaction_key from the task line. extracted_value MUST be one of the allowed values listed for that task, or null. Never substitute or invent values.${obsLine}`;
 }
