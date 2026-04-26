@@ -1,8 +1,23 @@
 import { getPendingBatchItems, updateBatchItemStatus, claimPendingBatchItems, initializeBatchTable, ensureCallQATable, initializeCallTables, ensureCallDispositionsTable } from "./bigquery";
-import { insertCallInfo, insertCallObservations, insertCallQAResults, insertCallDisposition } from "./bigquery";
-import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, type DispositionConfig } from "./gemini";
+import { insertCallInfo, insertCallObservations, insertCallQAResults, insertCallDisposition, insertCallActivationObjectives } from "./bigquery";
+import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, type DispositionConfig, type ActivationObjectivesContext } from "./gemini";
+import { computeActivationObjectiveResults } from "./activationObjectives";
 import { storage } from "./storage";
+import type { ActivationObjective } from "@shared/schema";
 import { createHash, randomUUID } from "crypto";
+
+function ensureInteractionContextKeys(
+  contextValues: Record<string, string>,
+  contextSource: Record<string, any>,
+  objectives: ActivationObjective[],
+): void {
+  for (const obj of objectives) {
+    const key = obj.interactionContextKey || "interaction_key";
+    if (contextValues[key] === undefined && contextSource[key] !== undefined && contextSource[key] !== null) {
+      contextValues[key] = String(contextSource[key]);
+    }
+  }
+}
 
 async function getPromptWithVersion(clientPathwayId: number) {
   const activeObs = await storage.getActiveObservations(clientPathwayId);
@@ -76,6 +91,9 @@ async function processBatch() {
   const batchDispCats = await storage.getDispositionCategories(cpId);
   const batchDispDets = await storage.getDispositionDetails(cpId);
   const batchDispConfig: DispositionConfig = { categories: batchDispCats, details: batchDispDets };
+  const batchActiveObjectives = await storage.getActiveActivationObjectives(cpId);
+  const batchActiveInteractions = batchActiveObjectives.length > 0 ? await storage.getActiveActivationInteractions(cpId) : [];
+  console.log(`Activation objectives loaded — ${batchActiveObjectives.length} active, ${batchActiveInteractions.length} interactions for CP ${cpId}`);
 
   console.log(`Claiming ${pendingItems.length} items in bulk...`);
   const allIds = pendingItems.map(item => item.bland_call_id);
@@ -128,6 +146,14 @@ async function processBatch() {
         try { batchContext = JSON.parse(item.context_values); } catch {}
       }
 
+      const blandTs = (item as any).bland_created_at?.value || (item as any).bland_created_at || null;
+      const callDate = blandTs ? new Date(blandTs).toISOString() : null;
+      const activationCallDate = callDate || new Date().toISOString();
+      ensureInteractionContextKeys(batchContext, batchContext, batchActiveObjectives);
+      const activationContext: ActivationObjectivesContext | undefined = batchActiveObjectives.length > 0
+        ? { objectives: batchActiveObjectives, activeInteractions: batchActiveInteractions, observations: activeObs, callDate: activationCallDate, contextValues: batchContext }
+        : undefined;
+
       const { analysis, tokenUsage } = await analyzeTranscript(
         sourceId,
         item.transcript.trim(),
@@ -140,12 +166,11 @@ async function processBatch() {
         barriersGuidance || undefined,
         batchCallQAPrompts,
         batchDispConfig,
+        activationContext,
       );
 
       const processingTimeMs = Date.now() - startTime;
       const processedAt = new Date().toISOString();
-      const blandTs = (item as any).bland_created_at?.value || (item as any).bland_created_at || null;
-      const callDate = blandTs ? new Date(blandTs).toISOString() : null;
 
       const processingId = randomUUID();
       await insertCallInfo({
@@ -180,6 +205,20 @@ async function processBatch() {
       if (analysis.disposition) {
         await insertCallDisposition(sourceId, analysis.disposition);
       }
+
+      const objectiveResults = batchActiveObjectives.length > 0
+        ? computeActivationObjectiveResults({
+            callId: sourceId,
+            callDate: activationCallDate,
+            contextValues: batchContext,
+            objectives: batchActiveObjectives,
+            activeInteractions: batchActiveInteractions,
+            observations: activeObs,
+            extractions: analysis.activation_objectives || [],
+            processedAt,
+          })
+        : [];
+      await insertCallActivationObjectives(sourceId, objectiveResults);
 
       enqueueBqUpdate(async () => {
         await updateBatchItemStatus(item.bland_call_id, "completed", sourceId);
