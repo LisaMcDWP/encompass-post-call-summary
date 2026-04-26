@@ -1102,9 +1102,15 @@ When proposing a new objective OR an enhancement to the current draft, ALWAYS fo
 **Observation Name:** Human-readable observation
 **Stages:** stage_one | Display One; stage_two | Display Two; stage_three | Display Three
 **Achieved Stage:** stage_three
-**Extracted Values:** Value A (GREEN), Value B (YELLOW), Value C (RED)
+**Extracted Values:** Value A (GREEN) | optional per-value hint; Value B (YELLOW); Value C (RED) | another hint
 **Stage Mappings:** Value A -> stage_three; Value B -> stage_two; Value C -> stage_one
 **Prompt Guidance:** Specific guidance for the AI extracting the observation...
+
+Notes on **Extracted Values** format:
+- Separate values with semicolons ";" (NOT commas — labels and hints may contain commas, quotes, or parentheses)
+- Each value is "Label (COLOR)" optionally followed by " | hint text" describing exactly when to choose that value
+- When the user describes WHEN to use a value (e.g. "use Unknown when the patient is vague"), encode that as the per-value hint, not just as global Prompt Guidance
+- ALWAYS include hints when the user has provided per-value descriptions
 
 Be concise, practical, and grounded in the user's existing setup. Keep responses short and actionable.`;
 

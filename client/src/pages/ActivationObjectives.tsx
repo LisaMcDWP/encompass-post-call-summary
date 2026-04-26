@@ -545,6 +545,36 @@ export default function ActivationObjectives() {
     }
   }
 
+  // Shared helper: parse "Extracted Values" line.
+  // New format (preferred): semicolon-separated, optional " | hint" suffix per value.
+  //   "Unknown (GRAY) | when patient is vague; Patient deferred (GRAY) | when patient redirects"
+  // Legacy format (fallback): comma-separated, no hints.
+  //   "Value A (GREEN), Value B (YELLOW)"
+  function parseExtractedValuesLine(valuesRaw: string): EnumValue[] {
+    if (!valuesRaw) return [];
+    const validColors: EnumColor[] = ["GREEN", "YELLOW", "RED", "BLUE", "GRAY"];
+    const useSemicolon = valuesRaw.includes(";");
+    const parts = useSemicolon ? valuesRaw.split(";") : valuesRaw.split(",");
+    const out: EnumValue[] = [];
+    for (const part of parts) {
+      const raw = part.trim();
+      if (!raw) continue;
+      // Split off optional hint: " | hint text"
+      const pipeIdx = raw.indexOf("|");
+      const head = pipeIdx >= 0 ? raw.slice(0, pipeIdx).trim() : raw;
+      const hint = pipeIdx >= 0 ? raw.slice(pipeIdx + 1).trim() : "";
+      const m = head.match(/^(.+?)\s*\(([A-Z]+)\)\s*$/);
+      if (!m) {
+        if (head) out.push({ label: head, color: "GRAY", promptHint: hint });
+        continue;
+      }
+      const color = (validColors.includes(m[2] as EnumColor) ? m[2] : "GRAY") as EnumColor;
+      const label = m[1].trim();
+      if (label) out.push({ label, color, promptHint: hint });
+    }
+    return out;
+  }
+
   function parseObjectiveProposal(text: string): Omit<ActivationObjective, "id"> | null {
     const get = (label: string) => {
       const re = new RegExp(`\\*\\*${label}:\\*\\*\\s*(.+?)(?=\\n\\*\\*|$)`, "is");
@@ -590,16 +620,7 @@ export default function ActivationObjectives() {
       || "";
 
     const valuesRaw = get("Extracted Values");
-    const validColors: EnumColor[] = ["GREEN", "YELLOW", "RED", "BLUE", "GRAY"];
-    let extractedEnumValues: EnumValue[] = [];
-    if (valuesRaw) {
-      extractedEnumValues = valuesRaw.split(",").map(part => {
-        const m = part.trim().match(/^(.+?)\s*\(([A-Z]+)\)$/);
-        if (!m) return { label: part.trim(), color: "GRAY" as EnumColor, promptHint: "" };
-        const color = (validColors.includes(m[2] as EnumColor) ? m[2] : "GRAY") as EnumColor;
-        return { label: m[1].trim(), color, promptHint: "" };
-      }).filter(v => v.label);
-    }
+    let extractedEnumValues: EnumValue[] = parseExtractedValuesLine(valuesRaw);
 
     const mappingsRaw = get("Stage Mappings");
     let stageMappings: StageMapping[] = [];
@@ -734,15 +755,8 @@ export default function ActivationObjectives() {
     }
 
     const valuesRaw = get("Extracted Values");
-    const validColors: EnumColor[] = ["GREEN", "YELLOW", "RED", "BLUE", "GRAY"];
-    let extractedValues: EnumValue[] | null = null;
     if (valuesRaw) {
-      extractedValues = valuesRaw.split(",").map(part => {
-        const m = part.trim().match(/^(.+?)\s*\(([A-Z]+)\)$/);
-        if (!m) return { label: part.trim(), color: "GRAY" as EnumColor, promptHint: "" };
-        const color = (validColors.includes(m[2] as EnumColor) ? m[2] : "GRAY") as EnumColor;
-        return { label: m[1].trim(), color, promptHint: "" };
-      }).filter(v => v.label);
+      const extractedValues = parseExtractedValuesLine(valuesRaw);
       if (extractedValues.length > 0) out.extractedEnumValues = extractedValues;
     }
 
