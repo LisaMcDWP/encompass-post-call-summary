@@ -83,12 +83,35 @@ interface CallQAResultItem {
   evidence: string | null;
 }
 
+interface CallActivationObjective {
+  objective_id: number;
+  objective_name: string;
+  interaction_id: number | null;
+  interaction_key: string | null;
+  interaction_name: string | null;
+  call_date: string | null;
+  anchor_event_date: string | null;
+  target_date: string | null;
+  days_remaining: number | null;
+  band_label: string | null;
+  extracted_value: string | null;
+  current_stage_id: string | null;
+  current_stage_name: string | null;
+  on_track: boolean | null;
+  on_track_status: string | null;
+  is_eligible: boolean;
+  exclusion_reason: string | null;
+  rationale: string | null;
+  processed_at: any;
+}
+
 interface CallDetail {
   callInfo: CallInfo;
   observations: CallObservation[];
   qaPairs: QAPair[];
   barriers: CallBarrier[];
   callQA: CallQAResultItem[];
+  activationObjectives?: CallActivationObjective[];
   transcript: string | null;
   totalRuns: number;
   currentRun: number;
@@ -393,6 +416,7 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
   const qaPairs = data.qaPairs || [];
   const barriers = data.barriers || [];
   const callQA = data.callQA || [];
+  const activationObjectives: CallActivationObjective[] = data.activationObjectives || [];
   const disposition = data.disposition || null;
   const transcript = data.transcript || null;
   const totalRuns = data.totalRuns || 1;
@@ -960,6 +984,107 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
                 </div>
                 {disposition.detail && <p className="text-sm text-gray-600 mt-2">{disposition.detail}</p>}
                 {disposition.evidence && <p className="text-xs text-gray-400 mt-1 italic">"{disposition.evidence}"</p>}
+              </CardContent>
+            </Card>
+          )}
+
+          {activationObjectives.length > 0 && (
+            <Card className="border-border/60 bg-card shadow-sm" data-testid="detail-activation-objectives">
+              <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
+                <CardTitle className="text-base flex items-center gap-2 text-secondary">
+                  <CheckCircle2 className="h-4 w-4 text-primary" />
+                  Activation Objectives
+                  <Badge variant="outline" className="text-xs ml-2">{activationObjectives.length} {activationObjectives.length === 1 ? "objective" : "objectives"}</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4 space-y-3">
+                {activationObjectives.map((ao) => {
+                  const eligibilityVariant = ao.is_eligible ? "default" : "secondary";
+                  const onTrackBg = ao.on_track === true ? "#dcfce7" :
+                                     ao.on_track === false ? "#fee2e2" : "#f1f5f9";
+                  const onTrackFg = ao.on_track === true ? "#166534" :
+                                     ao.on_track === false ? "#991b1b" : "#475569";
+                  const onTrackBorder = ao.on_track === true ? "#bbf7d0" :
+                                        ao.on_track === false ? "#fecaca" : "#cbd5e1";
+                  return (
+                    <div
+                      key={ao.objective_id}
+                      className="border border-border/50 rounded-lg p-4 bg-muted/10 space-y-2"
+                      data-testid={`detail-activation-objective-${ao.objective_id}`}
+                    >
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-sm">{ao.objective_name}</div>
+                          {(ao.interaction_name || ao.interaction_key) && (
+                            <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5 flex-wrap">
+                              <span>Interaction:</span>
+                              {ao.interaction_name && <span className="font-medium text-foreground">{ao.interaction_name}</span>}
+                              {ao.interaction_key && (
+                                <code className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded">{ao.interaction_key}</code>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <Badge variant={eligibilityVariant} className="text-[11px]">
+                            {ao.is_eligible ? "Eligible" : "Not eligible"}
+                          </Badge>
+                          {ao.on_track_status && (
+                            <span
+                              className="inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full border"
+                              style={{ backgroundColor: onTrackBg, color: onTrackFg, borderColor: onTrackBorder }}
+                            >
+                              {ao.on_track_status}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {!ao.is_eligible && ao.exclusion_reason && (
+                        <p className="text-xs text-muted-foreground italic">Reason: {ao.exclusion_reason}</p>
+                      )}
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1">
+                        <div>
+                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70">Anchor date</div>
+                          <div className="font-medium">{ao.anchor_event_date || "—"}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70">Target date</div>
+                          <div className="font-medium">{ao.target_date || "—"}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70">Days remaining</div>
+                          <div className="font-medium">{ao.days_remaining ?? "—"}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70">Band</div>
+                          <div className="font-medium">{ao.band_label || "—"}</div>
+                        </div>
+                      </div>
+
+                      {(ao.current_stage_name || ao.extracted_value) && (
+                        <div className="flex items-center gap-2 text-sm pt-1 flex-wrap">
+                          {ao.extracted_value && (
+                            <Badge variant="outline" className="font-mono text-[10px]">{ao.extracted_value}</Badge>
+                          )}
+                          {ao.current_stage_name && (
+                            <>
+                              <span className="text-muted-foreground">→</span>
+                              <Badge className="text-[11px]" style={{ backgroundColor: "#0098db", color: "white" }}>
+                                {ao.current_stage_name}
+                              </Badge>
+                            </>
+                          )}
+                        </div>
+                      )}
+
+                      {ao.rationale && (
+                        <p className="text-xs text-muted-foreground italic leading-relaxed">{ao.rationale}</p>
+                      )}
+                    </div>
+                  );
+                })}
               </CardContent>
             </Card>
           )}
