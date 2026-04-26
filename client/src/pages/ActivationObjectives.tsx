@@ -780,13 +780,22 @@ function ObjectiveEditor(p: EditorProps) {
         </CardContent>
       </Card>
 
+      {/* Observation card — objective-level extracted value set (mapped to stages below) */}
+      <ObservationEditor
+        observationName={p.form.observationName}
+        extractedEnumValues={p.form.extractedEnumValues}
+        onNameChange={(v) => p.updateForm({ observationName: v })}
+        addExtracted={p.addExtractedValue}
+        removeExtracted={p.removeExtractedValue}
+      />
+
       {/* Stages card */}
       <Card>
         <CardContent className="p-5 space-y-3">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-semibold text-base">Progress stages — in order</h3>
-              <p className="text-xs text-muted-foreground">Stages represent advancement toward the objective. Pick which stage means "objective achieved".</p>
+              <p className="text-xs text-muted-foreground">Stages represent advancement toward the objective. Pick which stage means "objective achieved", and assign observation values to the stages they signal.</p>
             </div>
             <Button size="sm" variant="outline" onClick={p.addStage} data-testid="button-add-stage">
               <Plus className="h-3.5 w-3.5 mr-1" /> Add stage
@@ -794,30 +803,66 @@ function ObjectiveEditor(p: EditorProps) {
           </div>
 
           <div className="space-y-2">
-            {p.form.stages.map((s, i) => (
-              <div key={s.id} className="flex items-center gap-2 p-2 rounded-md border bg-card" data-testid={`row-stage-${i}`}>
-                <div className="flex flex-col">
-                  <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => p.moveStage(i, -1)} disabled={i === 0}>
-                    <ChevronUp className="h-3 w-3" />
-                  </Button>
-                  <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => p.moveStage(i, 1)} disabled={i === p.form.stages.length - 1}>
-                    <ChevronDown className="h-3 w-3" />
-                  </Button>
+            {p.form.stages.map((s, i) => {
+              return (
+                <div key={s.id} className="flex flex-col gap-2 p-2 rounded-md border bg-card" data-testid={`row-stage-${i}`}>
+                  <div className="flex items-center gap-2">
+                    <div className="flex flex-col">
+                      <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => p.moveStage(i, -1)} disabled={i === 0}>
+                        <ChevronUp className="h-3 w-3" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => p.moveStage(i, 1)} disabled={i === p.form.stages.length - 1}>
+                        <ChevronDown className="h-3 w-3" />
+                      </Button>
+                    </div>
+                    <div className="w-7 h-7 rounded-full border-2 border-muted-foreground/30 flex items-center justify-center text-xs font-semibold">{i + 1}</div>
+                    <div className="flex-1 grid grid-cols-3 gap-2">
+                      <Input value={s.name} onChange={e => p.updateStage(i, { name: e.target.value })}
+                        placeholder="snake_case_name" className="h-8 text-sm" data-testid={`input-stage-name-${i}`} />
+                      <Input value={s.displayName} onChange={e => p.updateStage(i, { displayName: e.target.value })}
+                        placeholder="Display name" className="h-8 text-sm" data-testid={`input-stage-display-${i}`} />
+                      <Input value={s.description} onChange={e => p.updateStage(i, { description: e.target.value })}
+                        placeholder="Sublabel (optional)" className="h-8 text-sm" data-testid={`input-stage-desc-${i}`} />
+                    </div>
+                    <Button size="icon" variant="ghost" onClick={() => p.removeStage(i)} data-testid={`button-remove-stage-${i}`}>
+                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                    </Button>
+                  </div>
+                  {p.form.extractedEnumValues.length > 0 && (
+                    <div className="ml-12 flex items-center gap-2 flex-wrap">
+                      <Label className="text-[10px] uppercase tracking-wider text-muted-foreground shrink-0">Observation values</Label>
+                      {p.form.extractedEnumValues.map(v => {
+                        const mapping = p.form.stageMappings.find(m => m.extractedValue === v);
+                        const onThisStage = mapping?.stageId === s.id;
+                        const onOtherStage = !!mapping?.stageId && mapping.stageId !== s.id;
+                        const otherStageName = onOtherStage
+                          ? p.form.stages.find(st => st.id === mapping?.stageId)?.displayName
+                          : null;
+                        return (
+                          <button
+                            key={v}
+                            type="button"
+                            onClick={() => p.setMapping(v, onThisStage ? "" : s.id)}
+                            title={onOtherStage ? `Currently mapped to "${otherStageName}". Click to move here.` : undefined}
+                            className={
+                              "text-[11px] font-mono px-2 py-0.5 rounded-md border transition-colors " +
+                              (onThisStage
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : onOtherStage
+                                  ? "bg-background text-muted-foreground/60 border-dashed border-border hover:bg-muted hover:text-foreground"
+                                  : "bg-background text-muted-foreground border-border hover:bg-muted hover:text-foreground")
+                            }
+                            data-testid={`chip-stage-value-${i}-${v}`}
+                          >
+                            {v}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-                <div className="w-7 h-7 rounded-full border-2 border-muted-foreground/30 flex items-center justify-center text-xs font-semibold">{i + 1}</div>
-                <div className="flex-1 grid grid-cols-3 gap-2">
-                  <Input value={s.name} onChange={e => p.updateStage(i, { name: e.target.value })}
-                    placeholder="snake_case_name" className="h-8 text-sm" data-testid={`input-stage-name-${i}`} />
-                  <Input value={s.displayName} onChange={e => p.updateStage(i, { displayName: e.target.value })}
-                    placeholder="Display name" className="h-8 text-sm" data-testid={`input-stage-display-${i}`} />
-                  <Input value={s.description} onChange={e => p.updateStage(i, { description: e.target.value })}
-                    placeholder="Sublabel (optional)" className="h-8 text-sm" data-testid={`input-stage-desc-${i}`} />
-                </div>
-                <Button size="icon" variant="ghost" onClick={() => p.removeStage(i)} data-testid={`button-remove-stage-${i}`}>
-                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                </Button>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="pt-2 border-t flex items-center gap-2">
@@ -984,18 +1029,6 @@ function ObjectiveEditor(p: EditorProps) {
         </CardContent>
       </Card>
 
-      {/* Observation card — objective-level extracted value set + stage mappings */}
-      <ObservationEditor
-        observationName={p.form.observationName}
-        extractedEnumValues={p.form.extractedEnumValues}
-        stageMappings={p.form.stageMappings}
-        stages={p.form.stages}
-        onNameChange={(v) => p.updateForm({ observationName: v })}
-        addExtracted={p.addExtractedValue}
-        removeExtracted={p.removeExtractedValue}
-        setMapping={p.setMapping}
-      />
-
       {/* Optional general prompt guidance */}
       <Card>
         <CardContent className="p-5 space-y-2">
@@ -1147,17 +1180,14 @@ function InteractionConfigEditor({
 // ============================================================
 
 function ObservationEditor({
-  observationName, extractedEnumValues, stageMappings, stages,
-  onNameChange, addExtracted, removeExtracted, setMapping,
+  observationName, extractedEnumValues,
+  onNameChange, addExtracted, removeExtracted,
 }: {
   observationName: string;
   extractedEnumValues: string[];
-  stageMappings: StageMapping[];
-  stages: Stage[];
   onNameChange: (v: string) => void;
   addExtracted: (v: string) => void;
   removeExtracted: (v: string) => void;
-  setMapping: (extracted: string, stageId: string) => void;
 }) {
   const [newValue, setNewValue] = useState("");
   return (
@@ -1169,7 +1199,7 @@ function ObservationEditor({
             Observation
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            One observation per objective. Define the value set the model is allowed to extract from any configured interaction, and map each value to a progress stage.
+            One observation per objective. Define the value set the model is allowed to extract from any configured interaction. Then assign each value to a progress stage in the Stages section below.
           </p>
         </div>
 
@@ -1183,8 +1213,8 @@ function ObservationEditor({
         </div>
 
         <div>
-          <Label className="text-xs uppercase tracking-wider text-muted-foreground">Allowed extracted values → progress stage</Label>
-          <p className="text-[11px] text-muted-foreground mb-2">These values are shared across every interaction configured above. The model must pick one (or null if not discussed).</p>
+          <Label className="text-xs uppercase tracking-wider text-muted-foreground">Allowed extracted values</Label>
+          <p className="text-[11px] text-muted-foreground mb-2">Shared across every configured interaction. The model must pick one (or null if not discussed).</p>
           <div className="flex gap-2 mb-2">
             <Input value={newValue} onChange={e => setNewValue(e.target.value)}
               placeholder="e.g. scheduled, attended, plans_to_schedule"
@@ -1198,27 +1228,15 @@ function ObservationEditor({
           {extractedEnumValues.length === 0 ? (
             <div className="text-xs text-muted-foreground italic">No extracted values yet.</div>
           ) : (
-            <div className="space-y-1.5">
-              {extractedEnumValues.map(v => {
-                const mapping = stageMappings.find(m => m.extractedValue === v);
-                return (
-                  <div key={v} className="flex items-center gap-2 text-sm" data-testid={`row-observation-mapping-${v}`}>
-                    <Badge variant="outline" className="font-mono text-xs">{v}</Badge>
-                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-                    <Select value={mapping?.stageId || ""} onValueChange={(sid) => setMapping(v, sid)}>
-                      <SelectTrigger className="h-7 text-xs w-48" data-testid={`select-observation-mapping-${v}`}>
-                        <SelectValue placeholder="Pick a stage..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {stages.map(s => <SelectItem key={s.id} value={s.id}>{s.displayName}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => removeExtracted(v)} data-testid={`button-observation-removevalue-${v}`}>
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </div>
-                );
-              })}
+            <div className="flex flex-wrap gap-1.5">
+              {extractedEnumValues.map(v => (
+                <div key={v} className="flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-md border bg-muted/30 text-sm" data-testid={`row-observation-value-${v}`}>
+                  <span className="font-mono text-xs">{v}</span>
+                  <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => removeExtracted(v)} data-testid={`button-observation-removevalue-${v}`}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ))}
             </div>
           )}
         </div>
