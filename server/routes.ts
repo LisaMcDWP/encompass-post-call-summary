@@ -4,7 +4,7 @@ import { analyzeTranscript, analyzeTranscriptFast, analyzeTranscriptBackground, 
 import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBarriers, insertCallQAResults, insertCallDisposition, ensureCallBarriersTable, ensureCallQATable, getCallBarriers, getCallInfoList, getCallDetail, getCallStatsByDay, queryBlandCalls, loadBlandCallsToBatch, fetchAwellContextForCareFlows, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, bulkUpdateBatchItemStatus, bulkUpdateBatchResults, resetFailedBatchItems, deletePendingBatchItems, recreateBatch, getDistinctTags, upsertCallReviews, getCallReviews, upsertCallReviewStatus, upsertCallReviewMeta, getCallReviewStatusesBulk, ensureCallReviewStatusesTable, getCallReviewList } from "./bigquery";
 import { randomUUID, createHash } from "crypto";
 import { storage } from "./storage";
-import { insertObservationSchema, enumValueSchema, insertContextParameterSchema, insertCallQAPromptSchema, insertDispositionCategorySchema, insertDispositionDetailSchema, insertCallReviewItemSchema } from "@shared/schema";
+import { insertObservationSchema, enumValueSchema, insertContextParameterSchema, insertCallQAPromptSchema, insertDispositionCategorySchema, insertDispositionDetailSchema, insertCallReviewItemSchema, insertActivationObjectiveSchema } from "@shared/schema";
 import { z } from "zod";
 
 async function getPromptWithVersion(clientPathwayId: number) {
@@ -822,6 +822,93 @@ export async function registerRoutes(
     const deleted = await storage.deleteObservation(id, cpId);
     if (!deleted) return res.status(404).json({ message: "Observation not found" });
     res.json({ success: true });
+  });
+
+  app.get("/api/activation-objectives", async (req, res) => {
+    const cpId = Number(req.query.clientPathwayId);
+    if (!cpId) return res.status(400).json({ message: "clientPathwayId query param required" });
+    try {
+      const items = await storage.getActivationObjectives(cpId);
+      res.json(items);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/activation-objectives/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+    const cpId = Number(req.query.clientPathwayId) || undefined;
+    try {
+      const item = await storage.getActivationObjective(id, cpId);
+      if (!item) return res.status(404).json({ message: "Activation objective not found" });
+      res.json(item);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/activation-objectives", async (req, res) => {
+    const cpId = Number(req.body.clientPathwayId || req.query.clientPathwayId);
+    if (!cpId) return res.status(400).json({ message: "clientPathwayId is required" });
+    const parsed = insertActivationObjectiveSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.errors.map(e => e.message).join(", "), errors: parsed.error.errors });
+    }
+    try {
+      const item = await storage.createActivationObjective(cpId, parsed.data);
+      res.status(201).json(item);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/activation-objectives/reorder", async (req, res) => {
+    const { orderedIds } = req.body;
+    if (!Array.isArray(orderedIds) || !orderedIds.every((id: any) => typeof id === "number")) {
+      return res.status(400).json({ message: "orderedIds must be an array of numbers" });
+    }
+    const cpId = Number(req.body.clientPathwayId || req.query.clientPathwayId) || undefined;
+    try {
+      await storage.reorderActivationObjectives(orderedIds, cpId);
+      const items = cpId ? await storage.getActivationObjectives(cpId) : [];
+      res.json(items);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/activation-objectives/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+
+    const parsed = insertActivationObjectiveSchema.partial().safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.errors.map(e => e.message).join(", "), errors: parsed.error.errors });
+    }
+
+    const cpId = Number(req.body.clientPathwayId || req.query.clientPathwayId) || undefined;
+    try {
+      const item = await storage.updateActivationObjective(id, parsed.data, cpId);
+      if (!item) return res.status(404).json({ message: "Activation objective not found" });
+      res.json(item);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/activation-objectives/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+
+    const cpId = Number(req.query.clientPathwayId) || undefined;
+    try {
+      const deleted = await storage.deleteActivationObjective(id, cpId);
+      if (!deleted) return res.status(404).json({ message: "Activation objective not found" });
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
   });
 
   app.get("/api/disposition-categories", async (req, res) => {

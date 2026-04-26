@@ -21,7 +21,7 @@ A full-stack application that provides a Gemini-powered transcript analysis API.
 
 ### How it works:
 - `client_pathway` table stores multiple entries (id, client, pathway, description, gcp_project_id, secret_key)
-- Config tables (`observations`, `context_parameters`, `settings`, `call_qa_prompts`, `disposition_categories`, `disposition_details`) all have a `client_pathway_id` column
+- Config tables (`observations`, `context_parameters`, `settings`, `call_qa_prompts`, `disposition_categories`, `disposition_details`, `activation_objectives`) all have a `client_pathway_id` column
 - All config API endpoints require `clientPathwayId` as a query param (GET/DELETE) or body param (POST/PUT)
 - Frontend uses React Context (`ClientPathwayContext`) with a sidebar dropdown selector
 - Setup pages automatically load/save config for the selected client/pathway

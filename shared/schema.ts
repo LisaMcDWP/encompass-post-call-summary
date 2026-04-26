@@ -198,3 +198,108 @@ export interface CallReview {
   reviewedBy: string;
   reviewedAt: string;
 }
+
+export const activationObjectiveStageSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  displayName: z.string().min(1),
+  description: z.string().default(""),
+  order: z.number().int(),
+});
+export type ActivationObjectiveStage = z.infer<typeof activationObjectiveStageSchema>;
+
+export const activationObjectiveThresholdSchema = z.object({
+  bandLabel: z.enum(["early", "near_window", "at_window", "post_window"]),
+  bandDisplayName: z.string().default(""),
+  daysRemainingMin: z.number().int().nullable(),
+  daysRemainingMax: z.number().int().nullable(),
+  onTrackStageIds: z.array(z.string()).default([]),
+  satisfiedLabel: z.string().default("On track"),
+  unsatisfiedLabel: z.string().default("At risk"),
+});
+export type ActivationObjectiveThreshold = z.infer<typeof activationObjectiveThresholdSchema>;
+
+export const activationObjectiveTouchpointStageMappingSchema = z.object({
+  extractedValue: z.string().min(1),
+  stageId: z.string().min(1),
+});
+export type ActivationObjectiveTouchpointStageMapping = z.infer<typeof activationObjectiveTouchpointStageMappingSchema>;
+
+export const activationObjectiveInclusionRulesSchema = z.object({
+  requirePcpAssigned: z.boolean().default(false),
+  requireCompletedWithPatientOrCaregiver: z.boolean().default(true),
+  customRules: z.array(z.string()).default([]),
+});
+export type ActivationObjectiveInclusionRules = z.infer<typeof activationObjectiveInclusionRulesSchema>;
+
+export const activationObjectiveTouchpointSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  expectedDayOffset: z.number().int(),
+  canResolveObjective: z.boolean().default(true),
+  inclusionRules: activationObjectiveInclusionRulesSchema.default({
+    requirePcpAssigned: false,
+    requireCompletedWithPatientOrCaregiver: true,
+    customRules: [],
+  }),
+  extractedEnumValues: z.array(z.string()).default([]),
+  stageMappings: z.array(activationObjectiveTouchpointStageMappingSchema).default([]),
+  promptGuidance: z.string().default(""),
+});
+export type ActivationObjectiveTouchpoint = z.infer<typeof activationObjectiveTouchpointSchema>;
+
+export const insertActivationObjectiveSchema = z.object({
+  name: z.string().min(1),
+  displayName: z.string().min(1),
+  description: z.string().default(""),
+  anchorEventType: z.enum(["discharge", "enrollment", "procedure", "custom"]).default("discharge"),
+  anchorContextKey: z.string().min(1),
+  windowDays: z.number().int().min(1),
+  stages: z.array(activationObjectiveStageSchema).default([]),
+  achievedStageId: z.string().default(""),
+  thresholds: z.array(activationObjectiveThresholdSchema).default([]),
+  touchpoints: z.array(activationObjectiveTouchpointSchema).default([]),
+  isActive: z.boolean().default(true),
+  displayOrder: z.number().int().default(0),
+  promptGuidance: z.string().default(""),
+});
+export type InsertActivationObjective = z.infer<typeof insertActivationObjectiveSchema>;
+
+export interface ActivationObjective {
+  id: number;
+  name: string;
+  displayName: string;
+  description: string;
+  anchorEventType: string;
+  anchorContextKey: string;
+  windowDays: number;
+  stages: ActivationObjectiveStage[];
+  achievedStageId: string;
+  thresholds: ActivationObjectiveThreshold[];
+  touchpoints: ActivationObjectiveTouchpoint[];
+  isActive: boolean;
+  displayOrder: number;
+  promptGuidance: string;
+}
+
+export interface CallActivationObjectiveResult {
+  callId: string;
+  objectiveId: number;
+  objectiveName: string;
+  touchpointId: string;
+  touchpointName: string;
+  callDate: string;
+  anchorEventDate: string | null;
+  targetDate: string | null;
+  daysRemaining: number | null;
+  bandLabel: string | null;
+  extractedValue: string | null;
+  currentStageId: string | null;
+  currentStageName: string | null;
+  onTrack: boolean | null;
+  onTrackStatus: string;
+  isEligible: boolean;
+  exclusionReason: string;
+  rationale: string;
+  processedAt: string;
+}

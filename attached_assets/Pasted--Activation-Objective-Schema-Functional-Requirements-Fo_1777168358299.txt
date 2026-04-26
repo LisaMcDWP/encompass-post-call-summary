@@ -1,0 +1,59 @@
+# Activation Objective Schema — Functional Requirements
+**For:** Replit build · CareOps Analytics Platform
+**Program context:** TOC post-discharge · extensible to all activation programs
+
+---
+
+## Overview
+
+Build a configuration and reporting interface for **activation objectives** — program-level goals tied to patient outcomes. Each objective has a target date derived from a patient anchor event, a set of ordered progress stages, and window-aware on-track rules that evaluate progress relative to how much time remains before the target date.
+
+---
+
+## Core Concepts
+
+**Activation objective** — a named clinical or operational goal with a defined completion window. Example: "PCP follow-up attended within 7 days of discharge."
+
+**Target date** — calculated per patient as: `anchor event date + window (days)`. The anchor event is configurable (discharge, enrollment, procedure). Target date drives all downstream metrics.
+
+**Progress stages** — an ordered set of stages representing advancement toward the objective. Example: Not Scheduled → Scheduled → Attended. Stages are defined at the objective level and shared across all touchpoints.
+
+**Touchpoint** — a call or interaction at a specific day post-anchor where a patient's current stage is extracted from a transcript. Multiple touchpoints can be configured per objective (e.g. Day 4 and Day 10).
+
+**On-track status** — a window-aware determination of whether a patient's current stage is sufficient given days remaining to their target date. On-track thresholds are configured by days-remaining bands (e.g. 3+ days remaining = Scheduled is on track; 1–2 days = only Attended is on track).
+
+---
+
+## Required Functionality
+
+**Objective configuration**
+- Create and name an activation objective
+- Set anchor event type (discharge / enrollment / procedure)
+- Set window in days — system derives target date per patient
+- Define ordered progress stages with labels
+- Set which stage constitutes objective achieved
+
+**On-track threshold rules**
+- Configure which stages count as on-track by days-remaining band
+- Bands: early (3+ days), near window (1–2 days), at window (0 days), post window (past target date)
+- Post-window: only objective-achieved stage resolves as met; all others = not achieved
+
+**Touchpoint extraction mapping**
+- Per touchpoint, map each extracted enum value to a progress stage
+- Flag whether a touchpoint can resolve the objective (yes only if past target date and stage = achieved)
+- Configure inclusion/exclusion rules per touchpoint (e.g. exclude if no PCP assigned, exclude if call not completed with patient or caregiver)
+
+**Metrics output — per touchpoint**
+- On-track % = (patients at on-track stage or above) ÷ eligible contacted
+- Stage distribution across all progress stages
+- Excluded patient count and reason
+- Display: target date formula, days remaining at call date, threshold applied, leading indicator disclaimer if pre-window
+
+---
+
+## Constraints
+
+- On-track status is always relative to the individual patient's target date — not a fixed program calendar day
+- Objective achieved is only calculable after target date has passed and requires a valid visit/event date to validate the window
+- On-track % reported pre-window is a leading indicator only and must be labeled as such in any output
+- Extraction mapping and inclusion/exclusion rules are configured independently per touchpoint
