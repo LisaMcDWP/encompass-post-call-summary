@@ -1,5 +1,6 @@
 import { BigQuery } from "@google-cloud/bigquery";
 import type { ObservationResult, QAPair, Barrier, CallQAResult } from "./gemini";
+import type { CallActivationObjectiveResult } from "@shared/schema";
 
 const DATASET_ID = "call_information";
 const CALL_INFO_TABLE_ID = "call_info";
@@ -12,6 +13,7 @@ const KNOWN_CONTEXT_TABLE_ID = "known_context_details";
 const CALL_DISPOSITIONS_TABLE_ID = "call_dispositions";
 const CALL_REVIEWS_TABLE_ID = "call_reviews";
 const CALL_REVIEW_STATUSES_TABLE_ID = "call_review_statuses";
+const CALL_ACTIVATION_OBJECTIVES_TABLE_ID = "call_activation_objectives";
 
 export interface CallInfoRow {
   call_id: string;
@@ -688,6 +690,113 @@ export async function insertCallDisposition(callId: string, disposition: CallDis
     console.log(`BigQuery call_disposition inserted for call ${callId}: ${disposition.disposition_category} / ${disposition.disposition_detail}`);
   } catch (error: any) {
     console.error("Failed to insert call disposition:", error.message);
+  }
+}
+
+export async function ensureCallActivationObjectivesTable(targetProjectId?: string): Promise<void> {
+  try {
+    const dataset = await ensureDataset(targetProjectId);
+    const table = dataset.table(CALL_ACTIVATION_OBJECTIVES_TABLE_ID);
+    const [exists] = await table.exists();
+    if (!exists) {
+      await dataset.createTable(CALL_ACTIVATION_OBJECTIVES_TABLE_ID, {
+        schema: {
+          fields: [
+            { name: "call_id", type: "STRING", mode: "REQUIRED" },
+            { name: "objective_id", type: "INTEGER", mode: "REQUIRED" },
+            { name: "objective_name", type: "STRING", mode: "REQUIRED" },
+            { name: "touchpoint_id", type: "STRING", mode: "NULLABLE" },
+            { name: "touchpoint_name", type: "STRING", mode: "NULLABLE" },
+            { name: "call_date", type: "STRING", mode: "NULLABLE" },
+            { name: "anchor_event_date", type: "STRING", mode: "NULLABLE" },
+            { name: "target_date", type: "STRING", mode: "NULLABLE" },
+            { name: "days_remaining", type: "INTEGER", mode: "NULLABLE" },
+            { name: "band_label", type: "STRING", mode: "NULLABLE" },
+            { name: "extracted_value", type: "STRING", mode: "NULLABLE" },
+            { name: "current_stage_id", type: "STRING", mode: "NULLABLE" },
+            { name: "current_stage_name", type: "STRING", mode: "NULLABLE" },
+            { name: "on_track", type: "BOOL", mode: "NULLABLE" },
+            { name: "on_track_status", type: "STRING", mode: "NULLABLE" },
+            { name: "is_eligible", type: "BOOL", mode: "REQUIRED" },
+            { name: "exclusion_reason", type: "STRING", mode: "NULLABLE" },
+            { name: "rationale", type: "STRING", mode: "NULLABLE" },
+            { name: "processed_at", type: "TIMESTAMP", mode: "REQUIRED" },
+          ],
+        },
+      });
+      console.log(`Created call_activation_objectives table in project ${resolveProjectId(targetProjectId)}`);
+    }
+  } catch (error: any) {
+    console.error("Failed to ensure call_activation_objectives table:", error.message);
+  }
+}
+
+export async function insertCallActivationObjectives(callId: string, results: CallActivationObjectiveResult[], targetProjectId?: string): Promise<void> {
+  try {
+    const key = tableInitKey(CALL_ACTIVATION_OBJECTIVES_TABLE_ID, targetProjectId);
+    if (!initializedTables.has(key)) {
+      await ensureCallActivationObjectivesTable(targetProjectId);
+      initializedTables.add(key);
+    }
+
+    if (!results || results.length === 0) {
+      await deleteExistingCallData(callId, CALL_ACTIVATION_OBJECTIVES_TABLE_ID, targetProjectId);
+      return;
+    }
+
+    await deleteExistingCallData(callId, CALL_ACTIVATION_OBJECTIVES_TABLE_ID, targetProjectId);
+
+    const client = getOutputBigQueryClient(targetProjectId);
+    const rows = results.map(r => ({
+      call_id: callId,
+      objective_id: r.objectiveId,
+      objective_name: r.objectiveName,
+      touchpoint_id: r.touchpointId || null,
+      touchpoint_name: r.touchpointName || null,
+      call_date: r.callDate || null,
+      anchor_event_date: r.anchorEventDate || null,
+      target_date: r.targetDate || null,
+      days_remaining: r.daysRemaining,
+      band_label: r.bandLabel || null,
+      extracted_value: r.extractedValue || null,
+      current_stage_id: r.currentStageId || null,
+      current_stage_name: r.currentStageName || null,
+      on_track: r.onTrack,
+      on_track_status: r.onTrackStatus || null,
+      is_eligible: r.isEligible,
+      exclusion_reason: r.exclusionReason || null,
+      rationale: r.rationale || null,
+      processed_at: r.processedAt,
+    }));
+
+    await client
+      .dataset(DATASET_ID)
+      .table(CALL_ACTIVATION_OBJECTIVES_TABLE_ID)
+      .insert(rows);
+
+    console.log(`BigQuery call_activation_objectives inserted: ${rows.length} rows for call ${callId}`);
+  } catch (error: any) {
+    console.error("Failed to insert call_activation_objectives:", error.message);
+    if (error.errors) {
+      console.error("BigQuery errors:", JSON.stringify(error.errors));
+    }
+  }
+}
+
+export async function getCallActivationObjectives(callId: string, targetProjectId?: string): Promise<any[]> {
+  try {
+    const key = tableInitKey(CALL_ACTIVATION_OBJECTIVES_TABLE_ID, targetProjectId);
+    if (!initializedTables.has(key)) {
+      await ensureCallActivationObjectivesTable(targetProjectId);
+      initializedTables.add(key);
+    }
+    const client = getOutputBigQueryClient(targetProjectId);
+    const query = `SELECT * FROM \`${client.projectId}.${DATASET_ID}.${CALL_ACTIVATION_OBJECTIVES_TABLE_ID}\` WHERE call_id = @callId ORDER BY objective_id ASC`;
+    const [rows] = await client.query({ query, params: { callId } });
+    return rows;
+  } catch (error: any) {
+    console.error("Failed to get call activation objectives:", error.message);
+    return [];
   }
 }
 

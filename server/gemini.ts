@@ -1,5 +1,5 @@
 import { VertexAI } from "@google-cloud/vertexai";
-import type { Observation, EnumValue, ContextParameter, CallQAPrompt, DispositionCategory, DispositionDetail } from "@shared/schema";
+import type { Observation, EnumValue, ContextParameter, CallQAPrompt, DispositionCategory, DispositionDetail, ActivationObjective, ActivationObjectiveTouchpoint } from "@shared/schema";
 
 function getCredentials() {
   const raw = process.env.GCP_SERVICE_ACCOUNT_KEY;
@@ -81,6 +81,14 @@ export interface DispositionResult {
   detail?: string;
 }
 
+export interface ActivationObjectiveExtraction {
+  objective_name: string;
+  touchpoint_id: string;
+  extracted_value: string | null;
+  rationale: string;
+  evidence: string | null;
+}
+
 export interface TranscriptAnalysis {
   summary: string;
   transition_status: string;
@@ -90,6 +98,100 @@ export interface TranscriptAnalysis {
   barriers: Barrier[];
   call_qa: CallQAResult[];
   disposition?: DispositionResult;
+  activation_objectives?: ActivationObjectiveExtraction[];
+}
+
+export interface ActivationObjectivesContext {
+  objectives: ActivationObjective[];
+  callDate: string;
+  contextValues?: Record<string, string>;
+}
+
+interface ResolvedObjectiveTask {
+  objective: ActivationObjective;
+  touchpoint: ActivationObjectiveTouchpoint;
+  anchorDate: string;
+  callDayOffset: number;
+}
+
+function diffDaysISO(fromDate: string, toDate: string): number | null {
+  const a = new Date(fromDate);
+  const b = new Date(toDate);
+  if (isNaN(a.getTime()) || isNaN(b.getTime())) return null;
+  const aDay = Date.UTC(a.getUTCFullYear(), a.getUTCMonth(), a.getUTCDate());
+  const bDay = Date.UTC(b.getUTCFullYear(), b.getUTCMonth(), b.getUTCDate());
+  return Math.round((bDay - aDay) / (24 * 60 * 60 * 1000));
+}
+
+export function pickApplicableTouchpoint(
+  obj: ActivationObjective,
+  callDate: string,
+  contextValues: Record<string, string> | undefined,
+): { touchpoint: ActivationObjectiveTouchpoint | null; anchorDate: string | null; callDayOffset: number | null } {
+  const anchorRaw = contextValues?.[obj.anchorContextKey];
+  if (!anchorRaw) return { touchpoint: null, anchorDate: null, callDayOffset: null };
+  const callDay = diffDaysISO(anchorRaw, callDate);
+  if (callDay === null) return { touchpoint: null, anchorDate: anchorRaw, callDayOffset: null };
+  const tps = (obj.touchpoints || []).filter(tp => (tp.extractedEnumValues || []).some(v => v && v.trim()));
+  if (tps.length === 0) return { touchpoint: null, anchorDate: anchorRaw, callDayOffset: callDay };
+  let best: ActivationObjectiveTouchpoint | null = null;
+  let bestDist = Infinity;
+  for (const tp of tps) {
+    const d = Math.abs(tp.expectedDayOffset - callDay);
+    if (d < bestDist) {
+      bestDist = d;
+      best = tp;
+    }
+  }
+  return { touchpoint: best, anchorDate: anchorRaw, callDayOffset: callDay };
+}
+
+export function resolveObjectiveTasks(ctx: ActivationObjectivesContext | undefined): ResolvedObjectiveTask[] {
+  if (!ctx || !ctx.objectives || ctx.objectives.length === 0) return [];
+  const tasks: ResolvedObjectiveTask[] = [];
+  for (const obj of ctx.objectives) {
+    if (!obj.isActive) continue;
+    const { touchpoint, anchorDate, callDayOffset } = pickApplicableTouchpoint(obj, ctx.callDate, ctx.contextValues);
+    if (!touchpoint || !anchorDate || callDayOffset === null) continue;
+    tasks.push({ objective: obj, touchpoint, anchorDate, callDayOffset });
+  }
+  return tasks;
+}
+
+function buildActivationObjectivesPromptBlock(tasks: ResolvedObjectiveTask[]): string {
+  if (tasks.length === 0) return "";
+  const lines = tasks.map(t => {
+    const allowed = (t.touchpoint.extractedEnumValues || [])
+      .filter(v => v && v.trim())
+      .map(v => `"${v}"`)
+      .join(", ");
+    const guidance = (t.touchpoint.promptGuidance || t.objective.promptGuidance || "").trim();
+    const guidanceLine = guidance ? ` | Guidance: ${guidance}` : "";
+    return `  • objective_name="${t.objective.name}" (${t.objective.displayName}) | touchpoint_id="${t.touchpoint.id}" (${t.touchpoint.name}, expected day ${t.touchpoint.expectedDayOffset}) | Patient is on day ${t.callDayOffset} of a ${t.objective.windowDays}-day window from ${t.objective.anchorContextKey}=${t.anchorDate}. | Allowed values: ${allowed}, or null if not discussed.${guidanceLine}`;
+  });
+  return `\n###ACTIVATION OBJECTIVES (${tasks.length} task${tasks.length === 1 ? "" : "s"})
+For each task below, decide the patient's current status for that activation objective based ONLY on what was discussed in this call. Choose the single best match from the allowed values for that task, or null if the topic was not discussed in enough detail to assess. Do NOT invent values that are not in the allowed list.
+${lines.join("\n")}
+`;
+}
+
+function buildActivationObjectivesJsonField(tasks: ResolvedObjectiveTask[]): string {
+  if (tasks.length === 0) return "";
+  return `,
+  "activation_objectives": [ <-- EXACTLY ${tasks.length} object(s), one per task in the ACTIVATION OBJECTIVES section above
+    {
+      "objective_name": "COPY exactly from the task line",
+      "touchpoint_id": "COPY exactly from the task line",
+      "extracted_value": "One of the allowed values for this task, or null if not discussed",
+      "rationale": "Brief 1-2 sentence explanation grounded in the transcript",
+      "evidence": "Direct quote from the transcript supporting the extracted_value, or null if not discussed"
+    }
+  ]`;
+}
+
+function buildActivationObjectivesGuideline(tasks: ResolvedObjectiveTask[]): string {
+  if (tasks.length === 0) return "";
+  return `\n- activation_objectives: Output EXACTLY ${tasks.length} object(s), one per task in the ACTIVATION OBJECTIVES section. Use the exact objective_name and touchpoint_id from the task line. extracted_value MUST be one of the allowed values listed for that task, or null. Never substitute or invent values.`;
 }
 
 const COLOR_STYLES: Record<string, string> = {
@@ -257,14 +359,18 @@ function buildDispositionGuideline(config?: DispositionConfig): string {
   return `\n- disposition: Classify the overall call outcome. Choose exactly ONE category and ONE detail from the CALL DISPOSITION TAXONOMY above. Base your choice on observable evidence in the transcript (e.g. was the conversation completed? did the line disconnect? was a voicemail reached?).`;
 }
 
-export function buildPromptTemplate(activeObservations: Observation[], summaryInstruction?: string, contextParams?: ContextParameter[], observationsGuidance?: string, barriersGuidance?: string, callQAPrompts?: CallQAPrompt[], contextValues?: Record<string, string>, dispositionConfig?: DispositionConfig): string {
+export function buildPromptTemplate(activeObservations: Observation[], summaryInstruction?: string, contextParams?: ContextParameter[], observationsGuidance?: string, barriersGuidance?: string, callQAPrompts?: CallQAPrompt[], contextValues?: Record<string, string>, dispositionConfig?: DispositionConfig, activationContext?: ActivationObjectivesContext): string {
   const instruction = summaryInstruction || DEFAULT_SUMMARY_INSTRUCTION;
   const contextBlock = buildContextBlock(contextParams || []);
+  const activationTasks = resolveObjectiveTasks(activationContext);
+  const activationBlock = buildActivationObjectivesPromptBlock(activationTasks);
+  const activationJsonField = buildActivationObjectivesJsonField(activationTasks);
+  const activationGuideline = buildActivationObjectivesGuideline(activationTasks);
 
   if (activeObservations.length === 0) {
     const resolvedInstruction = instruction.replace("{{SUMMARY_TOPICS}}", "general topics discussed");
     return `You are an expert healthcare call analyst for Guideway Care. Analyze the following patient interaction transcript and produce a structured JSON output.
-${contextBlock}${buildDispositionPromptSection(dispositionConfig)}
+${contextBlock}${buildDispositionPromptSection(dispositionConfig)}${activationBlock}
 Your response MUST be valid JSON with exactly this structure:
 {
   "summary": "${resolvedInstruction}",
@@ -301,7 +407,7 @@ Your response MUST be valid JSON with exactly this structure:
       "detail": "Brief explanation of why this value was chosen based on the transcript",
       "evidence": "Direct quote from the transcript supporting this evaluation, or null if not applicable"
     }
-  ` : ""}]${buildDispositionJsonField(dispositionConfig)}
+  ` : ""}]${buildDispositionJsonField(dispositionConfig)}${activationJsonField}
 }
 
 Guidelines:
@@ -339,7 +445,7 @@ ${contextBlock}
 
 ###OBSERVATION REFERENCE TABLE (${topicCount} topics — output exactly one JSON object per row, no more, no less)
 ${observationsRefTable}
-${buildDispositionPromptSection(dispositionConfig)}
+${buildDispositionPromptSection(dispositionConfig)}${activationBlock}
 Your response MUST be valid JSON with exactly this structure:
 {
   "summary": "${resolvedSummaryInstruction}",
@@ -378,7 +484,7 @@ ${observationsSchema}
       "detail": "Brief explanation of why this value was chosen based on the transcript",
       "evidence": "Direct quote from the transcript supporting this evaluation, or null if not applicable"
     }
-  ` : ""}]${buildDispositionJsonField(dispositionConfig)}
+  ` : ""}]${buildDispositionJsonField(dispositionConfig)}${activationJsonField}
 }
 
 Guidelines:
@@ -394,7 +500,7 @@ Guidelines:
 - call_qa: For each of the following call experience evaluation prompts, assess the overall call and provide a response:
 ${buildCallQABlock(callQAPrompts || [])}
   Return one object per prompt with the name, display_name, value (your assessment), detail (brief explanation), and evidence (supporting quote or null).` : `
-- call_qa: Return an empty array [].`}${buildDispositionGuideline(dispositionConfig)}
+- call_qa: Return an empty array [].`}${buildDispositionGuideline(dispositionConfig)}${activationGuideline}
 Source ID: {{SOURCE_ID}}
 
 SOURCE TEXT:
@@ -511,9 +617,10 @@ export async function analyzeTranscript(
   barriersGuidance?: string,
   callQAPrompts?: CallQAPrompt[],
   dispositionConfig?: DispositionConfig,
+  activationContext?: ActivationObjectivesContext,
 ): Promise<{ analysis: TranscriptAnalysis; promptUsed: string; tokenUsage: { promptTokens: number; completionTokens: number; totalTokens: number; estimatedCost: number } }> {
   const model = buildGeminiModel();
-  const template = customPrompt || buildPromptTemplate(activeObservations, summaryInstruction, contextParams, observationsGuidance, barriersGuidance, callQAPrompts, contextValues, dispositionConfig);
+  const template = customPrompt || buildPromptTemplate(activeObservations, summaryInstruction, contextParams, observationsGuidance, barriersGuidance, callQAPrompts, contextValues, dispositionConfig, activationContext);
   const prompt = resolvePrompt(template, sourceId, sourceText, contextParams, contextValues);
 
   const result = await model.generateContent(prompt);
@@ -529,6 +636,7 @@ export async function analyzeTranscript(
   if (!Array.isArray(parsed.qa_pairs)) parsed.qa_pairs = [];
   if (!Array.isArray(parsed.barriers)) parsed.barriers = [];
   if (!Array.isArray(parsed.call_qa)) parsed.call_qa = [];
+  if (!Array.isArray(parsed.activation_objectives)) parsed.activation_objectives = [];
 
   parsed.observations = deduplicateByName(parsed.observations);
   parsed.call_qa = deduplicateByName(parsed.call_qa);
@@ -540,7 +648,7 @@ export async function analyzeTranscript(
   return { analysis: parsed as TranscriptAnalysis, promptUsed: prompt, tokenUsage };
 }
 
-export function buildFastPromptTemplate(activeObservations: Observation[], summaryInstruction?: string, contextParams?: ContextParameter[], observationsGuidance?: string, barriersGuidance?: string, contextValues?: Record<string, string>, dispositionConfig?: DispositionConfig): string {
+export function buildFastPromptTemplate(activeObservations: Observation[], summaryInstruction?: string, contextParams?: ContextParameter[], observationsGuidance?: string, barriersGuidance?: string, contextValues?: Record<string, string>, dispositionConfig?: DispositionConfig, activationContext?: ActivationObjectivesContext): string {
   const instruction = summaryInstruction || DEFAULT_SUMMARY_INSTRUCTION;
   const contextBlock = buildContextBlock(contextParams || []);
   const topicCount = activeObservations.length;
@@ -550,20 +658,24 @@ export function buildFastPromptTemplate(activeObservations: Observation[], summa
   const observationsSchema = buildObservationsSchema(activeObservations);
   const observationsRefTable = buildObservationsReferenceTable(activeObservations, contextParams, contextValues);
   const resolvedSummaryInstruction = instruction.replace("{{SUMMARY_TOPICS}}", summaryTopics || "general topics discussed");
+  const activationTasks = resolveObjectiveTasks(activationContext);
+  const activationBlock = buildActivationObjectivesPromptBlock(activationTasks);
+  const activationJsonField = buildActivationObjectivesJsonField(activationTasks);
+  const activationGuideline = buildActivationObjectivesGuideline(activationTasks);
 
   if (activeObservations.length === 0) {
     return `You are an expert healthcare call analyst for Guideway Care. Analyze the following patient interaction transcript and produce a structured JSON output.
-${contextBlock}${buildDispositionPromptSection(dispositionConfig)}
+${contextBlock}${buildDispositionPromptSection(dispositionConfig)}${activationBlock}
 Your response MUST be valid JSON with exactly this structure:
 {
   "summary": "${resolvedSummaryInstruction}",
   "observations": [],
   "transition_status": "<p>No observation topics configured.</p>",
-  "follow_up_areas": "<p>No follow-up areas identified.</p>"${buildDispositionJsonField(dispositionConfig)}
+  "follow_up_areas": "<p>No follow-up areas identified.</p>"${buildDispositionJsonField(dispositionConfig)}${activationJsonField}
 }
 
 Guidelines:
-- summary: Brief overall summary based on questions asked and patient's responses.${buildDispositionGuideline(dispositionConfig)}
+- summary: Brief overall summary based on questions asked and patient's responses.${buildDispositionGuideline(dispositionConfig)}${activationGuideline}
 Source ID: {{SOURCE_ID}}
 
 SOURCE TEXT:
@@ -586,7 +698,7 @@ ${observationsRefTable}
 
 ###CRITICAL RULE — NO DUPLICATES
 The observations array MUST contain EXACTLY ${topicCount} objects. Iterate through the reference table rows 1 to ${topicCount} in order. Output ONE object per row. If you have already output an observation name, do NOT output it again. Each name appears exactly once.
-${buildDispositionPromptSection(dispositionConfig)}
+${buildDispositionPromptSection(dispositionConfig)}${activationBlock}
 Your response MUST be valid JSON with exactly this structure:
 {
   "summary": "${resolvedSummaryInstruction}",
@@ -594,7 +706,7 @@ Your response MUST be valid JSON with exactly this structure:
 ${observationsSchema}
   ],
   "transition_status": "A single HTML string covering ALL ${topicCount} observation topics — each topic appears ONCE, no duplicates. Use inline styles for color-coded status badges. For enum topics: <b>Topic:</b> <span style='INLINE_STYLE'>ENUM_VALUE</span><br>Detail.<br><br>. Use these styles: ${colorStyles} — Mappings: ${statusMappings}. Order discussed topics first, 'Not Discussed' at the bottom.",
-  "follow_up_areas": "A single HTML string listing follow-up areas. Use <ul>/<li> with <b> for topic names. Only include items with issues. If none, use '<p>No follow-up areas identified.</p>'."${buildDispositionJsonField(dispositionConfig)}
+  "follow_up_areas": "A single HTML string listing follow-up areas. Use <ul>/<li> with <b> for topic names. Only include items with issues. If none, use '<p>No follow-up areas identified.</p>'."${buildDispositionJsonField(dispositionConfig)}${activationJsonField}
 }
 
 Guidelines:
@@ -603,7 +715,7 @@ Guidelines:
 - summary: Brief overall summary based on questions asked and patient's responses.
 - observations: EXACTLY ${topicCount} objects — one per row in the reference table. Copy name, display_name, domain, value_type from the table. Use evaluation guidance to choose value — do NOT copy guidance text into detail.${observationsGuidance ? `\n- GENERAL OBSERVATIONS GUIDANCE: ${observationsGuidance}` : ""}
 - transition_status: EXACTLY ${topicCount} topics in the HTML — one per observation, no duplicates. Detail text MUST be original.
-- follow_up_areas: Return a single HTML string.${buildDispositionGuideline(dispositionConfig)}
+- follow_up_areas: Return a single HTML string.${buildDispositionGuideline(dispositionConfig)}${activationGuideline}
 Source ID: {{SOURCE_ID}}
 
 SOURCE TEXT:
@@ -672,9 +784,10 @@ export async function analyzeTranscriptFast(
   contextValues?: Record<string, string>,
   observationsGuidance?: string,
   dispositionConfig?: DispositionConfig,
+  activationContext?: ActivationObjectivesContext,
 ): Promise<{ analysis: Partial<TranscriptAnalysis>; tokenUsage: { promptTokens: number; completionTokens: number; totalTokens: number; estimatedCost: number } }> {
   const model = buildGeminiModel();
-  const template = buildFastPromptTemplate(activeObservations, summaryInstruction, contextParams, observationsGuidance, undefined, contextValues, dispositionConfig);
+  const template = buildFastPromptTemplate(activeObservations, summaryInstruction, contextParams, observationsGuidance, undefined, contextValues, dispositionConfig, activationContext);
   const prompt = resolvePrompt(template, sourceId, sourceText, contextParams, contextValues);
 
   console.log(`[FAST] Starting Gemini call for ${sourceId}`);
@@ -688,6 +801,7 @@ export async function analyzeTranscriptFast(
     throw new Error("Fast Gemini response missing required fields.");
   }
   if (!Array.isArray(parsed.observations)) parsed.observations = [];
+  if (!Array.isArray(parsed.activation_objectives)) parsed.activation_objectives = [];
 
   parsed.observations = deduplicateByName(parsed.observations);
   if (parsed.transition_status) {

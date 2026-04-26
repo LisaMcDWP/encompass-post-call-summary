@@ -1,7 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { analyzeTranscript, analyzeTranscriptFast, analyzeTranscriptBackground, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, aiObservationAssistant, type DispositionConfig } from "./gemini";
-import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBarriers, insertCallQAResults, insertCallDisposition, ensureCallBarriersTable, ensureCallQATable, getCallBarriers, getCallInfoList, getCallDetail, getCallStatsByDay, queryBlandCalls, loadBlandCallsToBatch, fetchAwellContextForCareFlows, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, bulkUpdateBatchItemStatus, bulkUpdateBatchResults, resetFailedBatchItems, deletePendingBatchItems, recreateBatch, getDistinctTags, upsertCallReviews, getCallReviews, upsertCallReviewStatus, upsertCallReviewMeta, getCallReviewStatusesBulk, ensureCallReviewStatusesTable, getCallReviewList } from "./bigquery";
+import { analyzeTranscript, analyzeTranscriptFast, analyzeTranscriptBackground, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, aiObservationAssistant, type DispositionConfig, type ActivationObjectivesContext, type ActivationObjectiveExtraction } from "./gemini";
+import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBarriers, insertCallQAResults, insertCallDisposition, insertCallActivationObjectives, getCallActivationObjectives, ensureCallBarriersTable, ensureCallQATable, getCallBarriers, getCallInfoList, getCallDetail, getCallStatsByDay, queryBlandCalls, loadBlandCallsToBatch, fetchAwellContextForCareFlows, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, bulkUpdateBatchItemStatus, bulkUpdateBatchResults, resetFailedBatchItems, deletePendingBatchItems, recreateBatch, getDistinctTags, upsertCallReviews, getCallReviews, upsertCallReviewStatus, upsertCallReviewMeta, getCallReviewStatusesBulk, ensureCallReviewStatusesTable, getCallReviewList } from "./bigquery";
+import { computeActivationObjectiveResults } from "./activationObjectives";
 import { randomUUID, createHash } from "crypto";
 import { storage } from "./storage";
 import { insertObservationSchema, enumValueSchema, insertContextParameterSchema, insertCallQAPromptSchema, insertDispositionCategorySchema, insertDispositionDetailSchema, insertCallReviewItemSchema, insertActivationObjectiveSchema } from "@shared/schema";
@@ -147,6 +148,11 @@ export async function registerRoutes(
       const dispCategories = await storage.getDispositionCategories(cpId);
       const dispDetails = await storage.getDispositionDetails(cpId);
       const dispConfig: DispositionConfig = { categories: dispCategories, details: dispDetails };
+      const activeObjectives = await storage.getActiveActivationObjectives(cpId);
+      const syncCallDate = processed_datetime || new Date().toISOString();
+      const activationContext: ActivationObjectivesContext | undefined = activeObjectives.length > 0
+        ? { objectives: activeObjectives, callDate: syncCallDate, contextValues }
+        : undefined;
 
       const { analysis, tokenUsage } = await analyzeTranscript(
         resolvedSourceId,
@@ -160,6 +166,7 @@ export async function registerRoutes(
         barriersGuidance || undefined,
         callQAPrompts,
         dispConfig,
+        activationContext,
       );
       const processingTime = Date.now() - startTime;
 
@@ -200,6 +207,17 @@ export async function registerRoutes(
       if (analysis.disposition) {
         await insertCallDisposition(resolvedSourceId, analysis.disposition, targetProjectId);
       }
+      const objectiveResults = activeObjectives.length > 0
+        ? computeActivationObjectiveResults({
+            callId: resolvedSourceId,
+            callDate: syncCallDate,
+            contextValues,
+            objectives: activeObjectives,
+            extractions: analysis.activation_objectives || [],
+            processedAt,
+          })
+        : [];
+      await insertCallActivationObjectives(resolvedSourceId, objectiveResults, targetProjectId);
 
       return res.json({
         status: "success",
@@ -333,11 +351,17 @@ export async function registerRoutes(
           }
         }
 
+        const asyncActiveObjectives = await storage.getActiveActivationObjectives(cpId);
+        const asyncCallDate = processed_datetime || new Date().toISOString();
+        const asyncActivationContext: ActivationObjectivesContext | undefined = asyncActiveObjectives.length > 0
+          ? { objectives: asyncActiveObjectives, callDate: asyncCallDate, contextValues }
+          : undefined;
+
         console.log(`[AWELL-ASYNC] Running fast Gemini analysis inline for ${resolvedSourceId}`);
         const { analysis: fastAnalysis, tokenUsage: fastTokenUsage } = await analyzeTranscriptFast(
           resolvedSourceId, source_text.trim(), activeObs,
           summaryInstruction || undefined, contextParams, contextValues,
-          observationsGuidance || undefined, asyncDispConfig,
+          observationsGuidance || undefined, asyncDispConfig, asyncActivationContext,
         );
         const processingTime = Date.now() - startTime;
         const processedAt = new Date().toISOString();
@@ -413,6 +437,20 @@ export async function registerRoutes(
               insertCallBarriers(resolvedSourceId, bgResult.barriers, targetProjectId),
               insertCallQAResults(resolvedSourceId, bgResult.call_qa, targetProjectId),
               ...(fastAnalysis.disposition ? [insertCallDisposition(resolvedSourceId, fastAnalysis.disposition, targetProjectId)] : []),
+              insertCallActivationObjectives(
+                resolvedSourceId,
+                asyncActiveObjectives.length > 0
+                  ? computeActivationObjectiveResults({
+                      callId: resolvedSourceId,
+                      callDate: asyncCallDate,
+                      contextValues,
+                      objectives: asyncActiveObjectives,
+                      extractions: (fastAnalysis.activation_objectives as ActivationObjectiveExtraction[]) || [],
+                      processedAt,
+                    })
+                  : [],
+                targetProjectId,
+              ),
             ]);
             console.log(`[AWELL-ASYNC-BG] BigQuery writes completed for ${resolvedSourceId}`);
 
@@ -538,10 +576,16 @@ export async function registerRoutes(
       const dispDetails = await storage.getDispositionDetails(cpId);
       const dispositionConfig: DispositionConfig = { categories: dispCategories, details: dispDetails };
 
+      const syncAwellObjectives = await storage.getActiveActivationObjectives(cpId);
+      const syncAwellCallDate = processed_datetime || new Date().toISOString();
+      const syncAwellActivationContext: ActivationObjectivesContext | undefined = syncAwellObjectives.length > 0
+        ? { objectives: syncAwellObjectives, callDate: syncAwellCallDate, contextValues }
+        : undefined;
+
       const { analysis: fastAnalysis, tokenUsage: fastTokenUsage } = await analyzeTranscriptFast(
         resolvedSourceId, source_text.trim(), activeObs,
         summaryInstruction || undefined, contextParams, contextValues,
-        observationsGuidance || undefined, dispositionConfig,
+        observationsGuidance || undefined, dispositionConfig, syncAwellActivationContext,
       );
       const processingTime = Date.now() - startTime;
       console.log(`[AWELL] Fast Gemini completed for ${resolvedSourceId} in ${processingTime}ms — responding to Awell now`);
@@ -623,6 +667,17 @@ export async function registerRoutes(
           if (fastAnalysis.disposition) {
             bqInserts.push(insertCallDisposition(resolvedSourceId, fastAnalysis.disposition, targetProjectId));
           }
+          const syncAwellObjResults = syncAwellObjectives.length > 0
+            ? computeActivationObjectiveResults({
+                callId: resolvedSourceId,
+                callDate: syncAwellCallDate,
+                contextValues,
+                objectives: syncAwellObjectives,
+                extractions: (fastAnalysis.activation_objectives as ActivationObjectiveExtraction[]) || [],
+                processedAt,
+              })
+            : [];
+          bqInserts.push(insertCallActivationObjectives(resolvedSourceId, syncAwellObjResults, targetProjectId));
           await Promise.all(bqInserts);
           console.log(`[AWELL-BG] All BigQuery writes completed for ${resolvedSourceId}`);
         } catch (bgErr: any) {
@@ -1535,7 +1590,8 @@ export async function registerRoutes(
       if (!result.callInfo) {
         return res.status(404).json({ message: "Call not found" });
       }
-      res.json(result);
+      const activationObjectives = await getCallActivationObjectives(req.params.callId, targetProjectId);
+      res.json({ ...result, activationObjectives });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -1708,6 +1764,8 @@ export async function registerRoutes(
       const batchDispDets = await storage.getDispositionDetails(resolvedBatchCpId);
       const batchDispConfig: DispositionConfig = { categories: batchDispCats, details: batchDispDets };
       console.log(`Batch job: disposition config loaded — ${batchDispCats.length} categories, ${batchDispDets.length} details for CP ${resolvedBatchCpId}`);
+      const batchActiveObjectives = await storage.getActiveActivationObjectives(resolvedBatchCpId);
+      console.log(`Batch job: activation objectives loaded — ${batchActiveObjectives.length} active for CP ${resolvedBatchCpId}`);
       const { prompt: _p, promptVersion, promptVersionDate } = await getPromptWithVersion(resolvedBatchCpId);
 
       const jobId = `batch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -1763,6 +1821,12 @@ export async function registerRoutes(
             if (item.context_values) {
               try { batchContext = JSON.parse(item.context_values); } catch {}
             }
+            const blandTs = item.bland_created_at?.value || item.bland_created_at || null;
+            const callDate = blandTs ? new Date(blandTs).toISOString() : null;
+            const batchActivationCallDate = callDate || new Date().toISOString();
+            const batchActivationContext: ActivationObjectivesContext | undefined = batchActiveObjectives.length > 0
+              ? { objectives: batchActiveObjectives, callDate: batchActivationCallDate, contextValues: batchContext }
+              : undefined;
             const { analysis, tokenUsage } = await analyzeTranscript(
               callId,
               item.transcript.trim(),
@@ -1775,12 +1839,11 @@ export async function registerRoutes(
               barriersGuidance || undefined,
               callQAPromptsForBatch,
               batchDispConfig,
+              batchActivationContext,
             );
             const processingTimeMs = Date.now() - startTime;
 
             const processedAt = new Date().toISOString();
-            const blandTs = item.bland_created_at?.value || item.bland_created_at || null;
-            const callDate = blandTs ? new Date(blandTs).toISOString() : null;
             await insertCallInfo({
               callId,
               careFlowId: item.care_flow_id || null,
@@ -1817,6 +1880,17 @@ export async function registerRoutes(
             } else {
               console.log(`Batch job ${jobId}: ${callId} — NO disposition returned by Gemini`);
             }
+            const batchObjResults = batchActiveObjectives.length > 0
+              ? computeActivationObjectiveResults({
+                  callId,
+                  callDate: batchActivationCallDate,
+                  contextValues: batchContext,
+                  objectives: batchActiveObjectives,
+                  extractions: analysis.activation_objectives || [],
+                  processedAt,
+                })
+              : [];
+            await insertCallActivationObjectives(callId, batchObjResults, targetProjectId);
             batchResults.push({ callId, success: true, resultCallId: callId });
             jobState.completed++;
             console.log(`Batch job ${jobId}: [${idx + 1}/${total}] ${callId} completed (${processingTimeMs}ms)`);
