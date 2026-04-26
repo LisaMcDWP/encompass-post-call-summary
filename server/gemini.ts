@@ -81,12 +81,19 @@ export interface DispositionResult {
   detail?: string;
 }
 
+export interface ActivationObjectiveObservationExtraction {
+  topic_name: string;
+  value: string | null;
+  evidence: string | null;
+}
+
 export interface ActivationObjectiveExtraction {
   objective_name: string;
   interaction_key: string;
   extracted_value: string | null;
   rationale: string;
   evidence: string | null;
+  observations?: ActivationObjectiveObservationExtraction[];
 }
 
 export interface TranscriptAnalysis {
@@ -104,6 +111,7 @@ export interface TranscriptAnalysis {
 export interface ActivationObjectivesContext {
   objectives: ActivationObjective[];
   activeInteractions: ActivationInteraction[];
+  observations?: Observation[];
   callDate: string;
   contextValues?: Record<string, string>;
 }
@@ -114,6 +122,7 @@ interface ResolvedObjectiveTask {
   config: ActivationObjectiveInteractionConfig;
   anchorDate: string | null;
   callDayOffset: number | null;
+  observationTopics: Observation[];
 }
 
 function diffDaysISO(fromDate: string, toDate: string): number | null {
@@ -168,7 +177,14 @@ export function resolveObjectiveTasks(ctx: ActivationObjectivesContext | undefin
       .filter((v) => v && v.trim());
     if (allowed.length === 0) continue;
     const callDayOffset = anchorDate ? diffDaysISO(anchorDate, ctx.callDate) : null;
-    tasks.push({ objective: obj, interaction, config, anchorDate, callDayOffset });
+    const obsById = new Map<number, Observation>();
+    for (const o of ctx.observations || []) {
+      if (o && o.isActive) obsById.set(o.id, o);
+    }
+    const observationTopics = (config.observationTopicIds || [])
+      .map((id) => obsById.get(id))
+      .filter((o): o is Observation => !!o);
+    tasks.push({ objective: obj, interaction, config, anchorDate, callDayOffset, observationTopics });
   }
   return tasks;
 }
@@ -191,10 +207,22 @@ function buildActivationObjectivesPromptBlock(tasks: ResolvedObjectiveTask[]): s
       : t.anchorDate
         ? `Window: ${t.objective.windowDays} days from ${t.objective.anchorContextKey}=${t.anchorDate}.`
         : `Anchor date (${t.objective.anchorContextKey}) not provided in request context — assess based on call content alone.`;
-    return `  • objective_name="${t.objective.name}" (${t.objective.displayName}) | interaction_key="${t.interaction.key}" (${t.interaction.name}) | ${dayPart} | Allowed values: ${allowed}, or null if not discussed.${guidanceLine}${hintsBlock}`;
+    const obsBlock = t.observationTopics.length > 0
+      ? `\n    Observation topics for this objective+interaction (output one entry per topic in the observations array):\n` +
+        t.observationTopics.map((o) => {
+          const allowedVals = o.valueType === "enum" && Array.isArray(o.value) && o.value.length > 0
+            ? `Allowed values: ${(o.value as EnumValue[]).map(v => `"${v.label}"`).join(", ")}, or null if not discussed`
+            : o.valueType === "boolean"
+              ? `Allowed values: true, false, or null if not discussed`
+              : `Free-text value, or null if not discussed`;
+          const hint = (o.promptGuidance || "").trim() ? ` | Hint: ${o.promptGuidance.trim()}` : "";
+          return `      - topic_name="${o.name}" (${o.displayName}) — ${allowedVals}.${hint}`;
+        }).join("\n")
+      : "";
+    return `  • objective_name="${t.objective.name}" (${t.objective.displayName}) | interaction_key="${t.interaction.key}" (${t.interaction.name}) | ${dayPart} | Allowed values: ${allowed}, or null if not discussed.${guidanceLine}${hintsBlock}${obsBlock}`;
   });
   return `\n###ACTIVATION OBJECTIVES (${tasks.length} task${tasks.length === 1 ? "" : "s"})
-For each task below, decide the patient's current status for that activation objective based ONLY on what was discussed in this call. Choose the single best match from the allowed values for that task, or null if the topic was not discussed in enough detail to assess. Do NOT invent values that are not in the allowed list.
+For each task below, decide the patient's current status for that activation objective based ONLY on what was discussed in this call. Choose the single best match from the allowed values for that task, or null if the topic was not discussed in enough detail to assess. Do NOT invent values that are not in the allowed list. For tasks that list observation topics, also extract a value for each listed topic into the per-objective observations array — copy the topic_name exactly.
 ${lines.join("\n")}
 `;
 }
@@ -208,14 +236,25 @@ function buildActivationObjectivesJsonField(tasks: ResolvedObjectiveTask[]): str
       "interaction_key": "COPY exactly from the task line",
       "extracted_value": "One of the allowed values for this task, or null if not discussed",
       "rationale": "Brief 1-2 sentence explanation grounded in the transcript",
-      "evidence": "Direct quote from the transcript supporting the extracted_value, or null if not discussed"
+      "evidence": "Direct quote from the transcript supporting the extracted_value, or null if not discussed",
+      "observations": [ <-- one entry per observation topic listed for this task, OR an empty array if none were listed
+        {
+          "topic_name": "COPY exactly from the topic_name in the task line",
+          "value": "One of the allowed values for that topic, or null if not discussed",
+          "evidence": "Direct quote from the transcript supporting the value, or null"
+        }
+      ]
     }
   ]`;
 }
 
 function buildActivationObjectivesGuideline(tasks: ResolvedObjectiveTask[]): string {
   if (tasks.length === 0) return "";
-  return `\n- activation_objectives: Output EXACTLY ${tasks.length} object(s), one per task in the ACTIVATION OBJECTIVES section. Use the exact objective_name and interaction_key from the task line. extracted_value MUST be one of the allowed values listed for that task, or null. Never substitute or invent values.`;
+  const obsCount = tasks.reduce((sum, t) => sum + t.observationTopics.length, 0);
+  const obsLine = obsCount > 0
+    ? ` For each task that lists observation topics, also output one entry per topic in that task's observations array — copy topic_name exactly and pick value from that topic's allowed values, or null if not discussed.`
+    : "";
+  return `\n- activation_objectives: Output EXACTLY ${tasks.length} object(s), one per task in the ACTIVATION OBJECTIVES section. Use the exact objective_name and interaction_key from the task line. extracted_value MUST be one of the allowed values listed for that task, or null. Never substitute or invent values.${obsLine}`;
 }
 
 const COLOR_STYLES: Record<string, string> = {

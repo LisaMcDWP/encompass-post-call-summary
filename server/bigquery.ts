@@ -721,6 +721,7 @@ export async function ensureCallActivationObjectivesTable(targetProjectId?: stri
             { name: "is_eligible", type: "BOOL", mode: "REQUIRED" },
             { name: "exclusion_reason", type: "STRING", mode: "NULLABLE" },
             { name: "rationale", type: "STRING", mode: "NULLABLE" },
+            { name: "observations", type: "STRING", mode: "NULLABLE" },
             { name: "processed_at", type: "TIMESTAMP", mode: "REQUIRED" },
           ],
         },
@@ -735,6 +736,7 @@ export async function ensureCallActivationObjectivesTable(targetProjectId?: stri
         `ALTER TABLE ${fullTable} ADD COLUMN IF NOT EXISTS interaction_id INT64`,
         `ALTER TABLE ${fullTable} ADD COLUMN IF NOT EXISTS interaction_key STRING`,
         `ALTER TABLE ${fullTable} ADD COLUMN IF NOT EXISTS interaction_name STRING`,
+        `ALTER TABLE ${fullTable} ADD COLUMN IF NOT EXISTS observations STRING`,
       ]) {
         try {
           await client.query({ query: stmt });
@@ -786,6 +788,9 @@ export async function insertCallActivationObjectives(callId: string, results: Ca
       is_eligible: r.isEligible,
       exclusion_reason: r.exclusionReason || null,
       rationale: r.rationale || null,
+      observations: (r.observations && r.observations.length > 0)
+        ? JSON.stringify(r.observations)
+        : null,
       processed_at: r.processedAt,
     }));
 
@@ -813,7 +818,15 @@ export async function getCallActivationObjectives(callId: string, targetProjectI
     const client = getOutputBigQueryClient(targetProjectId);
     const query = `SELECT * FROM \`${client.projectId}.${DATASET_ID}.${CALL_ACTIVATION_OBJECTIVES_TABLE_ID}\` WHERE call_id = @callId ORDER BY objective_id ASC`;
     const [rows] = await client.query({ query, params: { callId } });
-    return rows;
+    return (rows || []).map((row: any) => {
+      let observations: any[] = [];
+      if (row?.observations && typeof row.observations === "string") {
+        try { observations = JSON.parse(row.observations); } catch { observations = []; }
+      } else if (Array.isArray(row?.observations)) {
+        observations = row.observations;
+      }
+      return { ...row, observations };
+    });
   } catch (error: any) {
     console.error("Failed to get call activation objectives:", error.message);
     return [];

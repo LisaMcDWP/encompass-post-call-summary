@@ -270,6 +270,7 @@ export const activationObjectiveInteractionConfigSchema = z.object({
     customRules: [],
   }),
   promptGuidance: z.string().default(""),
+  observationTopicIds: z.array(z.number().int()).default([]),
 });
 export type ActivationObjectiveInteractionConfig = z.infer<typeof activationObjectiveInteractionConfigSchema>;
 
@@ -343,5 +344,14 @@ export interface CallActivationObjectiveResult {
   isEligible: boolean;
   exclusionReason: string;
   rationale: string;
+  observations: CallActivationObjectiveObservation[];
   processedAt: string;
+}
+
+export interface CallActivationObjectiveObservation {
+  topicId: number;
+  name: string;
+  displayName: string;
+  value: string | null;
+  evidence: string | null;
 }

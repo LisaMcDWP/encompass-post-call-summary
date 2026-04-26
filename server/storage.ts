@@ -520,6 +520,9 @@ function rowToActivationObjective(row: any): ActivationObjective {
     canResolveObjective: c.canResolveObjective !== false,
     inclusionRules: c.inclusionRules || { requirePcpAssigned: false, requireCompletedWithPatientOrCaregiver: true, customRules: [] },
     promptGuidance: c.promptGuidance || "",
+    observationTopicIds: Array.isArray(c.observationTopicIds)
+      ? c.observationTopicIds.filter((id: any) => typeof id === "number")
+      : [],
   }));
 
   return {

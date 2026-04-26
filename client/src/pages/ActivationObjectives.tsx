@@ -69,6 +69,14 @@ interface ObjectiveInteractionConfig {
   canResolveObjective: boolean;
   inclusionRules: InclusionRules;
   promptGuidance: string;
+  observationTopicIds: number[];
+}
+
+interface ObservationTopic {
+  id: number;
+  name: string;
+  displayName: string;
+  isActive: boolean;
 }
 
 interface ActivationInteraction {
@@ -179,6 +187,7 @@ export default function ActivationObjectives() {
   const [items, setItems] = useState<ActivationObjective[]>([]);
   const [contextParams, setContextParams] = useState<ContextParameter[]>([]);
   const [interactions, setInteractions] = useState<ActivationInteraction[]>([]);
+  const [observationTopics, setObservationTopics] = useState<ObservationTopic[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<number | "new" | null>(null);
   const [form, setForm] = useState<Omit<ActivationObjective, "id">>(emptyForm());
@@ -197,14 +206,16 @@ export default function ActivationObjectives() {
     if (!selectedCPId) return;
     setLoading(true);
     try {
-      const [r1, r2, r3] = await Promise.all([
+      const [r1, r2, r3, r4] = await Promise.all([
         fetch(`/api/activation-objectives?clientPathwayId=${selectedCPId}`),
         fetch(`/api/context-parameters?clientPathwayId=${selectedCPId}`),
         fetch(`/api/activation-interactions?clientPathwayId=${selectedCPId}`),
+        fetch(`/api/observations?clientPathwayId=${selectedCPId}`),
       ]);
       if (r1.ok) setItems(await r1.json());
       if (r2.ok) setContextParams(await r2.json());
       if (r3.ok) setInteractions(await r3.json());
+      if (r4.ok) setObservationTopics(await r4.json());
     } catch (err: any) {
       toast({ title: "Failed to load", description: err.message, variant: "destructive" });
     } finally {
@@ -397,6 +408,7 @@ export default function ActivationObjectives() {
       canResolveObjective: false,
       inclusionRules: { requirePcpAssigned: false, requireCompletedWithPatientOrCaregiver: true, customRules: [] },
       promptGuidance: "",
+      observationTopicIds: [],
     };
     updateForm({ interactions: [...form.interactions, cfg] });
   }
@@ -532,6 +544,7 @@ export default function ActivationObjectives() {
           contextParams={contextParams}
           anchorContextOptions={anchorContextOptions}
           interactions={interactions}
+          observationTopics={observationTopics}
           addStage={addStage}
           updateStage={updateStage}
           removeStage={removeStage}
@@ -765,6 +778,7 @@ interface EditorProps {
   contextParams: ContextParameter[];
   anchorContextOptions: ContextParameter[];
   interactions: ActivationInteraction[];
+  observationTopics: ObservationTopic[];
   addStage: () => void;
   updateStage: (idx: number, patch: Partial<Stage>) => void;
   removeStage: (idx: number) => void;
@@ -1167,6 +1181,7 @@ function ObjectiveEditor(p: EditorProps) {
                 cfg={cfg}
                 idx={idx}
                 interaction={interaction}
+                observationTopics={p.observationTopics}
                 update={(patch) => p.updateInteractionConfig(idx, patch)}
                 onRemove={() => p.removeInteractionConfig(idx)}
               />
@@ -1243,14 +1258,23 @@ function AddInteractionPicker({
 // ============================================================
 
 function InteractionConfigEditor({
-  cfg, idx, interaction, update, onRemove,
+  cfg, idx, interaction, observationTopics, update, onRemove,
 }: {
   cfg: ObjectiveInteractionConfig;
   idx: number;
   interaction: ActivationInteraction | undefined;
+  observationTopics: ObservationTopic[];
   update: (patch: Partial<ObjectiveInteractionConfig>) => void;
   onRemove: () => void;
 }) {
+  function toggleTopic(topicId: number) {
+    const current = cfg.observationTopicIds || [];
+    const next = current.includes(topicId)
+      ? current.filter(id => id !== topicId)
+      : [...current, topicId];
+    update({ observationTopicIds: next });
+  }
+  const activeTopics = observationTopics.filter(t => t.isActive);
   return (
     <div className="border rounded-md p-4 space-y-3 bg-muted/20" data-testid={`card-interaction-config-${idx}`}>
       <div className="flex items-start gap-3">
@@ -1326,6 +1350,37 @@ function InteractionConfigEditor({
             className="text-sm mt-1" placeholder="Specific cues for this interaction..."
             data-testid={`textarea-cfg-guidance-${idx}`} />
         </div>
+      </div>
+
+      <div className="pt-2 border-t">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div>
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Observation topics to extract on this interaction</Label>
+            <p className="text-[11px] text-muted-foreground mt-0.5">For each call routed to this interaction, the model will also extract values for the selected observation topics — shown alongside the objective on the call details page.</p>
+          </div>
+          {(cfg.observationTopicIds || []).length > 0 && (
+            <Badge variant="secondary" className="text-[10px]">{(cfg.observationTopicIds || []).length} selected</Badge>
+          )}
+        </div>
+        {activeTopics.length === 0 ? (
+          <div className="text-[11px] text-muted-foreground border border-dashed rounded-md p-3 text-center">
+            No active observation topics for this pathway. <Link href="/observations"><span className="text-primary hover:underline cursor-pointer">Create some first →</span></Link>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {activeTopics.map(topic => {
+              const active = (cfg.observationTopicIds || []).includes(topic.id);
+              return (
+                <button key={topic.id} type="button"
+                  onClick={() => toggleTopic(topic.id)}
+                  className={`text-xs px-2 py-1 rounded-md border transition-colors ${active ? "bg-primary text-primary-foreground border-primary" : "bg-background text-muted-foreground border-border hover:bg-muted"}`}
+                  data-testid={`button-cfg-topic-${idx}-${topic.id}`}>
+                  {topic.displayName}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

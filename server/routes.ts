@@ -166,7 +166,7 @@ export async function registerRoutes(
       ensureInteractionContextKeys(contextValues, contextSource, activeObjectives);
       const syncCallDate = processed_datetime || new Date().toISOString();
       const activationContext: ActivationObjectivesContext | undefined = activeObjectives.length > 0
-        ? { objectives: activeObjectives, activeInteractions, callDate: syncCallDate, contextValues }
+        ? { objectives: activeObjectives, activeInteractions, observations: activeObs, callDate: syncCallDate, contextValues }
         : undefined;
 
       const { analysis, tokenUsage } = await analyzeTranscript(
@@ -229,6 +229,7 @@ export async function registerRoutes(
             contextValues,
             objectives: activeObjectives,
             activeInteractions,
+            observations: activeObs,
             extractions: analysis.activation_objectives || [],
             processedAt,
           })
@@ -372,7 +373,7 @@ export async function registerRoutes(
         ensureInteractionContextKeys(contextValues, contextSource, asyncActiveObjectives);
         const asyncCallDate = processed_datetime || new Date().toISOString();
         const asyncActivationContext: ActivationObjectivesContext | undefined = asyncActiveObjectives.length > 0
-          ? { objectives: asyncActiveObjectives, activeInteractions: asyncActiveInteractions, callDate: asyncCallDate, contextValues }
+          ? { objectives: asyncActiveObjectives, activeInteractions: asyncActiveInteractions, observations: activeObs, callDate: asyncCallDate, contextValues }
           : undefined;
 
         console.log(`[AWELL-ASYNC] Running fast Gemini analysis inline for ${resolvedSourceId}`);
@@ -464,6 +465,7 @@ export async function registerRoutes(
                       contextValues,
                       objectives: asyncActiveObjectives,
                       activeInteractions: asyncActiveInteractions,
+                      observations: activeObs,
                       extractions: (fastAnalysis.activation_objectives as ActivationObjectiveExtraction[]) || [],
                       processedAt,
                     })
@@ -600,7 +602,7 @@ export async function registerRoutes(
       ensureInteractionContextKeys(contextValues, contextSource, syncAwellObjectives);
       const syncAwellCallDate = processed_datetime || new Date().toISOString();
       const syncAwellActivationContext: ActivationObjectivesContext | undefined = syncAwellObjectives.length > 0
-        ? { objectives: syncAwellObjectives, activeInteractions: syncAwellInteractions, callDate: syncAwellCallDate, contextValues }
+        ? { objectives: syncAwellObjectives, activeInteractions: syncAwellInteractions, observations: activeObs, callDate: syncAwellCallDate, contextValues }
         : undefined;
 
       const { analysis: fastAnalysis, tokenUsage: fastTokenUsage } = await analyzeTranscriptFast(
@@ -695,6 +697,7 @@ export async function registerRoutes(
                 contextValues,
                 objectives: syncAwellObjectives,
                 activeInteractions: syncAwellInteractions,
+                observations: activeObs,
                 extractions: (fastAnalysis.activation_objectives as ActivationObjectiveExtraction[]) || [],
                 processedAt,
               })
@@ -1934,7 +1937,7 @@ export async function registerRoutes(
             const batchActivationCallDate = callDate || new Date().toISOString();
             ensureInteractionContextKeys(batchContext, batchContext, batchActiveObjectives);
             const batchActivationContext: ActivationObjectivesContext | undefined = batchActiveObjectives.length > 0
-              ? { objectives: batchActiveObjectives, activeInteractions: batchActiveInteractions, callDate: batchActivationCallDate, contextValues: batchContext }
+              ? { objectives: batchActiveObjectives, activeInteractions: batchActiveInteractions, observations: activeObs, callDate: batchActivationCallDate, contextValues: batchContext }
               : undefined;
             const { analysis, tokenUsage } = await analyzeTranscript(
               callId,
@@ -1996,6 +1999,7 @@ export async function registerRoutes(
                   contextValues: batchContext,
                   objectives: batchActiveObjectives,
                   activeInteractions: batchActiveInteractions,
+                  observations: activeObs,
                   extractions: analysis.activation_objectives || [],
                   processedAt,
                 })

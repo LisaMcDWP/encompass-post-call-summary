@@ -5,6 +5,8 @@ import type {
   ActivationObjectiveStage,
   ActivationInteraction,
   CallActivationObjectiveResult,
+  CallActivationObjectiveObservation,
+  Observation,
 } from "@shared/schema";
 import type { ActivationObjectiveExtraction } from "./gemini";
 
@@ -116,10 +118,19 @@ export function computeActivationObjectiveResults(args: {
   contextValues: Record<string, string>;
   objectives: ActivationObjective[];
   activeInteractions: ActivationInteraction[];
+  observations?: Observation[];
   extractions: ActivationObjectiveExtraction[];
   processedAt: string;
 }): CallActivationObjectiveResult[] {
   const { callId, callDate, contextValues, objectives, activeInteractions, extractions, processedAt } = args;
+  const observations = args.observations || [];
+  const obsById = new Map<number, Observation>();
+  const obsByName = new Map<string, Observation>();
+  for (const o of observations) {
+    if (!o) continue;
+    obsById.set(o.id, o);
+    if (o.name) obsByName.set(o.name, o);
+  }
   const results: CallActivationObjectiveResult[] = [];
 
   const extByKey = new Map<string, ActivationObjectiveExtraction>();
@@ -198,6 +209,28 @@ export function computeActivationObjectiveResults(args: {
       onTrackStatus = "unmapped_value";
     }
 
+    const configuredTopicIds = config.observationTopicIds || [];
+    const extractedObs = ext?.observations || [];
+    const extObsByName = new Map<string, typeof extractedObs[number]>();
+    for (const eo of extractedObs) {
+      if (eo && eo.topic_name) extObsByName.set(eo.topic_name, eo);
+    }
+    const observationsResult: CallActivationObjectiveObservation[] = configuredTopicIds
+      .map((id) => {
+        const topic = obsById.get(id);
+        if (!topic) return null;
+        const eo = extObsByName.get(topic.name);
+        const value = eo?.value && String(eo.value).trim() ? String(eo.value).trim() : null;
+        return {
+          topicId: topic.id,
+          name: topic.name,
+          displayName: topic.displayName,
+          value,
+          evidence: eo?.evidence || null,
+        };
+      })
+      .filter((o): o is CallActivationObjectiveObservation => !!o);
+
     results.push({
       callId,
       objectiveId: obj.id,
@@ -218,6 +251,7 @@ export function computeActivationObjectiveResults(args: {
       isEligible: true,
       exclusionReason: "",
       rationale: ext?.rationale || "",
+      observations: observationsResult,
       processedAt,
     });
   }
@@ -254,6 +288,7 @@ function makeIneligibleResult(
     isEligible: false,
     exclusionReason: reason,
     rationale: "",
+    observations: [],
     processedAt,
   };
 }

@@ -102,6 +102,13 @@ interface CallActivationObjective {
   is_eligible: boolean;
   exclusion_reason: string | null;
   rationale: string | null;
+  observations: Array<{
+    topicId: number;
+    name: string;
+    displayName: string;
+    value: string | null;
+    evidence: string | null;
+  }>;
   processed_at: any;
 }
 
@@ -1081,6 +1088,25 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
 
                       {ao.rationale && (
                         <p className="text-xs text-muted-foreground italic leading-relaxed">{ao.rationale}</p>
+                      )}
+
+                      {ao.observations && ao.observations.length > 0 && (
+                        <div className="mt-1 pt-2 border-t border-border/40 space-y-1">
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Observations</p>
+                          <div className="space-y-1">
+                            {ao.observations.map((obs) => (
+                              <div key={`${ao.objective_id}-${obs.topicId}`} className="flex items-start gap-2 text-xs" data-testid={`obs-${ao.objective_id}-${obs.topicId}`}>
+                                <span className="text-muted-foreground shrink-0">{obs.displayName}:</span>
+                                <span className="font-medium text-foreground">
+                                  {obs.value || <span className="italic text-muted-foreground">not detected</span>}
+                                </span>
+                                {obs.evidence && (
+                                  <span className="text-muted-foreground italic truncate">— "{obs.evidence}"</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </div>
                   );
