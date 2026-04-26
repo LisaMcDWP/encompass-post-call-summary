@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Pencil, Trash2, X, Save, Loader2, Target, Calendar,
   ArrowRight, GripVertical, ChevronDown, ChevronUp, Clock, AlertCircle, MessageSquare, ClipboardCheck,
+  ArrowUp, ArrowDown,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useClientPathway } from "@/contexts/ClientPathwayContext";
@@ -22,6 +23,7 @@ type EnumColor = "GREEN" | "YELLOW" | "RED" | "BLUE" | "GRAY";
 interface EnumValue {
   label: string;
   color: EnumColor;
+  promptHint?: string;
 }
 
 const COLOR_MAP: Record<EnumColor, { bg: string; text: string; border: string; chipActive: string; label: string }> = {
@@ -382,11 +384,50 @@ export default function ActivationObjectives() {
     updateForm({ interactions: form.interactions.filter((_, i) => i !== idx) });
   }
 
+  function setExtractedValueLabel(oldLabel: string, newLabel: string) {
+    const trimmed = newLabel.trim();
+    if (!trimmed || trimmed === oldLabel) return;
+    if (form.extractedEnumValues.some(v => v.label === trimmed)) {
+      toast({
+        title: "Duplicate value",
+        description: `"${trimmed}" already exists. Pick a different label.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    updateForm({
+      extractedEnumValues: form.extractedEnumValues.map(v =>
+        v.label === oldLabel ? { ...v, label: trimmed } : v
+      ),
+      stageMappings: form.stageMappings.map(m =>
+        m.extractedValue === oldLabel ? { ...m, extractedValue: trimmed } : m
+      ),
+    });
+  }
+
+  function setExtractedValueHint(label: string, hint: string) {
+    updateForm({
+      extractedEnumValues: form.extractedEnumValues.map(v =>
+        v.label === label ? { ...v, promptHint: hint } : v
+      ),
+    });
+  }
+
+  function moveExtractedValue(label: string, dir: "up" | "down") {
+    const list = [...form.extractedEnumValues];
+    const i = list.findIndex(v => v.label === label);
+    if (i < 0) return;
+    const j = dir === "up" ? i - 1 : i + 1;
+    if (j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+    updateForm({ extractedEnumValues: list });
+  }
+
   function addExtractedValue(label: string, color: EnumColor = "GRAY") {
     const trimmed = label.trim();
     if (!trimmed) return;
     if (form.extractedEnumValues.find(v => v.label === trimmed)) return;
-    updateForm({ extractedEnumValues: [...form.extractedEnumValues, { label: trimmed, color }] });
+    updateForm({ extractedEnumValues: [...form.extractedEnumValues, { label: trimmed, color, promptHint: "" }] });
   }
 
   function removeExtractedValue(label: string) {
@@ -470,6 +511,9 @@ export default function ActivationObjectives() {
           addExtractedValue={addExtractedValue}
           removeExtractedValue={removeExtractedValue}
           setExtractedValueColor={setExtractedValueColor}
+          setExtractedValueLabel={setExtractedValueLabel}
+          setExtractedValueHint={setExtractedValueHint}
+          moveExtractedValue={moveExtractedValue}
           setMapping={setMapping}
           onCancel={cancelEdit}
           onSave={saveForm}
@@ -688,6 +732,9 @@ interface EditorProps {
   addExtractedValue: (label: string, color?: EnumColor) => void;
   removeExtractedValue: (label: string) => void;
   setExtractedValueColor: (label: string, color: EnumColor) => void;
+  setExtractedValueLabel: (oldLabel: string, newLabel: string) => void;
+  setExtractedValueHint: (label: string, hint: string) => void;
+  moveExtractedValue: (label: string, dir: "up" | "down") => void;
   setMapping: (extractedValue: string, stageId: string) => void;
   onCancel: () => void;
   onSave: () => void;
@@ -811,6 +858,9 @@ function ObjectiveEditor(p: EditorProps) {
         addExtracted={p.addExtractedValue}
         removeExtracted={p.removeExtractedValue}
         setColor={p.setExtractedValueColor}
+        setLabel={p.setExtractedValueLabel}
+        setHint={p.setExtractedValueHint}
+        move={p.moveExtractedValue}
       />
 
       {/* Stages card */}
@@ -1206,7 +1256,7 @@ function InteractionConfigEditor({
 
 function ObservationEditor({
   observationName, extractedEnumValues,
-  onNameChange, addExtracted, removeExtracted, setColor,
+  onNameChange, addExtracted, removeExtracted, setColor, setLabel, setHint, move,
 }: {
   observationName: string;
   extractedEnumValues: EnumValue[];
@@ -1214,6 +1264,9 @@ function ObservationEditor({
   addExtracted: (label: string, color?: EnumColor) => void;
   removeExtracted: (label: string) => void;
   setColor: (label: string, color: EnumColor) => void;
+  setLabel: (oldLabel: string, newLabel: string) => void;
+  setHint: (label: string, hint: string) => void;
+  move: (label: string, dir: "up" | "down") => void;
 }) {
   const [newLabel, setNewLabel] = useState("");
   const [newColor, setNewColor] = useState<EnumColor>("GRAY");
@@ -1234,7 +1287,7 @@ function ObservationEditor({
             Observation
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            One observation per objective. Define the value set the model is allowed to extract, color-code each value by its sentiment, then assign them to progress stages below.
+            One observation per objective. Define the value set the model is allowed to extract, color-code each value by its sentiment, sequence them, and add an optional prompt hint per value. Then assign each to a progress stage below.
           </p>
         </div>
 
@@ -1247,72 +1300,130 @@ function ObservationEditor({
             data-testid="input-observation-name" />
         </div>
 
-        <div>
-          <Label className="text-xs uppercase tracking-wider text-muted-foreground">Allowed extracted values</Label>
-          <p className="text-[11px] text-muted-foreground mb-2">Shared across every configured interaction. The model must pick one (or null if not discussed).</p>
-
-          <div className="flex flex-wrap items-center gap-2 mb-3">
-            <Input value={newLabel} onChange={e => setNewLabel(e.target.value)}
-              placeholder="e.g. scheduled, attended, plans_to_schedule"
-              className="h-8 text-sm w-64"
-              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); submitNew(); } }}
-              data-testid="input-observation-newvalue" />
-            <Select value={newColor} onValueChange={c => setNewColor(c as EnumColor)}>
-              <SelectTrigger className="h-8 text-xs w-40" data-testid="select-observation-newcolor">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(COLOR_MAP).map(([key, val]) => (
-                  <SelectItem key={key} value={key}>
-                    <span className="inline-flex items-center gap-2">
-                      <span className={`inline-block w-3 h-3 rounded-full border ${val.bg} ${val.border}`} />
-                      <span className="text-xs">{val.label}</span>
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button size="sm" type="button" onClick={submitNew} data-testid="button-observation-addvalue">
-              <Plus className="h-3.5 w-3.5 mr-1" /> Add value
-            </Button>
-          </div>
+        <div className="space-y-3">
+          <Label className="text-sm font-semibold">Enum Values</Label>
 
           {extractedEnumValues.length === 0 ? (
             <div className="text-xs text-muted-foreground italic">No extracted values yet.</div>
           ) : (
-            <div className="flex flex-wrap gap-2">
-              {extractedEnumValues.map(v => {
+            <div className="space-y-2">
+              {extractedEnumValues.map((v, i) => {
                 const c = COLOR_MAP[v.color] || COLOR_MAP.GRAY;
                 return (
-                  <div key={v.label}
-                    className={`flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-md border ${c.bg} ${c.text} ${c.border}`}
-                    data-testid={`row-observation-value-${v.label}`}>
-                    <span className="font-mono text-xs font-medium">{v.label}</span>
-                    <Select value={v.color} onValueChange={col => setColor(v.label, col as EnumColor)}>
-                      <SelectTrigger className="h-5 w-5 p-0 border-0 bg-transparent shadow-none hover:bg-black/5 [&>svg]:hidden" data-testid={`select-observation-color-${v.label}`}>
-                        <span className={`inline-block w-3 h-3 rounded-full border ${c.bg} ${c.border}`} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(COLOR_MAP).map(([key, val]) => (
-                          <SelectItem key={key} value={key}>
-                            <span className="inline-flex items-center gap-2">
-                              <span className={`inline-block w-3 h-3 rounded-full border ${val.bg} ${val.border}`} />
-                              <span className="text-xs">{val.label}</span>
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button size="icon" variant="ghost" className="h-5 w-5 hover:bg-black/10"
-                      onClick={() => removeExtracted(v.label)}
-                      data-testid={`button-observation-removevalue-${v.label}`}>
-                      <X className="h-3 w-3" />
-                    </Button>
+                  <div key={`${v.label}-${i}`} className="space-y-1" data-testid={`row-observation-value-${v.label}`}>
+                    <div className="flex items-center gap-1.5 group">
+                      <div className="flex flex-col">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          type="button"
+                          onClick={() => move(v.label, "up")}
+                          disabled={i === 0}
+                          className="h-5 w-5 p-0 opacity-40 hover:opacity-100 disabled:opacity-10"
+                          data-testid={`button-observation-up-${v.label}`}
+                        >
+                          <ArrowUp className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          type="button"
+                          onClick={() => move(v.label, "down")}
+                          disabled={i === extractedEnumValues.length - 1}
+                          className="h-5 w-5 p-0 opacity-40 hover:opacity-100 disabled:opacity-10"
+                          data-testid={`button-observation-down-${v.label}`}
+                        >
+                          <ArrowDown className="h-3 w-3" />
+                        </Button>
+                      </div>
+                      <span className={`w-3 h-3 rounded-full shrink-0 border ${c.bg} ${c.border}`} />
+                      <Input
+                        defaultValue={v.label}
+                        onBlur={e => {
+                          const next = e.target.value.trim();
+                          if (next && next !== v.label) setLabel(v.label, next);
+                        }}
+                        className="text-sm h-8 flex-grow"
+                        data-testid={`input-observation-label-${v.label}`}
+                      />
+                      <Select value={v.color} onValueChange={col => setColor(v.label, col as EnumColor)}>
+                        <SelectTrigger className="h-8 w-40 text-xs" data-testid={`select-observation-color-${v.label}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(COLOR_MAP).map(([key, val]) => (
+                            <SelectItem key={key} value={key}>
+                              <span className="inline-flex items-center gap-2">
+                                <span className={`inline-block w-3 h-3 rounded-full border ${val.bg} ${val.border}`} />
+                                <span className="text-xs">{val.label}</span>
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        type="button"
+                        onClick={() => removeExtracted(v.label)}
+                        className="h-7 w-7 p-0 opacity-50 hover:opacity-100"
+                        data-testid={`button-observation-removevalue-${v.label}`}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                    <div className="pl-[60px] pr-10">
+                      <Input
+                        defaultValue={v.promptHint || ""}
+                        onBlur={e => {
+                          const next = e.target.value;
+                          if (next !== (v.promptHint || "")) setHint(v.label, next);
+                        }}
+                        placeholder="Optional prompt hint — extra guidance for Gemini when choosing this value"
+                        className="text-xs h-7 bg-muted/30 border-dashed"
+                        data-testid={`input-observation-hint-${v.label}`}
+                      />
+                    </div>
                   </div>
                 );
               })}
             </div>
           )}
+
+          <div className="flex items-end gap-2 pt-2 border-t">
+            <div className="flex-grow space-y-1">
+              <Label className="text-xs text-muted-foreground">Add new value</Label>
+              <Input
+                placeholder="e.g. scheduled, attended, plans_to_schedule"
+                value={newLabel}
+                onChange={e => setNewLabel(e.target.value)}
+                className="text-sm h-9"
+                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); submitNew(); } }}
+                data-testid="input-observation-newvalue"
+              />
+            </div>
+            <div className="w-40 space-y-1">
+              <Label className="text-xs text-muted-foreground">Color</Label>
+              <Select value={newColor} onValueChange={c => setNewColor(c as EnumColor)}>
+                <SelectTrigger className="h-9" data-testid="select-observation-newcolor">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(COLOR_MAP).map(([key, val]) => (
+                    <SelectItem key={key} value={key}>
+                      <span className="inline-flex items-center gap-2">
+                        <span className={`inline-block w-3 h-3 rounded-full border ${val.bg} ${val.border}`} />
+                        <span className="text-xs">{val.label}</span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button variant="outline" size="sm" type="button" onClick={submitNew} className="h-9" data-testid="button-observation-addvalue">
+              <Plus className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>

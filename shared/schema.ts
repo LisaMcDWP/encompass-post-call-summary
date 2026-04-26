@@ -228,6 +228,7 @@ export type ActivationObjectiveStageMapping = z.infer<typeof activationObjective
 export const observationEnumValueSchema = z.object({
   label: z.string().min(1),
   color: z.enum(["GREEN", "YELLOW", "RED", "BLUE", "GRAY"]).default("GRAY"),
+  promptHint: z.string().default(""),
 });
 export type ObservationEnumValue = z.infer<typeof observationEnumValueSchema>;
 

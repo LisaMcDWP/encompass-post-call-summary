@@ -161,17 +161,20 @@ export function resolveObjectiveTasks(ctx: ActivationObjectivesContext | undefin
 function buildActivationObjectivesPromptBlock(tasks: ResolvedObjectiveTask[]): string {
   if (tasks.length === 0) return "";
   const lines = tasks.map((t) => {
-    const allowed = (t.objective.extractedEnumValues || [])
-      .map((v) => v?.label || "")
-      .filter((v) => v && v.trim())
-      .map((v) => `"${v}"`)
-      .join(", ");
+    const valuesWithHints = (t.objective.extractedEnumValues || []).filter(v => v?.label && v.label.trim());
+    const allowed = valuesWithHints.map(v => `"${v.label}"`).join(", ");
+    const hintLines = valuesWithHints
+      .filter(v => (v.promptHint || "").trim())
+      .map(v => `      - "${v.label}": ${v.promptHint!.trim()}`);
+    const hintsBlock = hintLines.length > 0
+      ? `\n    Value hints:\n${hintLines.join("\n")}`
+      : "";
     const guidance = (t.config.promptGuidance || t.objective.promptGuidance || "").trim();
     const guidanceLine = guidance ? ` | Guidance: ${guidance}` : "";
     const dayPart = t.callDayOffset !== null
       ? `Patient is on day ${t.callDayOffset} of a ${t.objective.windowDays}-day window from ${t.objective.anchorContextKey}=${t.anchorDate}.`
       : `Window: ${t.objective.windowDays} days from ${t.objective.anchorContextKey}=${t.anchorDate}.`;
-    return `  • objective_name="${t.objective.name}" (${t.objective.displayName}) | interaction_key="${t.interaction.key}" (${t.interaction.name}) | ${dayPart} | Allowed values: ${allowed}, or null if not discussed.${guidanceLine}`;
+    return `  • objective_name="${t.objective.name}" (${t.objective.displayName}) | interaction_key="${t.interaction.key}" (${t.interaction.name}) | ${dayPart} | Allowed values: ${allowed}, or null if not discussed.${guidanceLine}${hintsBlock}`;
   });
   return `\n###ACTIVATION OBJECTIVES (${tasks.length} task${tasks.length === 1 ? "" : "s"})
 For each task below, decide the patient's current status for that activation objective based ONLY on what was discussed in this call. Choose the single best match from the allowed values for that task, or null if the topic was not discussed in enough detail to assess. Do NOT invent values that are not in the allowed list.

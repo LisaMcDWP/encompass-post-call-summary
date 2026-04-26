@@ -495,18 +495,23 @@ function rowToActivationObjective(row: any): ActivationObjective {
     }
   }
 
-  // Normalize: legacy values were plain strings; new shape is {label, color}.
+  // Normalize: legacy values were plain strings; new shape is {label, color, promptHint}.
   const VALID_COLORS = new Set(["GREEN", "YELLOW", "RED", "BLUE", "GRAY"]);
-  const extractedEnumValues: { label: string; color: "GREEN" | "YELLOW" | "RED" | "BLUE" | "GRAY" }[] = rawExtracted
+  type EnumColor = "GREEN" | "YELLOW" | "RED" | "BLUE" | "GRAY";
+  const extractedEnumValues: { label: string; color: EnumColor; promptHint: string }[] = rawExtracted
     .map((v: any) => {
-      if (typeof v === "string") return { label: v, color: "GRAY" as const };
+      if (typeof v === "string") return { label: v, color: "GRAY" as EnumColor, promptHint: "" };
       if (v && typeof v === "object" && typeof v.label === "string") {
         const color = typeof v.color === "string" && VALID_COLORS.has(v.color) ? v.color : "GRAY";
-        return { label: v.label, color: color as "GREEN" | "YELLOW" | "RED" | "BLUE" | "GRAY" };
+        return {
+          label: v.label,
+          color: color as EnumColor,
+          promptHint: typeof v.promptHint === "string" ? v.promptHint : "",
+        };
       }
       return null;
     })
-    .filter((v): v is { label: string; color: "GREEN" | "YELLOW" | "RED" | "BLUE" | "GRAY" } => v !== null);
+    .filter((v): v is { label: string; color: EnumColor; promptHint: string } => v !== null);
 
   // Strip legacy fields from per-interaction configs so the typed shape matches.
   const interactions: ActivationObjectiveInteractionConfig[] = interactionsRaw.map((c: any) => ({
