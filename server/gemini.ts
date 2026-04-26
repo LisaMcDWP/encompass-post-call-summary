@@ -1,5 +1,5 @@
 import { VertexAI } from "@google-cloud/vertexai";
-import type { Observation, EnumValue, ContextParameter, CallQAPrompt, DispositionCategory, DispositionDetail, ActivationObjective, ActivationObjectiveTouchpoint } from "@shared/schema";
+import type { Observation, EnumValue, ContextParameter, CallQAPrompt, DispositionCategory, DispositionDetail, ActivationObjective, ActivationObjectiveInteractionConfig, ActivationInteraction } from "@shared/schema";
 
 function getCredentials() {
   const raw = process.env.GCP_SERVICE_ACCOUNT_KEY;
@@ -83,7 +83,7 @@ export interface DispositionResult {
 
 export interface ActivationObjectiveExtraction {
   objective_name: string;
-  touchpoint_id: string;
+  interaction_key: string;
   extracted_value: string | null;
   rationale: string;
   evidence: string | null;
@@ -103,15 +103,17 @@ export interface TranscriptAnalysis {
 
 export interface ActivationObjectivesContext {
   objectives: ActivationObjective[];
+  activeInteractions: ActivationInteraction[];
   callDate: string;
   contextValues?: Record<string, string>;
 }
 
 interface ResolvedObjectiveTask {
   objective: ActivationObjective;
-  touchpoint: ActivationObjectiveTouchpoint;
+  interaction: ActivationInteraction;
+  config: ActivationObjectiveInteractionConfig;
   anchorDate: string;
-  callDayOffset: number;
+  callDayOffset: number | null;
 }
 
 function diffDaysISO(fromDate: string, toDate: string): number | null {
@@ -123,27 +125,18 @@ function diffDaysISO(fromDate: string, toDate: string): number | null {
   return Math.round((bDay - aDay) / (24 * 60 * 60 * 1000));
 }
 
-export function pickApplicableTouchpoint(
+export function pickApplicableInteraction(
   obj: ActivationObjective,
-  callDate: string,
   contextValues: Record<string, string> | undefined,
-): { touchpoint: ActivationObjectiveTouchpoint | null; anchorDate: string | null; callDayOffset: number | null } {
-  const anchorRaw = contextValues?.[obj.anchorContextKey];
-  if (!anchorRaw) return { touchpoint: null, anchorDate: null, callDayOffset: null };
-  const callDay = diffDaysISO(anchorRaw, callDate);
-  if (callDay === null) return { touchpoint: null, anchorDate: anchorRaw, callDayOffset: null };
-  const tps = (obj.touchpoints || []).filter(tp => (tp.extractedEnumValues || []).some(v => v && v.trim()));
-  if (tps.length === 0) return { touchpoint: null, anchorDate: anchorRaw, callDayOffset: callDay };
-  let best: ActivationObjectiveTouchpoint | null = null;
-  let bestDist = Infinity;
-  for (const tp of tps) {
-    const d = Math.abs(tp.expectedDayOffset - callDay);
-    if (d < bestDist) {
-      bestDist = d;
-      best = tp;
-    }
-  }
-  return { touchpoint: best, anchorDate: anchorRaw, callDayOffset: callDay };
+  activeInteractions: ActivationInteraction[],
+): { interaction: ActivationInteraction | null; config: ActivationObjectiveInteractionConfig | null } {
+  const keyName = obj.interactionContextKey || "interaction_key";
+  const value = contextValues?.[keyName];
+  if (!value) return { interaction: null, config: null };
+  const interaction = activeInteractions.find((i) => i.key === value) || null;
+  if (!interaction) return { interaction: null, config: null };
+  const config = (obj.interactions || []).find((c) => c.interactionId === interaction.id) || null;
+  return { interaction, config };
 }
 
 export function resolveObjectiveTasks(ctx: ActivationObjectivesContext | undefined): ResolvedObjectiveTask[] {
@@ -151,23 +144,31 @@ export function resolveObjectiveTasks(ctx: ActivationObjectivesContext | undefin
   const tasks: ResolvedObjectiveTask[] = [];
   for (const obj of ctx.objectives) {
     if (!obj.isActive) continue;
-    const { touchpoint, anchorDate, callDayOffset } = pickApplicableTouchpoint(obj, ctx.callDate, ctx.contextValues);
-    if (!touchpoint || !anchorDate || callDayOffset === null) continue;
-    tasks.push({ objective: obj, touchpoint, anchorDate, callDayOffset });
+    const anchorDate = ctx.contextValues?.[obj.anchorContextKey];
+    if (!anchorDate) continue;
+    const { interaction, config } = pickApplicableInteraction(obj, ctx.contextValues, ctx.activeInteractions);
+    if (!interaction || !config) continue;
+    const allowed = (config.extractedEnumValues || []).filter((v) => v && v.trim());
+    if (allowed.length === 0) continue;
+    const callDayOffset = diffDaysISO(anchorDate, ctx.callDate);
+    tasks.push({ objective: obj, interaction, config, anchorDate, callDayOffset });
   }
   return tasks;
 }
 
 function buildActivationObjectivesPromptBlock(tasks: ResolvedObjectiveTask[]): string {
   if (tasks.length === 0) return "";
-  const lines = tasks.map(t => {
-    const allowed = (t.touchpoint.extractedEnumValues || [])
-      .filter(v => v && v.trim())
-      .map(v => `"${v}"`)
+  const lines = tasks.map((t) => {
+    const allowed = (t.config.extractedEnumValues || [])
+      .filter((v) => v && v.trim())
+      .map((v) => `"${v}"`)
       .join(", ");
-    const guidance = (t.touchpoint.promptGuidance || t.objective.promptGuidance || "").trim();
+    const guidance = (t.config.promptGuidance || t.objective.promptGuidance || "").trim();
     const guidanceLine = guidance ? ` | Guidance: ${guidance}` : "";
-    return `  • objective_name="${t.objective.name}" (${t.objective.displayName}) | touchpoint_id="${t.touchpoint.id}" (${t.touchpoint.name}, expected day ${t.touchpoint.expectedDayOffset}) | Patient is on day ${t.callDayOffset} of a ${t.objective.windowDays}-day window from ${t.objective.anchorContextKey}=${t.anchorDate}. | Allowed values: ${allowed}, or null if not discussed.${guidanceLine}`;
+    const dayPart = t.callDayOffset !== null
+      ? `Patient is on day ${t.callDayOffset} of a ${t.objective.windowDays}-day window from ${t.objective.anchorContextKey}=${t.anchorDate}.`
+      : `Window: ${t.objective.windowDays} days from ${t.objective.anchorContextKey}=${t.anchorDate}.`;
+    return `  • objective_name="${t.objective.name}" (${t.objective.displayName}) | interaction_key="${t.interaction.key}" (${t.interaction.name}) | ${dayPart} | Allowed values: ${allowed}, or null if not discussed.${guidanceLine}`;
   });
   return `\n###ACTIVATION OBJECTIVES (${tasks.length} task${tasks.length === 1 ? "" : "s"})
 For each task below, decide the patient's current status for that activation objective based ONLY on what was discussed in this call. Choose the single best match from the allowed values for that task, or null if the topic was not discussed in enough detail to assess. Do NOT invent values that are not in the allowed list.
@@ -181,7 +182,7 @@ function buildActivationObjectivesJsonField(tasks: ResolvedObjectiveTask[]): str
   "activation_objectives": [ <-- EXACTLY ${tasks.length} object(s), one per task in the ACTIVATION OBJECTIVES section above
     {
       "objective_name": "COPY exactly from the task line",
-      "touchpoint_id": "COPY exactly from the task line",
+      "interaction_key": "COPY exactly from the task line",
       "extracted_value": "One of the allowed values for this task, or null if not discussed",
       "rationale": "Brief 1-2 sentence explanation grounded in the transcript",
       "evidence": "Direct quote from the transcript supporting the extracted_value, or null if not discussed"
@@ -191,7 +192,7 @@ function buildActivationObjectivesJsonField(tasks: ResolvedObjectiveTask[]): str
 
 function buildActivationObjectivesGuideline(tasks: ResolvedObjectiveTask[]): string {
   if (tasks.length === 0) return "";
-  return `\n- activation_objectives: Output EXACTLY ${tasks.length} object(s), one per task in the ACTIVATION OBJECTIVES section. Use the exact objective_name and touchpoint_id from the task line. extracted_value MUST be one of the allowed values listed for that task, or null. Never substitute or invent values.`;
+  return `\n- activation_objectives: Output EXACTLY ${tasks.length} object(s), one per task in the ACTIVATION OBJECTIVES section. Use the exact objective_name and interaction_key from the task line. extracted_value MUST be one of the allowed values listed for that task, or null. Never substitute or invent values.`;
 }
 
 const COLOR_STYLES: Record<string, string> = {

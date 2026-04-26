@@ -1,8 +1,9 @@
 import type {
   ActivationObjective,
-  ActivationObjectiveTouchpoint,
+  ActivationObjectiveInteractionConfig,
   ActivationObjectiveThreshold,
   ActivationObjectiveStage,
+  ActivationInteraction,
   CallActivationObjectiveResult,
 } from "@shared/schema";
 import type { ActivationObjectiveExtraction } from "./gemini";
@@ -36,27 +37,30 @@ function pickBand(
   return null;
 }
 
-function pickTouchpointForObjective(
+/**
+ * Resolves which interaction this call represents for a given objective by reading
+ * `obj.interactionContextKey` from contextValues. The value should match an interaction
+ * `key` in the active interactions list. Returns the matching interaction along with
+ * the per-objective config row (if any) and the interaction lookup data.
+ */
+export function pickInteractionForObjective(
   obj: ActivationObjective,
-  callDate: string,
   contextValues: Record<string, string>,
-): { touchpoint: ActivationObjectiveTouchpoint | null; anchorDate: string | null } {
-  const anchorRaw = contextValues[obj.anchorContextKey];
-  if (!anchorRaw) return { touchpoint: null, anchorDate: null };
-  const callDay = diffDaysISO(anchorRaw, callDate);
-  if (callDay === null) return { touchpoint: null, anchorDate: anchorRaw };
-  const tps = (obj.touchpoints || []).filter(tp => (tp.extractedEnumValues || []).some(v => v && v.trim()));
-  if (tps.length === 0) return { touchpoint: null, anchorDate: anchorRaw };
-  let best: ActivationObjectiveTouchpoint | null = null;
-  let bestDist = Infinity;
-  for (const tp of tps) {
-    const d = Math.abs(tp.expectedDayOffset - callDay);
-    if (d < bestDist) {
-      bestDist = d;
-      best = tp;
-    }
-  }
-  return { touchpoint: best, anchorDate: anchorRaw };
+  activeInteractions: ActivationInteraction[],
+): {
+  interaction: ActivationInteraction | null;
+  config: ActivationObjectiveInteractionConfig | null;
+  interactionKeyValue: string | null;
+} {
+  const keyName = obj.interactionContextKey || "interaction_key";
+  const interactionKeyValue = contextValues[keyName] ?? null;
+  if (!interactionKeyValue) return { interaction: null, config: null, interactionKeyValue: null };
+
+  const interaction = activeInteractions.find((i) => i.key === interactionKeyValue) || null;
+  if (!interaction) return { interaction: null, config: null, interactionKeyValue };
+
+  const config = (obj.interactions || []).find((c) => c.interactionId === interaction.id) || null;
+  return { interaction, config, interactionKeyValue };
 }
 
 export function computeActivationObjectiveResults(args: {
@@ -64,42 +68,54 @@ export function computeActivationObjectiveResults(args: {
   callDate: string;
   contextValues: Record<string, string>;
   objectives: ActivationObjective[];
+  activeInteractions: ActivationInteraction[];
   extractions: ActivationObjectiveExtraction[];
   processedAt: string;
 }): CallActivationObjectiveResult[] {
-  const { callId, callDate, contextValues, objectives, extractions, processedAt } = args;
+  const { callId, callDate, contextValues, objectives, activeInteractions, extractions, processedAt } = args;
   const results: CallActivationObjectiveResult[] = [];
 
   const extByKey = new Map<string, ActivationObjectiveExtraction>();
   for (const ex of extractions || []) {
     if (!ex || !ex.objective_name) continue;
-    extByKey.set(`${ex.objective_name}::${ex.touchpoint_id || ""}`, ex);
+    extByKey.set(`${ex.objective_name}::${ex.interaction_key || ""}`, ex);
   }
 
   for (const obj of objectives) {
     if (!obj.isActive) continue;
-    const { touchpoint, anchorDate } = pickTouchpointForObjective(obj, callDate, contextValues);
 
+    const anchorDate = contextValues[obj.anchorContextKey] ?? null;
     if (!anchorDate) {
       results.push(makeIneligibleResult(callId, callDate, obj, null, processedAt, `No anchor date provided (missing context key "${obj.anchorContextKey}")`));
       continue;
     }
-    if (!touchpoint) {
-      results.push(makeIneligibleResult(callId, callDate, obj, anchorDate, processedAt, "No applicable touchpoint with allowed extracted values"));
+
+    const { interaction, config, interactionKeyValue } = pickInteractionForObjective(obj, contextValues, activeInteractions);
+
+    if (!interactionKeyValue) {
+      results.push(makeIneligibleResult(callId, callDate, obj, anchorDate, processedAt, `No interaction key in context (missing key "${obj.interactionContextKey || "interaction_key"}")`));
+      continue;
+    }
+    if (!interaction) {
+      results.push(makeIneligibleResult(callId, callDate, obj, anchorDate, processedAt, `Unknown interaction key "${interactionKeyValue}" (no active interaction with this key)`));
+      continue;
+    }
+    if (!config) {
+      results.push(makeIneligibleResult(callId, callDate, obj, anchorDate, processedAt, `Interaction "${interaction.key}" is not configured for this objective`, interaction));
       continue;
     }
 
     const targetDate = addDaysISO(anchorDate, obj.windowDays);
     const daysRemaining = targetDate ? diffDaysISO(callDate, targetDate) : null;
     const band = daysRemaining !== null ? pickBand(obj.thresholds || [], daysRemaining) : null;
-    const ext = extByKey.get(`${obj.name}::${touchpoint.id}`) || extByKey.get(`${obj.name}::`) || null;
+    const ext = extByKey.get(`${obj.name}::${interaction.key}`) || extByKey.get(`${obj.name}::`) || null;
     const extractedValue = ext?.extracted_value && ext.extracted_value.trim() ? ext.extracted_value.trim() : null;
 
     let currentStage: ActivationObjectiveStage | null = null;
     if (extractedValue) {
-      const mapping = (touchpoint.stageMappings || []).find(m => m.extractedValue === extractedValue);
+      const mapping = (config.stageMappings || []).find((m) => m.extractedValue === extractedValue);
       if (mapping) {
-        currentStage = (obj.stages || []).find(s => s.id === mapping.stageId) || null;
+        currentStage = (obj.stages || []).find((s) => s.id === mapping.stageId) || null;
       }
     }
 
@@ -109,7 +125,7 @@ export function computeActivationObjectiveResults(args: {
     if (extractedValue === null) {
       onTrack = null;
       onTrackStatus = "not_assessed";
-    } else if (touchpoint.canResolveObjective && currentStage && obj.achievedStageId && currentStage.id === obj.achievedStageId) {
+    } else if (config.canResolveObjective && currentStage && obj.achievedStageId && currentStage.id === obj.achievedStageId) {
       onTrack = true;
       onTrackStatus = "achieved";
     } else if (band && currentStage) {
@@ -128,8 +144,9 @@ export function computeActivationObjectiveResults(args: {
       callId,
       objectiveId: obj.id,
       objectiveName: obj.name,
-      touchpointId: touchpoint.id,
-      touchpointName: touchpoint.name,
+      interactionId: interaction.id,
+      interactionKey: interaction.key,
+      interactionName: interaction.name,
       callDate,
       anchorEventDate: anchorDate,
       targetDate,
@@ -157,13 +174,15 @@ function makeIneligibleResult(
   anchorDate: string | null,
   processedAt: string,
   reason: string,
+  interaction?: ActivationInteraction | null,
 ): CallActivationObjectiveResult {
   return {
     callId,
     objectiveId: obj.id,
     objectiveName: obj.name,
-    touchpointId: "",
-    touchpointName: "",
+    interactionId: interaction?.id ?? null,
+    interactionKey: interaction?.key ?? "",
+    interactionName: interaction?.name ?? "",
     callDate,
     anchorEventDate: anchorDate,
     targetDate: null,

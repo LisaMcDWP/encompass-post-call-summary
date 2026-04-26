@@ -219,11 +219,11 @@ export const activationObjectiveThresholdSchema = z.object({
 });
 export type ActivationObjectiveThreshold = z.infer<typeof activationObjectiveThresholdSchema>;
 
-export const activationObjectiveTouchpointStageMappingSchema = z.object({
+export const activationObjectiveStageMappingSchema = z.object({
   extractedValue: z.string().min(1),
   stageId: z.string().min(1),
 });
-export type ActivationObjectiveTouchpointStageMapping = z.infer<typeof activationObjectiveTouchpointStageMappingSchema>;
+export type ActivationObjectiveStageMapping = z.infer<typeof activationObjectiveStageMappingSchema>;
 
 export const activationObjectiveInclusionRulesSchema = z.object({
   requirePcpAssigned: z.boolean().default(false),
@@ -232,10 +232,29 @@ export const activationObjectiveInclusionRulesSchema = z.object({
 });
 export type ActivationObjectiveInclusionRules = z.infer<typeof activationObjectiveInclusionRulesSchema>;
 
-export const activationObjectiveTouchpointSchema = z.object({
-  id: z.string().min(1),
+export const insertActivationInteractionSchema = z.object({
+  key: z.string().min(1).regex(/^[a-z0-9_]+$/, "Key must use lowercase letters, numbers, and underscores"),
   name: z.string().min(1),
-  expectedDayOffset: z.number().int(),
+  description: z.string().default(""),
+  expectedDayOffset: z.number().int().nullable().default(null),
+  isActive: z.boolean().default(true),
+  displayOrder: z.number().int().default(0),
+});
+export type InsertActivationInteraction = z.infer<typeof insertActivationInteractionSchema>;
+
+export interface ActivationInteraction {
+  id: number;
+  clientPathwayId: number;
+  key: string;
+  name: string;
+  description: string;
+  expectedDayOffset: number | null;
+  isActive: boolean;
+  displayOrder: number;
+}
+
+export const activationObjectiveInteractionConfigSchema = z.object({
+  interactionId: z.number().int(),
   canResolveObjective: z.boolean().default(true),
   inclusionRules: activationObjectiveInclusionRulesSchema.default({
     requirePcpAssigned: false,
@@ -243,10 +262,10 @@ export const activationObjectiveTouchpointSchema = z.object({
     customRules: [],
   }),
   extractedEnumValues: z.array(z.string()).default([]),
-  stageMappings: z.array(activationObjectiveTouchpointStageMappingSchema).default([]),
+  stageMappings: z.array(activationObjectiveStageMappingSchema).default([]),
   promptGuidance: z.string().default(""),
 });
-export type ActivationObjectiveTouchpoint = z.infer<typeof activationObjectiveTouchpointSchema>;
+export type ActivationObjectiveInteractionConfig = z.infer<typeof activationObjectiveInteractionConfigSchema>;
 
 export const insertActivationObjectiveSchema = z.object({
   name: z.string().min(1),
@@ -254,11 +273,12 @@ export const insertActivationObjectiveSchema = z.object({
   description: z.string().default(""),
   anchorEventType: z.enum(["discharge", "enrollment", "procedure", "custom"]).default("discharge"),
   anchorContextKey: z.string().min(1),
+  interactionContextKey: z.string().min(1).default("interaction_key"),
   windowDays: z.number().int().min(1),
   stages: z.array(activationObjectiveStageSchema).default([]),
   achievedStageId: z.string().default(""),
   thresholds: z.array(activationObjectiveThresholdSchema).default([]),
-  touchpoints: z.array(activationObjectiveTouchpointSchema).default([]),
+  interactions: z.array(activationObjectiveInteractionConfigSchema).default([]),
   isActive: z.boolean().default(true),
   displayOrder: z.number().int().default(0),
   promptGuidance: z.string().default(""),
@@ -272,11 +292,12 @@ export interface ActivationObjective {
   description: string;
   anchorEventType: string;
   anchorContextKey: string;
+  interactionContextKey: string;
   windowDays: number;
   stages: ActivationObjectiveStage[];
   achievedStageId: string;
   thresholds: ActivationObjectiveThreshold[];
-  touchpoints: ActivationObjectiveTouchpoint[];
+  interactions: ActivationObjectiveInteractionConfig[];
   isActive: boolean;
   displayOrder: number;
   promptGuidance: string;
@@ -286,8 +307,9 @@ export interface CallActivationObjectiveResult {
   callId: string;
   objectiveId: number;
   objectiveName: string;
-  touchpointId: string;
-  touchpointName: string;
+  interactionId: number | null;
+  interactionKey: string;
+  interactionName: string;
   callDate: string;
   anchorEventDate: string | null;
   targetDate: string | null;

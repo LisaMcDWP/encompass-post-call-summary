@@ -705,8 +705,9 @@ export async function ensureCallActivationObjectivesTable(targetProjectId?: stri
             { name: "call_id", type: "STRING", mode: "REQUIRED" },
             { name: "objective_id", type: "INTEGER", mode: "REQUIRED" },
             { name: "objective_name", type: "STRING", mode: "REQUIRED" },
-            { name: "touchpoint_id", type: "STRING", mode: "NULLABLE" },
-            { name: "touchpoint_name", type: "STRING", mode: "NULLABLE" },
+            { name: "interaction_id", type: "INTEGER", mode: "NULLABLE" },
+            { name: "interaction_key", type: "STRING", mode: "NULLABLE" },
+            { name: "interaction_name", type: "STRING", mode: "NULLABLE" },
             { name: "call_date", type: "STRING", mode: "NULLABLE" },
             { name: "anchor_event_date", type: "STRING", mode: "NULLABLE" },
             { name: "target_date", type: "STRING", mode: "NULLABLE" },
@@ -725,6 +726,24 @@ export async function ensureCallActivationObjectivesTable(targetProjectId?: stri
         },
       });
       console.log(`Created call_activation_objectives table in project ${resolveProjectId(targetProjectId)}`);
+    } else {
+      // Idempotent migration: add interaction_* columns if missing on legacy tables.
+      const projectId = resolveProjectId(targetProjectId);
+      const fullTable = `\`${projectId}.${DATASET_ID}.${CALL_ACTIVATION_OBJECTIVES_TABLE_ID}\``;
+      const client = getOutputBigQueryClient(targetProjectId);
+      for (const stmt of [
+        `ALTER TABLE ${fullTable} ADD COLUMN IF NOT EXISTS interaction_id INT64`,
+        `ALTER TABLE ${fullTable} ADD COLUMN IF NOT EXISTS interaction_key STRING`,
+        `ALTER TABLE ${fullTable} ADD COLUMN IF NOT EXISTS interaction_name STRING`,
+      ]) {
+        try {
+          await client.query({ query: stmt });
+        } catch (alterErr: any) {
+          if (!/already exists/i.test(alterErr.message || "")) {
+            console.warn(`call_activation_objectives migration warning: ${alterErr.message}`);
+          }
+        }
+      }
     }
   } catch (error: any) {
     console.error("Failed to ensure call_activation_objectives table:", error.message);
@@ -751,8 +770,9 @@ export async function insertCallActivationObjectives(callId: string, results: Ca
       call_id: callId,
       objective_id: r.objectiveId,
       objective_name: r.objectiveName,
-      touchpoint_id: r.touchpointId || null,
-      touchpoint_name: r.touchpointName || null,
+      interaction_id: r.interactionId ?? null,
+      interaction_key: r.interactionKey || null,
+      interaction_name: r.interactionName || null,
       call_date: r.callDate || null,
       anchor_event_date: r.anchorEventDate || null,
       target_date: r.targetDate || null,

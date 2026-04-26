@@ -10,6 +10,7 @@ import Home from "@/pages/Home";
 import Reference from "@/pages/Reference";
 import Observations from "@/pages/Observations";
 import ActivationObjectives from "@/pages/ActivationObjectives";
+import ActivationInteractions from "@/pages/ActivationInteractions";
 import SummaryPrompt from "@/pages/SummaryPrompt";
 import ContextParameters from "@/pages/ContextParameters";
 import GeneratedPrompt from "@/pages/GeneratedPrompt";
@@ -35,6 +36,7 @@ function Router() {
         <Route path="/calls" component={CallHistory} />
         <Route path="/overview" component={ProjectOverview} />
         <Route path="/observations" component={Observations} />
+        <Route path="/activation-interactions" component={ActivationInteractions} />
         <Route path="/activation-objectives" component={ActivationObjectives} />
         <Route path="/dispositions" component={Dispositions} />
         <Route path="/review-items" component={ReviewItems} />

@@ -5,7 +5,8 @@ import type {
   DispositionCategory, InsertDispositionCategory, DispositionDetail, InsertDispositionDetail,
   CallReviewItem, InsertCallReviewItem,
   ActivationObjective, InsertActivationObjective,
-  ActivationObjectiveStage, ActivationObjectiveThreshold, ActivationObjectiveTouchpoint,
+  ActivationObjectiveStage, ActivationObjectiveThreshold, ActivationObjectiveInteractionConfig,
+  ActivationInteraction, InsertActivationInteraction,
 } from "@shared/schema";
 
 const DATASET_ID = "call_information";
@@ -18,6 +19,7 @@ const DISPOSITION_CATEGORIES_TABLE_ID = "disposition_categories";
 const DISPOSITION_DETAILS_TABLE_ID = "disposition_details";
 const CALL_REVIEW_ITEMS_TABLE_ID = "call_review_items";
 const ACTIVATION_OBJECTIVES_TABLE_ID = "activation_objectives";
+const ACTIVATION_INTERACTIONS_TABLE_ID = "activation_interactions";
 
 let bigquery: BigQuery | null = null;
 
@@ -43,6 +45,7 @@ let clientPathwayTableInitialized = false;
 let dispositionCategoriesTableInitialized = false;
 let dispositionDetailsTableInitialized = false;
 let activationObjectivesTableInitialized = false;
+let activationInteractionsTableInitialized = false;
 
 async function ensureSettingsTable(): Promise<void> {
   if (settingsTableInitialized) return;
@@ -421,11 +424,12 @@ async function ensureActivationObjectivesTable(): Promise<void> {
         description STRING,
         anchor_event_type STRING NOT NULL,
         anchor_context_key STRING NOT NULL,
+        interaction_context_key STRING,
         window_days INT64 NOT NULL,
         stages STRING,
         achieved_stage_id STRING,
         thresholds STRING,
-        touchpoints STRING,
+        interactions STRING,
         is_active BOOL NOT NULL,
         display_order INT64 NOT NULL,
         prompt_guidance STRING,
@@ -441,16 +445,30 @@ async function ensureActivationObjectivesTable(): Promise<void> {
     }
   }
 
+  // Idempotent migration: add new columns if missing (legacy table had `touchpoints` column).
+  for (const stmt of [
+    `ALTER TABLE \`${fullTable}\` ADD COLUMN IF NOT EXISTS interaction_context_key STRING`,
+    `ALTER TABLE \`${fullTable}\` ADD COLUMN IF NOT EXISTS interactions STRING`,
+  ]) {
+    try {
+      await client.query({ query: stmt });
+    } catch (err: any) {
+      if (!err.message?.includes("Column already exists") && !err.message?.includes("already exists")) {
+        console.warn(`Schema migration warning for ${ACTIVATION_OBJECTIVES_TABLE_ID}: ${err.message}`);
+      }
+    }
+  }
+
   activationObjectivesTableInitialized = true;
 }
 
 function rowToActivationObjective(row: any): ActivationObjective {
   let stages: ActivationObjectiveStage[] = [];
   let thresholds: ActivationObjectiveThreshold[] = [];
-  let touchpoints: ActivationObjectiveTouchpoint[] = [];
+  let interactions: ActivationObjectiveInteractionConfig[] = [];
   try { if (row.stages) stages = JSON.parse(row.stages); } catch {}
   try { if (row.thresholds) thresholds = JSON.parse(row.thresholds); } catch {}
-  try { if (row.touchpoints) touchpoints = JSON.parse(row.touchpoints); } catch {}
+  try { if (row.interactions) interactions = JSON.parse(row.interactions); } catch {}
   return {
     id: row.id,
     name: row.name,
@@ -458,16 +476,66 @@ function rowToActivationObjective(row: any): ActivationObjective {
     description: row.description || "",
     anchorEventType: row.anchor_event_type,
     anchorContextKey: row.anchor_context_key,
+    interactionContextKey: row.interaction_context_key || "interaction_key",
     windowDays: typeof row.window_days === "object" && row.window_days !== null
       ? Number(row.window_days.value ?? row.window_days)
       : Number(row.window_days),
     stages,
     achievedStageId: row.achieved_stage_id || "",
     thresholds,
-    touchpoints,
+    interactions,
     isActive: row.is_active,
     displayOrder: row.display_order,
     promptGuidance: row.prompt_guidance || "",
+  };
+}
+
+async function ensureActivationInteractionsTable(): Promise<void> {
+  if (activationInteractionsTableInitialized) return;
+
+  const client = getBigQueryClient();
+  const projectId = process.env.GCP_PROJECT_ID;
+  const fullTable = `${projectId}.${DATASET_ID}.${ACTIVATION_INTERACTIONS_TABLE_ID}`;
+
+  try {
+    await client.query({
+      query: `CREATE TABLE IF NOT EXISTS \`${fullTable}\` (
+        id INT64 NOT NULL,
+        client_pathway_id INT64 NOT NULL,
+        \`key\` STRING NOT NULL,
+        name STRING NOT NULL,
+        description STRING,
+        expected_day_offset INT64,
+        is_active BOOL NOT NULL,
+        display_order INT64 NOT NULL
+      )`,
+    });
+    console.log(`BigQuery table ${DATASET_ID}.${ACTIVATION_INTERACTIONS_TABLE_ID} ready.`);
+  } catch (err: any) {
+    if (err.message?.includes("Already Exists")) {
+      console.log(`BigQuery table ${DATASET_ID}.${ACTIVATION_INTERACTIONS_TABLE_ID} already exists.`);
+    } else {
+      throw err;
+    }
+  }
+
+  activationInteractionsTableInitialized = true;
+}
+
+function rowToActivationInteraction(row: any): ActivationInteraction {
+  return {
+    id: row.id,
+    clientPathwayId: row.client_pathway_id,
+    key: row.key,
+    name: row.name,
+    description: row.description || "",
+    expectedDayOffset: row.expected_day_offset === null || row.expected_day_offset === undefined
+      ? null
+      : (typeof row.expected_day_offset === "object" && row.expected_day_offset !== null
+          ? Number(row.expected_day_offset.value ?? row.expected_day_offset)
+          : Number(row.expected_day_offset)),
+    isActive: row.is_active,
+    displayOrder: row.display_order,
   };
 }
 
@@ -533,6 +601,14 @@ export interface IStorage {
   updateActivationObjective(id: number, data: Partial<InsertActivationObjective>, clientPathwayId?: number): Promise<ActivationObjective | undefined>;
   deleteActivationObjective(id: number, clientPathwayId?: number): Promise<boolean>;
   reorderActivationObjectives(orderedIds: number[], clientPathwayId?: number): Promise<void>;
+
+  getActivationInteractions(clientPathwayId: number): Promise<ActivationInteraction[]>;
+  getActiveActivationInteractions(clientPathwayId: number): Promise<ActivationInteraction[]>;
+  getActivationInteraction(id: number, clientPathwayId?: number): Promise<ActivationInteraction | undefined>;
+  createActivationInteraction(clientPathwayId: number, data: InsertActivationInteraction): Promise<ActivationInteraction>;
+  updateActivationInteraction(id: number, data: Partial<InsertActivationInteraction>, clientPathwayId?: number): Promise<ActivationInteraction | undefined>;
+  deleteActivationInteraction(id: number, clientPathwayId?: number): Promise<boolean>;
+  reorderActivationInteractions(orderedIds: number[], clientPathwayId?: number): Promise<void>;
 }
 
 export class BigQueryStorage implements IStorage {
@@ -1281,11 +1357,12 @@ export class BigQueryStorage implements IStorage {
       description: data.description || "",
       anchor_event_type: data.anchorEventType || "discharge",
       anchor_context_key: data.anchorContextKey,
+      interaction_context_key: data.interactionContextKey || "interaction_key",
       window_days: data.windowDays,
       stages: JSON.stringify(data.stages || []),
       achieved_stage_id: data.achievedStageId || "",
       thresholds: JSON.stringify(data.thresholds || []),
-      touchpoints: JSON.stringify(data.touchpoints || []),
+      interactions: JSON.stringify(data.interactions || []),
       is_active: data.isActive !== false,
       display_order: data.displayOrder ?? 0,
       prompt_guidance: data.promptGuidance || "",
@@ -1293,7 +1370,7 @@ export class BigQueryStorage implements IStorage {
     };
 
     await client.query({
-      query: `INSERT INTO ${table} (id, name, display_name, description, anchor_event_type, anchor_context_key, window_days, stages, achieved_stage_id, thresholds, touchpoints, is_active, display_order, prompt_guidance, client_pathway_id) VALUES (@id, @name, @display_name, @description, @anchor_event_type, @anchor_context_key, @window_days, @stages, @achieved_stage_id, @thresholds, @touchpoints, @is_active, @display_order, @prompt_guidance, @client_pathway_id)`,
+      query: `INSERT INTO ${table} (id, name, display_name, description, anchor_event_type, anchor_context_key, interaction_context_key, window_days, stages, achieved_stage_id, thresholds, interactions, is_active, display_order, prompt_guidance, client_pathway_id) VALUES (@id, @name, @display_name, @description, @anchor_event_type, @anchor_context_key, @interaction_context_key, @window_days, @stages, @achieved_stage_id, @thresholds, @interactions, @is_active, @display_order, @prompt_guidance, @client_pathway_id)`,
       params: row,
     });
 
@@ -1314,11 +1391,12 @@ export class BigQueryStorage implements IStorage {
     if (data.description !== undefined) { setClauses.push("description = @description"); params.description = data.description; }
     if (data.anchorEventType !== undefined) { setClauses.push("anchor_event_type = @anchorEventType"); params.anchorEventType = data.anchorEventType; }
     if (data.anchorContextKey !== undefined) { setClauses.push("anchor_context_key = @anchorContextKey"); params.anchorContextKey = data.anchorContextKey; }
+    if (data.interactionContextKey !== undefined) { setClauses.push("interaction_context_key = @interactionContextKey"); params.interactionContextKey = data.interactionContextKey; }
     if (data.windowDays !== undefined) { setClauses.push("window_days = @windowDays"); params.windowDays = data.windowDays; }
     if (data.stages !== undefined) { setClauses.push("stages = @stages"); params.stages = JSON.stringify(data.stages); }
     if (data.achievedStageId !== undefined) { setClauses.push("achieved_stage_id = @achievedStageId"); params.achievedStageId = data.achievedStageId; }
     if (data.thresholds !== undefined) { setClauses.push("thresholds = @thresholds"); params.thresholds = JSON.stringify(data.thresholds); }
-    if (data.touchpoints !== undefined) { setClauses.push("touchpoints = @touchpoints"); params.touchpoints = JSON.stringify(data.touchpoints); }
+    if (data.interactions !== undefined) { setClauses.push("interactions = @interactions"); params.interactions = JSON.stringify(data.interactions); }
     if (data.isActive !== undefined) { setClauses.push("is_active = @isActive"); params.isActive = data.isActive; }
     if (data.displayOrder !== undefined) { setClauses.push("display_order = @displayOrder"); params.displayOrder = data.displayOrder; }
     if (data.promptGuidance !== undefined) { setClauses.push("prompt_guidance = @promptGuidance"); params.promptGuidance = data.promptGuidance; }
@@ -1345,6 +1423,138 @@ export class BigQueryStorage implements IStorage {
     await ensureActivationObjectivesTable();
     const client = getBigQueryClient();
     const table = this.getActivationObjectivesTable();
+    const cpClause = clientPathwayId != null ? " AND client_pathway_id = @cpId" : "";
+    for (let i = 0; i < orderedIds.length; i++) {
+      const params: Record<string, any> = { order: i, id: orderedIds[i] };
+      if (clientPathwayId != null) params.cpId = clientPathwayId;
+      await client.query({ query: `UPDATE ${table} SET display_order = @order WHERE id = @id${cpClause}`, params });
+    }
+  }
+
+  private getActivationInteractionsTable(): string {
+    const projectId = process.env.GCP_PROJECT_ID;
+    return `\`${projectId}.${DATASET_ID}.${ACTIVATION_INTERACTIONS_TABLE_ID}\``;
+  }
+
+  async getActivationInteractions(clientPathwayId: number): Promise<ActivationInteraction[]> {
+    await ensureActivationInteractionsTable();
+    const client = getBigQueryClient();
+    const table = this.getActivationInteractionsTable();
+    const [rows] = await client.query({
+      query: `SELECT * FROM ${table} WHERE client_pathway_id = @cpId ORDER BY display_order ASC, id ASC`,
+      params: { cpId: clientPathwayId },
+    });
+    return rows.map(rowToActivationInteraction);
+  }
+
+  async getActiveActivationInteractions(clientPathwayId: number): Promise<ActivationInteraction[]> {
+    await ensureActivationInteractionsTable();
+    const client = getBigQueryClient();
+    const table = this.getActivationInteractionsTable();
+    const [rows] = await client.query({
+      query: `SELECT * FROM ${table} WHERE client_pathway_id = @cpId AND is_active = TRUE ORDER BY display_order ASC, id ASC`,
+      params: { cpId: clientPathwayId },
+    });
+    return rows.map(rowToActivationInteraction);
+  }
+
+  async getActivationInteraction(id: number, clientPathwayId?: number): Promise<ActivationInteraction | undefined> {
+    await ensureActivationInteractionsTable();
+    const client = getBigQueryClient();
+    const table = this.getActivationInteractionsTable();
+    const cpClause = clientPathwayId != null ? " AND client_pathway_id = @cpId" : "";
+    const params: Record<string, any> = { id };
+    if (clientPathwayId != null) params.cpId = clientPathwayId;
+    const [rows] = await client.query({ query: `SELECT * FROM ${table} WHERE id = @id${cpClause}`, params });
+    return rows.length > 0 ? rowToActivationInteraction(rows[0]) : undefined;
+  }
+
+  async createActivationInteraction(clientPathwayId: number, data: InsertActivationInteraction): Promise<ActivationInteraction> {
+    await ensureActivationInteractionsTable();
+    const client = getBigQueryClient();
+    const table = this.getActivationInteractionsTable();
+    const id = await this.getNextIdForTable(table);
+
+    // Enforce unique key per CP
+    const existing = await this.getActivationInteractions(clientPathwayId);
+    if (existing.some((i) => i.key === data.key)) {
+      throw new Error(`Interaction key '${data.key}' already exists for this Client Pathway`);
+    }
+
+    const row = {
+      id,
+      client_pathway_id: clientPathwayId,
+      key: data.key,
+      name: data.name,
+      description: data.description || "",
+      expected_day_offset: data.expectedDayOffset === undefined ? null : data.expectedDayOffset,
+      is_active: data.isActive !== false,
+      display_order: data.displayOrder ?? 0,
+    };
+
+    await client.query({
+      query: `INSERT INTO ${table} (id, client_pathway_id, \`key\`, name, description, expected_day_offset, is_active, display_order) VALUES (@id, @client_pathway_id, @key, @name, @description, @expected_day_offset, @is_active, @display_order)`,
+      params: row,
+      types: { expected_day_offset: "INT64" },
+    });
+
+    return rowToActivationInteraction(row);
+  }
+
+  async updateActivationInteraction(id: number, data: Partial<InsertActivationInteraction>, clientPathwayId?: number): Promise<ActivationInteraction | undefined> {
+    await ensureActivationInteractionsTable();
+    const client = getBigQueryClient();
+    const table = this.getActivationInteractionsTable();
+    const existing = await this.getActivationInteraction(id, clientPathwayId);
+    if (!existing) return undefined;
+
+    if (data.key !== undefined && data.key !== existing.key) {
+      const all = await this.getActivationInteractions(existing.clientPathwayId);
+      if (all.some((i) => i.id !== id && i.key === data.key)) {
+        throw new Error(`Interaction key '${data.key}' already exists for this Client Pathway`);
+      }
+    }
+
+    const setClauses: string[] = [];
+    const params: Record<string, any> = { id };
+    const types: Record<string, string> = {};
+    if (data.key !== undefined) { setClauses.push("`key` = @key"); params.key = data.key; }
+    if (data.name !== undefined) { setClauses.push("name = @name"); params.name = data.name; }
+    if (data.description !== undefined) { setClauses.push("description = @description"); params.description = data.description; }
+    if (data.expectedDayOffset !== undefined) {
+      setClauses.push("expected_day_offset = @expected_day_offset");
+      params.expected_day_offset = data.expectedDayOffset;
+      types.expected_day_offset = "INT64";
+    }
+    if (data.isActive !== undefined) { setClauses.push("is_active = @is_active"); params.is_active = data.isActive; }
+    if (data.displayOrder !== undefined) { setClauses.push("display_order = @display_order"); params.display_order = data.displayOrder; }
+    if (setClauses.length === 0) return existing;
+
+    await client.query({
+      query: `UPDATE ${table} SET ${setClauses.join(", ")} WHERE id = @id`,
+      params,
+      types: Object.keys(types).length > 0 ? types : undefined,
+    });
+    return this.getActivationInteraction(id);
+  }
+
+  async deleteActivationInteraction(id: number, clientPathwayId?: number): Promise<boolean> {
+    await ensureActivationInteractionsTable();
+    const client = getBigQueryClient();
+    const table = this.getActivationInteractionsTable();
+    const existing = await this.getActivationInteraction(id, clientPathwayId);
+    if (!existing) return false;
+    const cpClause = clientPathwayId != null ? " AND client_pathway_id = @cpId" : "";
+    const params: Record<string, any> = { id };
+    if (clientPathwayId != null) params.cpId = clientPathwayId;
+    await client.query({ query: `DELETE FROM ${table} WHERE id = @id${cpClause}`, params });
+    return true;
+  }
+
+  async reorderActivationInteractions(orderedIds: number[], clientPathwayId?: number): Promise<void> {
+    await ensureActivationInteractionsTable();
+    const client = getBigQueryClient();
+    const table = this.getActivationInteractionsTable();
     const cpClause = clientPathwayId != null ? " AND client_pathway_id = @cpId" : "";
     for (let i = 0; i < orderedIds.length; i++) {
       const params: Record<string, any> = { order: i, id: orderedIds[i] };

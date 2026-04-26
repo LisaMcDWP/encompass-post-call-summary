@@ -5,8 +5,21 @@ import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBa
 import { computeActivationObjectiveResults } from "./activationObjectives";
 import { randomUUID, createHash } from "crypto";
 import { storage } from "./storage";
-import { insertObservationSchema, enumValueSchema, insertContextParameterSchema, insertCallQAPromptSchema, insertDispositionCategorySchema, insertDispositionDetailSchema, insertCallReviewItemSchema, insertActivationObjectiveSchema } from "@shared/schema";
+import { insertObservationSchema, enumValueSchema, insertContextParameterSchema, insertCallQAPromptSchema, insertDispositionCategorySchema, insertDispositionDetailSchema, insertCallReviewItemSchema, insertActivationObjectiveSchema, insertActivationInteractionSchema, type ActivationObjective } from "@shared/schema";
 import { z } from "zod";
+
+function ensureInteractionContextKeys(
+  contextValues: Record<string, string>,
+  contextSource: Record<string, any>,
+  objectives: ActivationObjective[],
+): void {
+  for (const obj of objectives) {
+    const key = obj.interactionContextKey || "interaction_key";
+    if (contextValues[key] === undefined && contextSource[key] !== undefined && contextSource[key] !== null) {
+      contextValues[key] = String(contextSource[key]);
+    }
+  }
+}
 
 async function getPromptWithVersion(clientPathwayId: number) {
   const activeObs = await storage.getActiveObservations(clientPathwayId);
@@ -149,9 +162,11 @@ export async function registerRoutes(
       const dispDetails = await storage.getDispositionDetails(cpId);
       const dispConfig: DispositionConfig = { categories: dispCategories, details: dispDetails };
       const activeObjectives = await storage.getActiveActivationObjectives(cpId);
+      const activeInteractions = activeObjectives.length > 0 ? await storage.getActiveActivationInteractions(cpId) : [];
+      ensureInteractionContextKeys(contextValues, contextSource, activeObjectives);
       const syncCallDate = processed_datetime || new Date().toISOString();
       const activationContext: ActivationObjectivesContext | undefined = activeObjectives.length > 0
-        ? { objectives: activeObjectives, callDate: syncCallDate, contextValues }
+        ? { objectives: activeObjectives, activeInteractions, callDate: syncCallDate, contextValues }
         : undefined;
 
       const { analysis, tokenUsage } = await analyzeTranscript(
@@ -213,6 +228,7 @@ export async function registerRoutes(
             callDate: syncCallDate,
             contextValues,
             objectives: activeObjectives,
+            activeInteractions,
             extractions: analysis.activation_objectives || [],
             processedAt,
           })
@@ -352,9 +368,11 @@ export async function registerRoutes(
         }
 
         const asyncActiveObjectives = await storage.getActiveActivationObjectives(cpId);
+        const asyncActiveInteractions = asyncActiveObjectives.length > 0 ? await storage.getActiveActivationInteractions(cpId) : [];
+        ensureInteractionContextKeys(contextValues, contextSource, asyncActiveObjectives);
         const asyncCallDate = processed_datetime || new Date().toISOString();
         const asyncActivationContext: ActivationObjectivesContext | undefined = asyncActiveObjectives.length > 0
-          ? { objectives: asyncActiveObjectives, callDate: asyncCallDate, contextValues }
+          ? { objectives: asyncActiveObjectives, activeInteractions: asyncActiveInteractions, callDate: asyncCallDate, contextValues }
           : undefined;
 
         console.log(`[AWELL-ASYNC] Running fast Gemini analysis inline for ${resolvedSourceId}`);
@@ -445,6 +463,7 @@ export async function registerRoutes(
                       callDate: asyncCallDate,
                       contextValues,
                       objectives: asyncActiveObjectives,
+                      activeInteractions: asyncActiveInteractions,
                       extractions: (fastAnalysis.activation_objectives as ActivationObjectiveExtraction[]) || [],
                       processedAt,
                     })
@@ -577,9 +596,11 @@ export async function registerRoutes(
       const dispositionConfig: DispositionConfig = { categories: dispCategories, details: dispDetails };
 
       const syncAwellObjectives = await storage.getActiveActivationObjectives(cpId);
+      const syncAwellInteractions = syncAwellObjectives.length > 0 ? await storage.getActiveActivationInteractions(cpId) : [];
+      ensureInteractionContextKeys(contextValues, contextSource, syncAwellObjectives);
       const syncAwellCallDate = processed_datetime || new Date().toISOString();
       const syncAwellActivationContext: ActivationObjectivesContext | undefined = syncAwellObjectives.length > 0
-        ? { objectives: syncAwellObjectives, callDate: syncAwellCallDate, contextValues }
+        ? { objectives: syncAwellObjectives, activeInteractions: syncAwellInteractions, callDate: syncAwellCallDate, contextValues }
         : undefined;
 
       const { analysis: fastAnalysis, tokenUsage: fastTokenUsage } = await analyzeTranscriptFast(
@@ -673,6 +694,7 @@ export async function registerRoutes(
                 callDate: syncAwellCallDate,
                 contextValues,
                 objectives: syncAwellObjectives,
+                activeInteractions: syncAwellInteractions,
                 extractions: (fastAnalysis.activation_objectives as ActivationObjectiveExtraction[]) || [],
                 processedAt,
               })
@@ -877,6 +899,91 @@ export async function registerRoutes(
     const deleted = await storage.deleteObservation(id, cpId);
     if (!deleted) return res.status(404).json({ message: "Observation not found" });
     res.json({ success: true });
+  });
+
+  // ===== Activation Interactions (per-CP, top-level) =====
+  app.get("/api/activation-interactions", async (req, res) => {
+    const cpId = Number(req.query.clientPathwayId);
+    if (!cpId) return res.status(400).json({ message: "clientPathwayId query param required" });
+    try {
+      const items = await storage.getActivationInteractions(cpId);
+      res.json(items);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/activation-interactions/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+    const cpId = Number(req.query.clientPathwayId) || undefined;
+    try {
+      const item = await storage.getActivationInteraction(id, cpId);
+      if (!item) return res.status(404).json({ message: "Activation interaction not found" });
+      res.json(item);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/activation-interactions", async (req, res) => {
+    const cpId = Number(req.body.clientPathwayId || req.query.clientPathwayId);
+    if (!cpId) return res.status(400).json({ message: "clientPathwayId is required" });
+    const parsed = insertActivationInteractionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.errors.map(e => e.message).join(", "), errors: parsed.error.errors });
+    }
+    try {
+      const item = await storage.createActivationInteraction(cpId, parsed.data);
+      res.status(201).json(item);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/activation-interactions/reorder", async (req, res) => {
+    const { orderedIds } = req.body;
+    if (!Array.isArray(orderedIds) || !orderedIds.every((id: any) => typeof id === "number")) {
+      return res.status(400).json({ message: "orderedIds must be an array of numbers" });
+    }
+    const cpId = Number(req.body.clientPathwayId || req.query.clientPathwayId) || undefined;
+    try {
+      await storage.reorderActivationInteractions(orderedIds, cpId);
+      const items = cpId ? await storage.getActivationInteractions(cpId) : [];
+      res.json(items);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/activation-interactions/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+    const parsed = insertActivationInteractionSchema.partial().safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.errors.map(e => e.message).join(", "), errors: parsed.error.errors });
+    }
+    const cpId = Number(req.body.clientPathwayId || req.query.clientPathwayId) || undefined;
+    try {
+      const item = await storage.updateActivationInteraction(id, parsed.data, cpId);
+      if (!item) return res.status(404).json({ message: "Activation interaction not found" });
+      res.json(item);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/activation-interactions/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+    const cpId = Number(req.query.clientPathwayId) || undefined;
+    try {
+      const deleted = await storage.deleteActivationInteraction(id, cpId);
+      if (!deleted) return res.status(404).json({ message: "Activation interaction not found" });
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
   });
 
   app.get("/api/activation-objectives", async (req, res) => {
@@ -1765,7 +1872,8 @@ export async function registerRoutes(
       const batchDispConfig: DispositionConfig = { categories: batchDispCats, details: batchDispDets };
       console.log(`Batch job: disposition config loaded — ${batchDispCats.length} categories, ${batchDispDets.length} details for CP ${resolvedBatchCpId}`);
       const batchActiveObjectives = await storage.getActiveActivationObjectives(resolvedBatchCpId);
-      console.log(`Batch job: activation objectives loaded — ${batchActiveObjectives.length} active for CP ${resolvedBatchCpId}`);
+      const batchActiveInteractions = batchActiveObjectives.length > 0 ? await storage.getActiveActivationInteractions(resolvedBatchCpId) : [];
+      console.log(`Batch job: activation objectives loaded — ${batchActiveObjectives.length} active, ${batchActiveInteractions.length} interactions for CP ${resolvedBatchCpId}`);
       const { prompt: _p, promptVersion, promptVersionDate } = await getPromptWithVersion(resolvedBatchCpId);
 
       const jobId = `batch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -1824,8 +1932,9 @@ export async function registerRoutes(
             const blandTs = item.bland_created_at?.value || item.bland_created_at || null;
             const callDate = blandTs ? new Date(blandTs).toISOString() : null;
             const batchActivationCallDate = callDate || new Date().toISOString();
+            ensureInteractionContextKeys(batchContext, batchContext, batchActiveObjectives);
             const batchActivationContext: ActivationObjectivesContext | undefined = batchActiveObjectives.length > 0
-              ? { objectives: batchActiveObjectives, callDate: batchActivationCallDate, contextValues: batchContext }
+              ? { objectives: batchActiveObjectives, activeInteractions: batchActiveInteractions, callDate: batchActivationCallDate, contextValues: batchContext }
               : undefined;
             const { analysis, tokenUsage } = await analyzeTranscript(
               callId,
@@ -1886,6 +1995,7 @@ export async function registerRoutes(
                   callDate: batchActivationCallDate,
                   contextValues: batchContext,
                   objectives: batchActiveObjectives,
+                  activeInteractions: batchActiveInteractions,
                   extractions: analysis.activation_objectives || [],
                   processedAt,
                 })

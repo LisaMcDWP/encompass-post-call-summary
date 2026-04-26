@@ -10,8 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Pencil, Trash2, X, Save, Loader2, Target, Calendar,
-  ArrowRight, GripVertical, ChevronDown, ChevronUp, Clock, AlertCircle,
+  ArrowRight, GripVertical, ChevronDown, ChevronUp, Clock, AlertCircle, MessageSquare,
 } from "lucide-react";
+import { Link } from "wouter";
 import { useClientPathway } from "@/contexts/ClientPathwayContext";
 
 type AnchorEventType = "discharge" | "enrollment" | "procedure" | "custom";
@@ -46,15 +47,24 @@ interface InclusionRules {
   customRules: string[];
 }
 
-interface Touchpoint {
-  id: string;
-  name: string;
-  expectedDayOffset: number;
+interface ObjectiveInteractionConfig {
+  interactionId: number;
   canResolveObjective: boolean;
   inclusionRules: InclusionRules;
   extractedEnumValues: string[];
   stageMappings: StageMapping[];
   promptGuidance: string;
+}
+
+interface ActivationInteraction {
+  id: number;
+  clientPathwayId: number;
+  key: string;
+  name: string;
+  description: string;
+  expectedDayOffset: number | null;
+  isActive: boolean;
+  displayOrder: number;
 }
 
 interface ActivationObjective {
@@ -68,7 +78,8 @@ interface ActivationObjective {
   stages: Stage[];
   achievedStageId: string;
   thresholds: Threshold[];
-  touchpoints: Touchpoint[];
+  interactions: ObjectiveInteractionConfig[];
+  interactionContextKey: string;
   isActive: boolean;
   displayOrder: number;
   promptGuidance: string;
@@ -115,7 +126,8 @@ function emptyForm(): Omit<ActivationObjective, "id"> {
     stages,
     achievedStageId: "stage_3",
     thresholds: DEFAULT_THRESHOLDS(stages),
-    touchpoints: [],
+    interactions: [],
+    interactionContextKey: "interaction_key",
     isActive: true,
     displayOrder: 0,
     promptGuidance: "",
@@ -144,6 +156,7 @@ export default function ActivationObjectives() {
   const { toast } = useToast();
   const [items, setItems] = useState<ActivationObjective[]>([]);
   const [contextParams, setContextParams] = useState<ContextParameter[]>([]);
+  const [interactions, setInteractions] = useState<ActivationInteraction[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<number | "new" | null>(null);
   const [form, setForm] = useState<Omit<ActivationObjective, "id">>(emptyForm());
@@ -162,12 +175,14 @@ export default function ActivationObjectives() {
     if (!selectedCPId) return;
     setLoading(true);
     try {
-      const [r1, r2] = await Promise.all([
+      const [r1, r2, r3] = await Promise.all([
         fetch(`/api/activation-objectives?clientPathwayId=${selectedCPId}`),
         fetch(`/api/context-parameters?clientPathwayId=${selectedCPId}`),
+        fetch(`/api/activation-interactions?clientPathwayId=${selectedCPId}`),
       ]);
       if (r1.ok) setItems(await r1.json());
       if (r2.ok) setContextParams(await r2.json());
+      if (r3.ok) setInteractions(await r3.json());
     } catch (err: any) {
       toast({ title: "Failed to load", description: err.message, variant: "destructive" });
     } finally {
@@ -187,7 +202,8 @@ export default function ActivationObjectives() {
       ...rest,
       stages: rest.stages || [],
       thresholds: rest.thresholds || [],
-      touchpoints: rest.touchpoints || [],
+      interactions: rest.interactions || [],
+      interactionContextKey: rest.interactionContextKey || "interaction_key",
     });
     setEditingId(id);
     setExpandedId(null);
@@ -204,17 +220,32 @@ export default function ActivationObjectives() {
       toast({ title: "Missing required fields", description: "Name, display name, anchor context key, and window days are required.", variant: "destructive" });
       return;
     }
+    if (!form.interactionContextKey.trim()) {
+      toast({ title: "Missing interaction context key", description: "Specify the request context field that carries the interaction key (e.g. interaction_key).", variant: "destructive" });
+      return;
+    }
     // Validate every extracted enum value has a stage mapping
-    for (const tp of form.touchpoints) {
-      const unmapped = tp.extractedEnumValues.filter(v => !tp.stageMappings.find(m => m.extractedValue === v && m.stageId));
+    for (const cfg of form.interactions) {
+      const interaction = interactions.find(i => i.id === cfg.interactionId);
+      const label = interaction?.name || `Interaction #${cfg.interactionId}`;
+      const unmapped = cfg.extractedEnumValues.filter(v => !cfg.stageMappings.find(m => m.extractedValue === v && m.stageId));
       if (unmapped.length > 0) {
         toast({
-          title: `Touchpoint "${tp.name}" has unmapped values`,
+          title: `"${label}" has unmapped values`,
           description: `Pick a stage for: ${unmapped.join(", ")}`,
           variant: "destructive",
         });
         return;
       }
+    }
+    // Validate no duplicate interaction references
+    const seenIds = new Set<number>();
+    for (const cfg of form.interactions) {
+      if (seenIds.has(cfg.interactionId)) {
+        toast({ title: "Duplicate interaction", description: "Each interaction can only be configured once per objective.", variant: "destructive" });
+        return;
+      }
+      seenIds.add(cfg.interactionId);
     }
     // Auto-heal: post_window only counts the achieved stage as on-track
     const healedThresholds = form.thresholds.map(t =>
@@ -288,11 +319,11 @@ export default function ActivationObjectives() {
       ...t,
       onTrackStageIds: t.onTrackStageIds.filter(id => id !== removed.id),
     }));
-    const newTouchpoints = form.touchpoints.map(tp => ({
-      ...tp,
-      stageMappings: tp.stageMappings.filter(m => m.stageId !== removed.id),
+    const newInteractions = form.interactions.map(cfg => ({
+      ...cfg,
+      stageMappings: cfg.stageMappings.filter(m => m.stageId !== removed.id),
     }));
-    updateForm({ stages: next, achievedStageId: newAchieved, thresholds: newThresholds, touchpoints: newTouchpoints });
+    updateForm({ stages: next, achievedStageId: newAchieved, thresholds: newThresholds, interactions: newInteractions });
   }
 
   function moveStage(idx: number, dir: -1 | 1) {
@@ -317,53 +348,51 @@ export default function ActivationObjectives() {
     updateForm({ thresholds: next });
   }
 
-  function addTouchpoint() {
-    const idx = form.touchpoints.length + 1;
-    const tp: Touchpoint = {
-      id: `tp_${Date.now()}`,
-      name: `Day ${idx} call`,
-      expectedDayOffset: idx,
+  function addInteractionConfig(interactionId: number) {
+    if (form.interactions.some(c => c.interactionId === interactionId)) return;
+    const cfg: ObjectiveInteractionConfig = {
+      interactionId,
       canResolveObjective: false,
       inclusionRules: { requirePcpAssigned: false, requireCompletedWithPatientOrCaregiver: true, customRules: [] },
       extractedEnumValues: [],
       stageMappings: [],
       promptGuidance: "",
     };
-    updateForm({ touchpoints: [...form.touchpoints, tp] });
+    updateForm({ interactions: [...form.interactions, cfg] });
   }
 
-  function updateTouchpoint(idx: number, patch: Partial<Touchpoint>) {
-    const next = form.touchpoints.map((t, i) => i === idx ? { ...t, ...patch } : t);
-    updateForm({ touchpoints: next });
+  function updateInteractionConfig(idx: number, patch: Partial<ObjectiveInteractionConfig>) {
+    const next = form.interactions.map((c, i) => i === idx ? { ...c, ...patch } : c);
+    updateForm({ interactions: next });
   }
 
-  function removeTouchpoint(idx: number) {
-    if (!confirm("Remove this touchpoint?")) return;
-    updateForm({ touchpoints: form.touchpoints.filter((_, i) => i !== idx) });
+  function removeInteractionConfig(idx: number) {
+    if (!confirm("Remove this interaction configuration from the objective?")) return;
+    updateForm({ interactions: form.interactions.filter((_, i) => i !== idx) });
   }
 
-  function addExtractedValue(tpIdx: number, value: string) {
+  function addExtractedValue(cfgIdx: number, value: string) {
     if (!value.trim()) return;
-    const tp = form.touchpoints[tpIdx];
-    if (tp.extractedEnumValues.includes(value.trim())) return;
-    updateTouchpoint(tpIdx, { extractedEnumValues: [...tp.extractedEnumValues, value.trim()] });
+    const cfg = form.interactions[cfgIdx];
+    if (cfg.extractedEnumValues.includes(value.trim())) return;
+    updateInteractionConfig(cfgIdx, { extractedEnumValues: [...cfg.extractedEnumValues, value.trim()] });
   }
 
-  function removeExtractedValue(tpIdx: number, value: string) {
-    const tp = form.touchpoints[tpIdx];
-    updateTouchpoint(tpIdx, {
-      extractedEnumValues: tp.extractedEnumValues.filter(v => v !== value),
-      stageMappings: tp.stageMappings.filter(m => m.extractedValue !== value),
+  function removeExtractedValue(cfgIdx: number, value: string) {
+    const cfg = form.interactions[cfgIdx];
+    updateInteractionConfig(cfgIdx, {
+      extractedEnumValues: cfg.extractedEnumValues.filter(v => v !== value),
+      stageMappings: cfg.stageMappings.filter(m => m.extractedValue !== value),
     });
   }
 
-  function setMapping(tpIdx: number, extractedValue: string, stageId: string) {
-    const tp = form.touchpoints[tpIdx];
-    const exists = tp.stageMappings.some(m => m.extractedValue === extractedValue);
+  function setMapping(cfgIdx: number, extractedValue: string, stageId: string) {
+    const cfg = form.interactions[cfgIdx];
+    const exists = cfg.stageMappings.some(m => m.extractedValue === extractedValue);
     const newMappings = exists
-      ? tp.stageMappings.map(m => m.extractedValue === extractedValue ? { ...m, stageId } : m)
-      : [...tp.stageMappings, { extractedValue, stageId }];
-    updateTouchpoint(tpIdx, { stageMappings: newMappings });
+      ? cfg.stageMappings.map(m => m.extractedValue === extractedValue ? { ...m, stageId } : m)
+      : [...cfg.stageMappings, { extractedValue, stageId }];
+    updateInteractionConfig(cfgIdx, { stageMappings: newMappings });
   }
 
   // ----------------------------------------
@@ -413,15 +442,16 @@ export default function ActivationObjectives() {
           updateForm={updateForm}
           contextParams={contextParams}
           anchorContextOptions={anchorContextOptions}
+          interactions={interactions}
           addStage={addStage}
           updateStage={updateStage}
           removeStage={removeStage}
           moveStage={moveStage}
           toggleThresholdStage={toggleThresholdStage}
           updateThreshold={updateThreshold}
-          addTouchpoint={addTouchpoint}
-          updateTouchpoint={updateTouchpoint}
-          removeTouchpoint={removeTouchpoint}
+          addInteractionConfig={addInteractionConfig}
+          updateInteractionConfig={updateInteractionConfig}
+          removeInteractionConfig={removeInteractionConfig}
           addExtractedValue={addExtractedValue}
           removeExtractedValue={removeExtractedValue}
           setMapping={setMapping}
@@ -494,7 +524,8 @@ function ObjectiveCard({
                 <span className="text-muted-foreground">Window:</span> <span className="font-medium">{obj.windowDays} days</span>
               </span>
               <span><span className="text-muted-foreground">Stages:</span> <span className="font-medium">{(obj.stages || []).length}</span></span>
-              <span><span className="text-muted-foreground">Touchpoints:</span> <span className="font-medium">{(obj.touchpoints || []).length}</span></span>
+              <span><span className="text-muted-foreground">Interactions:</span> <span className="font-medium">{(obj.interactions || []).length}</span></span>
+              <span><span className="text-muted-foreground">Context key:</span> <span className="font-mono text-xs">{obj.interactionContextKey || "interaction_key"}</span></span>
             </div>
           </div>
           <div className="flex items-center gap-1 shrink-0">
@@ -514,17 +545,15 @@ function ObjectiveCard({
           <div className="mt-4 pt-4 border-t space-y-3">
             <StagesPreview stages={obj.stages || []} achievedStageId={obj.achievedStageId} />
             <ThresholdsPreview thresholds={obj.thresholds || []} stages={obj.stages || []} />
-            {(obj.touchpoints || []).length > 0 && (
+            {(obj.interactions || []).length > 0 && (
               <div className="text-sm">
-                <Label className="text-xs text-muted-foreground uppercase tracking-wider">Touchpoints</Label>
+                <Label className="text-xs text-muted-foreground uppercase tracking-wider">Configured interactions</Label>
                 <div className="mt-2 space-y-1">
-                  {obj.touchpoints.map(tp => (
-                    <div key={tp.id} className="flex items-center gap-3 text-sm">
-                      <Badge variant="outline">{tp.name}</Badge>
-                      <span className="text-muted-foreground">Day {tp.expectedDayOffset}</span>
-                      <span className="text-muted-foreground">·</span>
-                      <span className="text-muted-foreground">{tp.stageMappings.length} mapping{tp.stageMappings.length !== 1 ? "s" : ""}</span>
-                      {tp.canResolveObjective && <Badge variant="secondary" className="text-[10px]">can resolve</Badge>}
+                  {obj.interactions.map(cfg => (
+                    <div key={cfg.interactionId} className="flex items-center gap-3 text-sm">
+                      <Badge variant="outline" className="font-mono text-[11px]">interaction #{cfg.interactionId}</Badge>
+                      <span className="text-muted-foreground">{cfg.stageMappings.length} mapping{cfg.stageMappings.length !== 1 ? "s" : ""}</span>
+                      {cfg.canResolveObjective && <Badge variant="secondary" className="text-[10px]">can resolve</Badge>}
                     </div>
                   ))}
                 </div>
@@ -621,18 +650,19 @@ interface EditorProps {
   updateForm: (patch: Partial<Omit<ActivationObjective, "id">>) => void;
   contextParams: ContextParameter[];
   anchorContextOptions: ContextParameter[];
+  interactions: ActivationInteraction[];
   addStage: () => void;
   updateStage: (idx: number, patch: Partial<Stage>) => void;
   removeStage: (idx: number) => void;
   moveStage: (idx: number, dir: -1 | 1) => void;
   toggleThresholdStage: (idx: number, stageId: string) => void;
   updateThreshold: (idx: number, patch: Partial<Threshold>) => void;
-  addTouchpoint: () => void;
-  updateTouchpoint: (idx: number, patch: Partial<Touchpoint>) => void;
-  removeTouchpoint: (idx: number) => void;
-  addExtractedValue: (tpIdx: number, value: string) => void;
-  removeExtractedValue: (tpIdx: number, value: string) => void;
-  setMapping: (tpIdx: number, extractedValue: string, stageId: string) => void;
+  addInteractionConfig: (interactionId: number) => void;
+  updateInteractionConfig: (idx: number, patch: Partial<ObjectiveInteractionConfig>) => void;
+  removeInteractionConfig: (idx: number) => void;
+  addExtractedValue: (cfgIdx: number, value: string) => void;
+  removeExtractedValue: (cfgIdx: number, value: string) => void;
+  setMapping: (cfgIdx: number, extractedValue: string, stageId: string) => void;
   onCancel: () => void;
   onSave: () => void;
   saving: boolean;
@@ -879,34 +909,79 @@ function ObjectiveEditor(p: EditorProps) {
         </CardContent>
       </Card>
 
-      {/* Touchpoints card */}
+      {/* Interaction routing card */}
+      <Card className="border-2 border-[#96d410]/40 bg-[#96d410]/5">
+        <CardContent className="p-5 space-y-3">
+          <div>
+            <h3 className="font-semibold text-base flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-primary" /> Interaction routing
+            </h3>
+            <p className="text-xs text-muted-foreground">Each call carries an interaction key in the API request context. The matching configured interaction below decides how this objective is extracted.</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+            <div>
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Interaction context key *</Label>
+              <Input value={p.form.interactionContextKey}
+                onChange={e => p.updateForm({ interactionContextKey: e.target.value })}
+                placeholder="interaction_key" data-testid="input-interaction-context-key" />
+              <p className="text-[11px] text-muted-foreground mt-1">Name of the request context field that carries the interaction key (default <code className="font-mono">interaction_key</code>).</p>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              <Link href="/activation-interactions">
+                <span className="text-primary hover:underline cursor-pointer">Manage activation interactions →</span>
+              </Link>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Per-interaction extraction config */}
       <Card>
         <CardContent className="p-5 space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
-              <h3 className="font-semibold text-base">Touchpoints</h3>
-              <p className="text-xs text-muted-foreground">Calls or interactions where this objective is extracted from a transcript. Each touchpoint has its own extraction mapping and inclusion rules.</p>
+              <h3 className="font-semibold text-base">Configured interactions</h3>
+              <p className="text-xs text-muted-foreground">Pick which interactions this objective should be extracted from, and how each one maps to the progress stages.</p>
             </div>
-            <Button size="sm" variant="outline" onClick={p.addTouchpoint} data-testid="button-add-touchpoint">
-              <Plus className="h-3.5 w-3.5 mr-1" /> Add touchpoint
-            </Button>
+            <AddInteractionPicker
+              interactions={p.interactions}
+              configured={p.form.interactions}
+              onAdd={p.addInteractionConfig}
+            />
           </div>
 
-          {p.form.touchpoints.length === 0 && (
+          {p.interactions.length === 0 && (
             <div className="text-sm text-muted-foreground border border-dashed rounded-md p-6 text-center">
-              No touchpoints yet. Add one for each call type where this objective should be extracted (e.g. "Day 4 call", "Day 10 call").
+              No activation interactions defined for this pathway yet.{" "}
+              <Link href="/activation-interactions">
+                <span className="text-primary hover:underline cursor-pointer">Create some first →</span>
+              </Link>
             </div>
           )}
 
-          {p.form.touchpoints.map((tp, idx) => (
-            <TouchpointEditor key={tp.id} tp={tp} idx={idx} stages={p.form.stages}
-              update={(patch) => p.updateTouchpoint(idx, patch)}
-              onRemove={() => p.removeTouchpoint(idx)}
-              addExtracted={(v) => p.addExtractedValue(idx, v)}
-              removeExtracted={(v) => p.removeExtractedValue(idx, v)}
-              setMapping={(v, sid) => p.setMapping(idx, v, sid)}
-            />
-          ))}
+          {p.interactions.length > 0 && p.form.interactions.length === 0 && (
+            <div className="text-sm text-muted-foreground border border-dashed rounded-md p-6 text-center">
+              No interactions configured yet. Use the picker above to add one.
+            </div>
+          )}
+
+          {p.form.interactions.map((cfg, idx) => {
+            const interaction = p.interactions.find(i => i.id === cfg.interactionId);
+            return (
+              <InteractionConfigEditor
+                key={cfg.interactionId}
+                cfg={cfg}
+                idx={idx}
+                interaction={interaction}
+                stages={p.form.stages}
+                update={(patch) => p.updateInteractionConfig(idx, patch)}
+                onRemove={() => p.removeInteractionConfig(idx)}
+                addExtracted={(v) => p.addExtractedValue(idx, v)}
+                removeExtracted={(v) => p.removeExtractedValue(idx, v)}
+                setMapping={(v, sid) => p.setMapping(idx, v, sid)}
+              />
+            );
+          })}
         </CardContent>
       </Card>
 
@@ -914,7 +989,7 @@ function ObjectiveEditor(p: EditorProps) {
       <Card>
         <CardContent className="p-5 space-y-2">
           <Label className="text-sm font-semibold">Objective-level prompt guidance (optional)</Label>
-          <p className="text-xs text-muted-foreground">Extra context that applies across all touchpoints — e.g. how to interpret ambiguous patient statements about appointment status.</p>
+          <p className="text-xs text-muted-foreground">Extra context that applies across all interactions — e.g. how to interpret ambiguous patient statements about appointment status.</p>
           <Textarea value={p.form.promptGuidance} onChange={e => p.updateForm({ promptGuidance: e.target.value })}
             rows={3} placeholder="If the patient mentions 'I have an appointment' without a date, infer 'scheduled' unless they say it already occurred."
             data-testid="textarea-objective-guidance" />
@@ -925,110 +1000,170 @@ function ObjectiveEditor(p: EditorProps) {
 }
 
 // ============================================================
+// Add interaction picker
+// ============================================================
+
+function AddInteractionPicker({
+  interactions, configured, onAdd,
+}: {
+  interactions: ActivationInteraction[];
+  configured: ObjectiveInteractionConfig[];
+  onAdd: (id: number) => void;
+}) {
+  const configuredIds = new Set(configured.map(c => c.interactionId));
+  const available = interactions.filter(i => !configuredIds.has(i.id) && i.isActive);
+  const [pendingId, setPendingId] = useState<string>("");
+
+  if (interactions.length === 0) return null;
+
+  return (
+    <div className="flex items-center gap-2">
+      <Select value={pendingId} onValueChange={setPendingId}>
+        <SelectTrigger className="w-64 h-9" data-testid="select-add-interaction">
+          <SelectValue placeholder={available.length === 0 ? "All interactions configured" : "Pick an interaction..."} />
+        </SelectTrigger>
+        <SelectContent>
+          {available.map(i => (
+            <SelectItem key={i.id} value={String(i.id)}>
+              {i.name} <span className="text-muted-foreground ml-1 text-xs">({i.key})</span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button
+        size="sm"
+        disabled={!pendingId}
+        onClick={() => {
+          const id = parseInt(pendingId);
+          if (!isNaN(id)) {
+            onAdd(id);
+            setPendingId("");
+          }
+        }}
+        data-testid="button-add-interaction"
+      >
+        <Plus className="h-3.5 w-3.5 mr-1" /> Add
+      </Button>
+    </div>
+  );
+}
+
+// ============================================================
 // Touchpoint editor
 // ============================================================
 
-function TouchpointEditor({
-  tp, idx, stages, update, onRemove, addExtracted, removeExtracted, setMapping,
+function InteractionConfigEditor({
+  cfg, idx, interaction, stages, update, onRemove, addExtracted, removeExtracted, setMapping,
 }: {
-  tp: Touchpoint;
+  cfg: ObjectiveInteractionConfig;
   idx: number;
+  interaction: ActivationInteraction | undefined;
   stages: Stage[];
-  update: (patch: Partial<Touchpoint>) => void;
+  update: (patch: Partial<ObjectiveInteractionConfig>) => void;
   onRemove: () => void;
   addExtracted: (v: string) => void;
   removeExtracted: (v: string) => void;
   setMapping: (extracted: string, stageId: string) => void;
 }) {
   const [newValue, setNewValue] = useState("");
-  const stageById = new Map(stages.map(s => [s.id, s.displayName]));
   return (
-    <div className="border rounded-md p-4 space-y-3 bg-muted/20" data-testid={`card-touchpoint-${idx}`}>
+    <div className="border rounded-md p-4 space-y-3 bg-muted/20" data-testid={`card-interaction-config-${idx}`}>
       <div className="flex items-start gap-3">
-        <div className="flex-1 grid grid-cols-3 gap-3">
-          <div>
-            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Touchpoint name</Label>
-            <Input value={tp.name} onChange={e => update({ name: e.target.value })} className="h-8 text-sm" data-testid={`input-tp-name-${idx}`} />
-          </div>
-          <div>
-            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Expected day offset</Label>
-            <Input type="number" value={tp.expectedDayOffset}
-              onChange={e => update({ expectedDayOffset: parseInt(e.target.value) || 0 })}
-              className="h-8 text-sm" data-testid={`input-tp-offset-${idx}`} />
-            <p className="text-[10px] text-muted-foreground mt-0.5">Days after anchor event (e.g. 4 = day 4 call)</p>
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="md:col-span-2">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Interaction</Label>
+            <div className="mt-1 flex items-center gap-2 flex-wrap">
+              {interaction ? (
+                <>
+                  <span className="font-semibold text-sm">{interaction.name}</span>
+                  <Badge variant="outline" className="font-mono text-[11px]">{interaction.key}</Badge>
+                  {interaction.expectedDayOffset != null && (
+                    <Badge variant="secondary" className="text-[11px]">Day {interaction.expectedDayOffset}</Badge>
+                  )}
+                  {!interaction.isActive && <Badge variant="secondary">Inactive</Badge>}
+                </>
+              ) : (
+                <span className="text-sm text-amber-600 flex items-center gap-1">
+                  <AlertCircle className="h-3.5 w-3.5" /> Interaction #{cfg.interactionId} not found (was it deleted?)
+                </span>
+              )}
+            </div>
+            {interaction?.description && (
+              <p className="text-[11px] text-muted-foreground mt-1">{interaction.description}</p>
+            )}
           </div>
           <div className="pt-5">
             <div className="flex items-center gap-2">
-              <Switch checked={tp.canResolveObjective}
-                onCheckedChange={c => update({ canResolveObjective: c })} data-testid={`switch-tp-resolves-${idx}`} />
+              <Switch checked={cfg.canResolveObjective}
+                onCheckedChange={c => update({ canResolveObjective: c })} data-testid={`switch-cfg-resolves-${idx}`} />
               <Label className="text-sm">Can resolve objective</Label>
             </div>
-            <p className="text-[10px] text-muted-foreground mt-1 leading-tight">Enable for terminal touchpoints (e.g. on or after the target date) where the call's extracted stage is the final answer for the objective.</p>
+            <p className="text-[10px] text-muted-foreground mt-1 leading-tight">Enable for terminal interactions (e.g. on or after the target date) where the call's extracted stage is the final answer for the objective.</p>
           </div>
         </div>
-        <Button size="icon" variant="ghost" onClick={onRemove} data-testid={`button-remove-tp-${idx}`}>
+        <Button size="icon" variant="ghost" onClick={onRemove} data-testid={`button-remove-cfg-${idx}`}>
           <Trash2 className="h-4 w-4 text-destructive" />
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 pt-2 border-t">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t">
         <div>
           <Label className="text-xs uppercase tracking-wider text-muted-foreground">Inclusion rules</Label>
           <div className="space-y-1.5 mt-2">
             <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="checkbox" checked={tp.inclusionRules.requirePcpAssigned}
-                onChange={e => update({ inclusionRules: { ...tp.inclusionRules, requirePcpAssigned: e.target.checked } })}
-                data-testid={`check-tp-require-pcp-${idx}`} />
+              <input type="checkbox" checked={cfg.inclusionRules.requirePcpAssigned}
+                onChange={e => update({ inclusionRules: { ...cfg.inclusionRules, requirePcpAssigned: e.target.checked } })}
+                data-testid={`check-cfg-require-pcp-${idx}`} />
               Require PCP assigned
             </label>
             <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="checkbox" checked={tp.inclusionRules.requireCompletedWithPatientOrCaregiver}
-                onChange={e => update({ inclusionRules: { ...tp.inclusionRules, requireCompletedWithPatientOrCaregiver: e.target.checked } })}
-                data-testid={`check-tp-require-completed-${idx}`} />
+              <input type="checkbox" checked={cfg.inclusionRules.requireCompletedWithPatientOrCaregiver}
+                onChange={e => update({ inclusionRules: { ...cfg.inclusionRules, requireCompletedWithPatientOrCaregiver: e.target.checked } })}
+                data-testid={`check-cfg-require-completed-${idx}`} />
               Require call completed with patient or caregiver
             </label>
           </div>
         </div>
         <div>
-          <Label className="text-xs uppercase tracking-wider text-muted-foreground">Touchpoint prompt guidance (optional)</Label>
-          <Textarea value={tp.promptGuidance}
+          <Label className="text-xs uppercase tracking-wider text-muted-foreground">Interaction prompt guidance (optional)</Label>
+          <Textarea value={cfg.promptGuidance}
             onChange={e => update({ promptGuidance: e.target.value })} rows={3}
-            className="text-sm mt-1" placeholder="Specific cues for this call type..."
-            data-testid={`textarea-tp-guidance-${idx}`} />
+            className="text-sm mt-1" placeholder="Specific cues for this interaction..."
+            data-testid={`textarea-cfg-guidance-${idx}`} />
         </div>
       </div>
 
       <div className="pt-2 border-t">
         <Label className="text-xs uppercase tracking-wider text-muted-foreground">Extracted enum values → progress stage mapping</Label>
-        <p className="text-[11px] text-muted-foreground mb-2">Define what values the model can output for this touchpoint, and which stage each one maps to.</p>
+        <p className="text-[11px] text-muted-foreground mb-2">Define what values the model can output for this interaction, and which stage each one maps to.</p>
         <div className="flex gap-2 mb-2">
           <Input value={newValue} onChange={e => setNewValue(e.target.value)}
             placeholder="e.g. patient_confirmed_appointment" className="h-8 text-sm"
             onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addExtracted(newValue); setNewValue(""); } }}
-            data-testid={`input-tp-newvalue-${idx}`} />
-          <Button size="sm" type="button" onClick={() => { addExtracted(newValue); setNewValue(""); }} data-testid={`button-tp-addvalue-${idx}`}>
+            data-testid={`input-cfg-newvalue-${idx}`} />
+          <Button size="sm" type="button" onClick={() => { addExtracted(newValue); setNewValue(""); }} data-testid={`button-cfg-addvalue-${idx}`}>
             <Plus className="h-3.5 w-3.5 mr-1" /> Add value
           </Button>
         </div>
-        {tp.extractedEnumValues.length === 0 ? (
+        {cfg.extractedEnumValues.length === 0 ? (
           <div className="text-xs text-muted-foreground italic">No extracted values yet.</div>
         ) : (
           <div className="space-y-1.5">
-            {tp.extractedEnumValues.map(v => {
-              const mapping = tp.stageMappings.find(m => m.extractedValue === v);
+            {cfg.extractedEnumValues.map(v => {
+              const mapping = cfg.stageMappings.find(m => m.extractedValue === v);
               return (
-                <div key={v} className="flex items-center gap-2 text-sm" data-testid={`row-tp-mapping-${idx}-${v}`}>
+                <div key={v} className="flex items-center gap-2 text-sm" data-testid={`row-cfg-mapping-${idx}-${v}`}>
                   <Badge variant="outline" className="font-mono text-xs">{v}</Badge>
                   <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
                   <Select value={mapping?.stageId || ""} onValueChange={(sid) => setMapping(v, sid)}>
-                    <SelectTrigger className="h-7 text-xs w-48" data-testid={`select-tp-mapping-${idx}-${v}`}>
+                    <SelectTrigger className="h-7 text-xs w-48" data-testid={`select-cfg-mapping-${idx}-${v}`}>
                       <SelectValue placeholder="Pick a stage..." />
                     </SelectTrigger>
                     <SelectContent>
                       {stages.map(s => <SelectItem key={s.id} value={s.id}>{s.displayName}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => removeExtracted(v)} data-testid={`button-tp-removevalue-${idx}-${v}`}>
+                  <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => removeExtracted(v)} data-testid={`button-cfg-removevalue-${idx}-${v}`}>
                     <X className="h-3 w-3" />
                   </Button>
                 </div>
