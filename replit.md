@@ -60,6 +60,7 @@ Gemini 2.5 Flash can produce duplicate items. Post-processing dedup applied to:
 - `client/src/pages/CallQA.tsx` — Call QA prompt management UI (scoped by selected CP)
 - `client/src/pages/Dispositions.tsx` — Call Dispositions management UI (scoped by selected CP)
 - `client/src/pages/ReviewItems.tsx` — Call Review Items management UI (scoped by selected CP)
+- `client/src/pages/ActivationObjectives.tsx` — Activation Objectives management UI: anchor + window → target date, ordered progress stages, days-remaining threshold rules, per-touchpoint extracted-value→stage mappings (scoped by selected CP)
 - `client/src/pages/GeneratedPrompt.tsx` — Read-only generated prompt viewer (scoped by selected CP)
 - `client/src/components/AppLayout.tsx` — Layout with sidebar navigation and CP selector dropdown
 - `client/src/pages/Reference.tsx` — API reference documentation

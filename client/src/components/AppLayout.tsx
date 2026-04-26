@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Settings, FlaskConical, LayoutDashboard, BookOpen, ChevronRight, FileText, Variable, Eye, Phone, Box, Code2, Layers, Package, ShieldAlert, ClipboardCheck, ClipboardList, Building2, ChevronDown, BarChart3, Plus, ChevronUp, ListTree } from "lucide-react";
+import { Settings, FlaskConical, LayoutDashboard, BookOpen, ChevronRight, FileText, Variable, Eye, Phone, Box, Code2, Layers, Package, ShieldAlert, ClipboardCheck, ClipboardList, Building2, ChevronDown, BarChart3, Plus, ChevronUp, ListTree, Target } from "lucide-react";
 import { useClientPathway } from "@/contexts/ClientPathwayContext";
 import { useState } from "react";
 
@@ -16,6 +16,7 @@ const SETUP_ITEMS: NavItem[] = [
   { label: "Call QA", href: "/call-qa", icon: <ClipboardCheck className="h-4 w-4" />, section: "setup" },
   { label: "Context Parameters", href: "/context-parameters", icon: <Variable className="h-4 w-4" />, section: "setup" },
   { label: "Observations", href: "/observations", icon: <Settings className="h-4 w-4" />, section: "setup" },
+  { label: "Activation Objectives", href: "/activation-objectives", icon: <Target className="h-4 w-4" />, section: "setup" },
   { label: "Dispositions", href: "/dispositions", icon: <ListTree className="h-4 w-4" />, section: "setup" },
   { label: "Review Items", href: "/review-items", icon: <ClipboardList className="h-4 w-4" />, section: "setup" },
   { label: "Generated Prompt", href: "/generated-prompt", icon: <Eye className="h-4 w-4" />, section: "setup" },
