@@ -200,6 +200,15 @@ This is how Lisa deploys every time. Don't propose alternative paths, Cloud Shel
 
 That's it. Two steps. Don't add more.
 
+#### Cloud Build SA roles (one-time setup, already granted on `guidewaycare-476802`)
+The build runs as `gwc-ai-transcript-extractions@guidewaycare-476802.iam.gserviceaccount.com` and needs all four of these roles. If a build ever fails with a `PERMISSION_DENIED` / `denied: Permission ...` message, check this list against IAM:
+- **Logs Writer** (`roles/logging.logWriter`) — required because `cloudbuild.yaml` uses `logging: CLOUD_LOGGING_ONLY`.
+- **Artifact Registry Writer** (`roles/artifactregistry.writer`) — required to push the image (GCR pushes route through Artifact Registry under the hood).
+- **Cloud Run Admin** (`roles/run.admin`) — required to create/update the `guideway-care-api` service.
+- **Service Account User** (`roles/iam.serviceAccountUser`) — required so the build SA can attach the runtime identity to the new Cloud Run revision.
+
+IAM page: https://console.cloud.google.com/iam-admin/iam?project=guidewaycare-476802
+
 ## Branding
 - Guideway Care branding (colors from guidewaycare.com)
 - Primary: `#0098db`, Navy: `#172938`, Dark BG: `#101a22`, Green: `#96d410`
