@@ -219,10 +219,16 @@ export default function ActivationObjectives() {
 
   function startEdit(obj: ActivationObjective) {
     const { id, ...rest } = obj;
+    const stages = rest.stages || [];
+    // Seed default threshold bands when none are saved so the editor always
+    // shows the four bands ready to tweak.
+    const thresholds = (rest.thresholds && rest.thresholds.length > 0)
+      ? rest.thresholds
+      : DEFAULT_THRESHOLDS(stages);
     setForm({
       ...rest,
-      stages: rest.stages || [],
-      thresholds: rest.thresholds || [],
+      stages,
+      thresholds,
       interactions: rest.interactions || [],
       interactionContextKey: rest.interactionContextKey || "interaction_key",
     });
@@ -668,8 +674,17 @@ function StagesPreview({ stages, achievedStageId }: { stages: Stage[]; achievedS
 }
 
 function ThresholdsPreview({ thresholds, stages }: { thresholds: Threshold[]; stages: Stage[] }) {
-  if (thresholds.length === 0) return null;
   const stageById = new Map(stages.map(s => [s.id, s.displayName]));
+  if (thresholds.length === 0) {
+    return (
+      <div>
+        <Label className="text-xs text-muted-foreground uppercase tracking-wider">On-track threshold rules</Label>
+        <div className="mt-2 text-xs text-muted-foreground italic border border-dashed rounded-md px-3 py-2">
+          No threshold bands configured. Edit this objective to set up on-track / at-risk rules by days remaining.
+        </div>
+      </div>
+    );
+  }
   return (
     <div>
       <Label className="text-xs text-muted-foreground uppercase tracking-wider">On-track threshold rules</Label>
