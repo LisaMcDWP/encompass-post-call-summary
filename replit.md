@@ -192,19 +192,13 @@ Returns service connectivity status.
 - **deploy.sh**: Manual deployment via `gcloud` CLI (`--min-instances 0`)
 
 ### Standard Deploy Procedure (DO NOT DEVIATE)
-This is how Lisa deploys every time. Don't propose alternative paths unless asked.
+This is how Lisa deploys every time. Don't propose alternative paths, Cloud Shell streaming commands, or `gcloud beta` log commands. Don't suggest installing extra gcloud components. Don't reinvent this.
 
-1. **From Replit**: commit and `git push` to the repo. The Cloud Build trigger on `guidewaycare-476802` fires automatically off the push and runs `cloudbuild.yaml` end-to-end (build → push GCR → deploy Cloud Run revision).
-2. **From GCP Cloud Shell** (project already set to `guidewaycare-476802`), monitor with:
-   ```bash
-   # Stream the build that the git push just triggered
-   gcloud beta builds log --stream $(gcloud builds list --limit 1 --format='value(id)')
+1. **From Replit**: commit and `git push` to the repo. The Cloud Build trigger on `guidewaycare-476802` fires automatically off the push and runs `cloudbuild.yaml` end-to-end (build → push GCR → deploy Cloud Run revision of `guideway-care-api`).
+2. **Monitor in the browser**: Cloud Build console for build status, Cloud Run console for the new revision and service logs. No CLI streaming required.
+3. On the first request after a new revision goes live, expect "Schema migration ok for activation_*: ensured column ..." lines in Cloud Run logs as the lazy BigQuery migrations run.
 
-   # Tail the live Cloud Run service after the new revision rolls out
-   gcloud beta run services logs tail guideway-care-api --region us-central1
-   ```
-   Note: `beta` is required — plain `gcloud builds log --stream` and `gcloud run services logs tail` don't exist in the GA track in Cloud Shell.
-3. On the first request after a new revision goes live, expect "Schema migration ok for activation_*: ensured column ..." lines as the lazy BigQuery migrations run.
+That's it. Two steps. Don't add more.
 
 ## Branding
 - Guideway Care branding (colors from guidewaycare.com)
