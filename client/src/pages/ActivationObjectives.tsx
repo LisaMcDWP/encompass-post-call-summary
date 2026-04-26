@@ -104,6 +104,7 @@ interface ActivationObjective {
   observationName: string;
   extractedEnumValues: EnumValue[];
   stageMappings: StageMapping[];
+  knownContextExtractedValues: string[];
   excludedExtractedValues: string[];
   interactions: ObjectiveInteractionConfig[];
   interactionContextKey: string;
@@ -166,6 +167,7 @@ function emptyForm(): Omit<ActivationObjective, "id"> {
     observationName: "",
     extractedEnumValues: [],
     stageMappings: [],
+    knownContextExtractedValues: [],
     excludedExtractedValues: [],
     interactions: [],
     interactionContextKey: "interaction_key",
@@ -273,6 +275,7 @@ export default function ActivationObjectives() {
       interactions: rest.interactions || [],
       interactionContextKey: rest.interactionContextKey || "interaction_key",
       observationTopicIds: rest.observationTopicIds || [],
+      knownContextExtractedValues: rest.knownContextExtractedValues || [],
       excludedExtractedValues: rest.excludedExtractedValues || [],
     });
     setEditingId(id);
@@ -296,17 +299,19 @@ export default function ActivationObjectives() {
       toast({ title: "Missing interaction context key", description: "Specify the request context field that carries the interaction key (e.g. interaction_key).", variant: "destructive" });
       return;
     }
-    // Validate every extracted enum value is either mapped to a stage or marked excluded.
+    // Validate every extracted enum value is mapped to a stage, marked Known Context, or Excluded.
     {
+      const knownCtx = new Set(form.knownContextExtractedValues);
       const excluded = new Set(form.excludedExtractedValues);
       const unmapped = form.extractedEnumValues.filter(v =>
+        !knownCtx.has(v.label) &&
         !excluded.has(v.label) &&
         !form.stageMappings.find(m => m.extractedValue === v.label && m.stageId)
       );
       if (unmapped.length > 0) {
         toast({
           title: "Observation has unassigned values",
-          description: `Assign each to a stage or move to Excluded: ${unmapped.map(v => v.label).join(", ")}`,
+          description: `Assign each to a stage, Known Context, or Excluded: ${unmapped.map(v => v.label).join(", ")}`,
           variant: "destructive",
         });
         return;
@@ -436,18 +441,25 @@ export default function ActivationObjectives() {
     updateForm({ stages: next });
   }
 
-  function setExcluded(label: string, excluded: boolean) {
-    const isCurrentlyExcluded = form.excludedExtractedValues.includes(label);
-    if (excluded === isCurrentlyExcluded) return;
-    const next = excluded
-      ? [...form.excludedExtractedValues, label]
+  // Set a value's non-stage role: "known_context" (capture but no progression),
+  // "excluded" (drop entirely), or null (clear → returns to "needs assignment").
+  // The three roles (mapped, known_context, excluded) are mutually exclusive.
+  function setNonStage(label: string, kind: "known_context" | "excluded" | null) {
+    const knownNext = kind === "known_context"
+      ? Array.from(new Set([...form.knownContextExtractedValues, label]))
+      : form.knownContextExtractedValues.filter(v => v !== label);
+    const excludedNext = kind === "excluded"
+      ? Array.from(new Set([...form.excludedExtractedValues, label]))
       : form.excludedExtractedValues.filter(v => v !== label);
-    // When marking a value as excluded, also clear any stage mapping for it
-    // (excluded values cannot be assigned to a stage).
-    const newMappings = excluded
+    // When moving a value into a non-stage bin, clear any stage mapping for it.
+    const newMappings = (kind === "known_context" || kind === "excluded")
       ? form.stageMappings.filter(m => m.extractedValue !== label)
       : form.stageMappings;
-    updateForm({ excludedExtractedValues: next, stageMappings: newMappings });
+    updateForm({
+      knownContextExtractedValues: knownNext,
+      excludedExtractedValues: excludedNext,
+      stageMappings: newMappings,
+    });
   }
 
   function toggleThresholdStage(thresholdIdx: number, stageId: string) {
@@ -731,7 +743,8 @@ export default function ActivationObjectives() {
       observationName,
       extractedEnumValues,
       stageMappings,
-      excludedExtractedValues: [],
+      knownContextExtractedValues: [],
+    excludedExtractedValues: [],
       interactions: [],
       interactionContextKey: "interaction_key",
       isActive: true,
@@ -1297,7 +1310,7 @@ export default function ActivationObjectives() {
           updateStage={updateStage}
           removeStage={removeStage}
           moveStage={moveStage}
-          setExcluded={setExcluded}
+          setNonStage={setNonStage}
           toggleThresholdStage={toggleThresholdStage}
           updateThreshold={updateThreshold}
           addDefaultBand={addDefaultBand}
@@ -1533,7 +1546,7 @@ interface EditorProps {
   updateStage: (idx: number, patch: Partial<Stage>) => void;
   removeStage: (idx: number) => void;
   moveStage: (idx: number, dir: -1 | 1) => void;
-  setExcluded: (label: string, excluded: boolean) => void;
+  setNonStage: (label: string, kind: "known_context" | "excluded" | null) => void;
   toggleThresholdStage: (idx: number, stageId: string) => void;
   updateThreshold: (idx: number, patch: Partial<Threshold>) => void;
   addDefaultBand: () => void;
@@ -1728,15 +1741,16 @@ function ObjectiveEditor(p: EditorProps) {
                     {p.form.extractedEnumValues.map(v => {
                       const mapping = p.form.stageMappings.find(m => m.extractedValue === v.label);
                       const isExcluded = p.form.excludedExtractedValues.includes(v.label);
+                      const isKnownCtx = p.form.knownContextExtractedValues.includes(v.label);
                       const onThisStage = mapping?.stageId === u.id;
                       const onOtherStage = !!mapping?.stageId && mapping.stageId !== u.id;
                       const otherStageName = onOtherStage
                         ? p.form.stages.find(st => st.id === mapping?.stageId)?.displayName
                         : null;
                       const c = COLOR_MAP[v.color] || COLOR_MAP.GRAY;
-                      if (isExcluded) {
+                      if (isExcluded || isKnownCtx) {
                         return (
-                          <span key={v.label} className="text-[11px] font-mono px-2 py-0.5 rounded-md border border-dashed text-muted-foreground bg-background opacity-60" title="Excluded — not assignable to any stage">
+                          <span key={v.label} className="text-[11px] font-mono px-2 py-0.5 rounded-md border border-dashed text-muted-foreground bg-background opacity-60" title={isExcluded ? "Excluded — not assignable to any stage" : "Known Context — captured but not used for staging"}>
                             {v.label}
                           </span>
                         );
@@ -1803,15 +1817,16 @@ function ObjectiveEditor(p: EditorProps) {
                       {p.form.extractedEnumValues.map(v => {
                         const mapping = p.form.stageMappings.find(m => m.extractedValue === v.label);
                         const isExcluded = p.form.excludedExtractedValues.includes(v.label);
+                        const isKnownCtx = p.form.knownContextExtractedValues.includes(v.label);
                         const onThisStage = mapping?.stageId === s.id;
                         const onOtherStage = !!mapping?.stageId && mapping.stageId !== s.id;
                         const otherStageName = onOtherStage
                           ? p.form.stages.find(st => st.id === mapping?.stageId)?.displayName
                           : null;
                         const c = COLOR_MAP[v.color] || COLOR_MAP.GRAY;
-                        if (isExcluded) {
+                        if (isExcluded || isKnownCtx) {
                           return (
-                            <span key={v.label} className="text-[11px] font-mono px-2 py-0.5 rounded-md border border-dashed text-muted-foreground bg-background opacity-60" title="Excluded — not assignable to any stage">
+                            <span key={v.label} className="text-[11px] font-mono px-2 py-0.5 rounded-md border border-dashed text-muted-foreground bg-background opacity-60" title={isExcluded ? "Excluded — not assignable to any stage" : "Known Context — captured but not used for staging"}>
                               {v.label}
                             </span>
                           );
@@ -1843,44 +1858,67 @@ function ObjectiveEditor(p: EditorProps) {
             })}
           </div>
 
-          {/* Excluded bin — permanent, not a stage */}
-          <div className="rounded-md border-2 border-dashed border-muted-foreground/40 bg-muted/20 p-2 flex flex-col gap-2" data-testid="row-stage-excluded">
-            <div className="flex items-center gap-2">
-              <div className="w-12 shrink-0" />
-              <Badge variant="outline" className="border-dashed text-muted-foreground">Excluded</Badge>
-              <span className="text-xs text-muted-foreground">Not a stage — patient does not enter the denominator at all.</span>
-            </div>
-            {p.form.extractedEnumValues.length > 0 && (
-              <div className="ml-12 flex items-center gap-2 flex-wrap">
-                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground shrink-0">Observation values</Label>
-                {p.form.extractedEnumValues.map(v => {
-                  const isExcluded = p.form.excludedExtractedValues.includes(v.label);
-                  const mapping = p.form.stageMappings.find(m => m.extractedValue === v.label);
-                  const onAStage = !!mapping?.stageId;
-                  const stageName = onAStage ? p.form.stages.find(st => st.id === mapping?.stageId)?.displayName : null;
-                  return (
-                    <button
-                      key={v.label}
-                      type="button"
-                      onClick={() => p.setExcluded(v.label, !isExcluded)}
-                      title={isExcluded ? "Click to remove from Excluded" : (onAStage ? `Currently mapped to "${stageName}". Click to mark Excluded (clears stage mapping).` : "Click to mark Excluded")}
-                      className={
-                        "text-[11px] font-mono px-2 py-0.5 rounded-md border transition-colors " +
-                        (isExcluded
-                          ? "bg-foreground text-background border-foreground"
+          {/* Non-stage value bins — Known Context (capture only) and Excluded (drop entirely) */}
+          {(["known_context", "excluded"] as const).map(kind => {
+            const isKnownCtx = kind === "known_context";
+            const title = isKnownCtx ? "Known Context" : "Excluded";
+            const subtitle = isKnownCtx
+              ? "Captured for downstream context but not used for stage progression."
+              : "Not a stage — patient does not enter the denominator at all.";
+            const testIdSuffix = isKnownCtx ? "known-context" : "excluded";
+            return (
+              <div key={kind} className="rounded-md border-2 border-dashed border-muted-foreground/40 bg-muted/20 p-2 flex flex-col gap-2" data-testid={`row-bin-${testIdSuffix}`}>
+                <div className="flex items-center gap-2">
+                  <div className="w-12 shrink-0" />
+                  <Badge variant="outline" className="border-dashed text-muted-foreground">{title}</Badge>
+                  <span className="text-xs text-muted-foreground">{subtitle}</span>
+                </div>
+                {p.form.extractedEnumValues.length > 0 && (
+                  <div className="ml-12 flex items-center gap-2 flex-wrap">
+                    <Label className="text-[10px] uppercase tracking-wider text-muted-foreground shrink-0">Observation values</Label>
+                    {p.form.extractedEnumValues.map(v => {
+                      const inThisBin = isKnownCtx
+                        ? p.form.knownContextExtractedValues.includes(v.label)
+                        : p.form.excludedExtractedValues.includes(v.label);
+                      const inOtherBin = isKnownCtx
+                        ? p.form.excludedExtractedValues.includes(v.label)
+                        : p.form.knownContextExtractedValues.includes(v.label);
+                      const mapping = p.form.stageMappings.find(m => m.extractedValue === v.label);
+                      const onAStage = !!mapping?.stageId;
+                      const stageName = onAStage ? p.form.stages.find(st => st.id === mapping?.stageId)?.displayName : null;
+                      const otherBinName = isKnownCtx ? "Excluded" : "Known Context";
+                      const tooltip = inThisBin
+                        ? `Click to remove from ${title}`
+                        : inOtherBin
+                          ? `Currently in ${otherBinName}. Click to move to ${title}.`
                           : onAStage
-                            ? "bg-background text-muted-foreground border-dashed border-muted-foreground/40 opacity-60 hover:opacity-100"
-                            : "bg-background text-muted-foreground border-muted-foreground/40 hover:bg-muted")
-                      }
-                      data-testid={`chip-excluded-${v.label}`}
-                    >
-                      {v.label}
-                    </button>
-                  );
-                })}
+                            ? `Currently mapped to "${stageName}". Click to mark ${title} (clears stage mapping).`
+                            : `Click to mark ${title}`;
+                      return (
+                        <button
+                          key={v.label}
+                          type="button"
+                          onClick={() => p.setNonStage(v.label, inThisBin ? null : kind)}
+                          title={tooltip}
+                          className={
+                            "text-[11px] font-mono px-2 py-0.5 rounded-md border transition-colors " +
+                            (inThisBin
+                              ? "bg-foreground text-background border-foreground"
+                              : (inOtherBin || onAStage)
+                                ? "bg-background text-muted-foreground border-dashed border-muted-foreground/40 opacity-60 hover:opacity-100"
+                                : "bg-background text-muted-foreground border-muted-foreground/40 hover:bg-muted")
+                          }
+                          data-testid={`chip-${testIdSuffix}-${v.label}`}
+                        >
+                          {v.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            );
+          })}
 
           <div className="pt-2 border-t flex items-center gap-2">
             <Label className="text-sm">Objective achieved when stage =</Label>
