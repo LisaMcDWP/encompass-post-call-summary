@@ -1001,6 +1001,7 @@ export async function aiActivationObjectiveAssistant(
     observations: Observation[];
     interactions: ActivationInteraction[];
     contextParameters: ContextParameter[];
+    currentDraft?: any;
   },
   userMessage: string,
   conversationHistory: { role: string; text: string }[] = []
@@ -1075,6 +1076,14 @@ ${JSON.stringify(interactionsSnapshot, null, 2)}
 
 Available context parameters (anchorContextKey usually points at a date field):
 ${JSON.stringify(contextParamsSnapshot, null, 2)}
+${context.currentDraft ? `
+
+The user is currently editing this objective draft. Treat questions as requests to ENHANCE or refine THIS draft unless they explicitly ask for something new.
+
+CRITICAL FOR ENHANCEMENT MODE: When responding with the structured block, INCLUDE ONLY the fields you are actually changing. OMIT any field that should stay the same. Do not echo unchanged fields — the parser merges only what you include, so emitting unchanged fields can overwrite related state (like stage ids). For example, if the user asks "improve the description", emit only **Description:** in the block.
+
+Current draft being edited:
+${JSON.stringify(context.currentDraft, null, 2)}` : ""}
 
 Your role:
 1. Suggest new activation objectives relevant to post-discharge/care-transition programs
@@ -1083,7 +1092,7 @@ Your role:
 4. Suggest extracted enum values + colors for the underlying observation
 5. Flag missing or weak mappings between extracted values and stages
 
-When proposing a NEW objective, format it clearly so the user can apply it. Use this exact block (one per proposal, English values only):
+When proposing a new objective OR an enhancement to the current draft, ALWAYS format it as the structured block below — never as JSON, YAML, or a code block. The user has an automated parser that only understands this exact format. Output one block per proposal, English values only:
 **Name:** snake_case_name
 **Display Name:** Human Readable Name
 **Description:** What this objective measures

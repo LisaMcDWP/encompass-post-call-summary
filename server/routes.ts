@@ -991,7 +991,7 @@ export async function registerRoutes(
 
   app.post("/api/activation-objectives/ai-suggest", async (req, res) => {
     try {
-      const { message, history, clientPathwayId } = req.body;
+      const { message, history, clientPathwayId, currentDraft } = req.body;
       if (!message || typeof message !== "string") {
         return res.status(400).json({ error: "Message is required" });
       }
@@ -1004,7 +1004,7 @@ export async function registerRoutes(
         storage.getContextParameters(cpId),
       ]);
       const response = await aiActivationObjectiveAssistant(
-        { objectives, observations, interactions, contextParameters },
+        { objectives, observations, interactions, contextParameters, currentDraft },
         message,
         history || [],
       );

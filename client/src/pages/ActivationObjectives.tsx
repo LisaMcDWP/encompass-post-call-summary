@@ -199,6 +199,10 @@ export default function ActivationObjectives() {
   const [aiMessage, setAiMessage] = useState("");
   const [aiHistory, setAiHistory] = useState<{ role: string; text: string }[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
+  const [editorAiOpen, setEditorAiOpen] = useState(false);
+  const [editorAiMessage, setEditorAiMessage] = useState("");
+  const [editorAiHistory, setEditorAiHistory] = useState<{ role: string; text: string }[]>([]);
+  const [editorAiLoading, setEditorAiLoading] = useState(false);
 
   useEffect(() => {
     if (!selectedCPId) return;
@@ -229,10 +233,18 @@ export default function ActivationObjectives() {
     }
   }
 
+  function resetEditorAi() {
+    setEditorAiOpen(false);
+    setEditorAiMessage("");
+    setEditorAiHistory([]);
+    setEditorAiLoading(false);
+  }
+
   function startNew() {
     setForm(emptyForm());
     setEditingId("new");
     setExpandedId(null);
+    resetEditorAi();
   }
 
   function startEdit(obj: ActivationObjective) {
@@ -253,11 +265,13 @@ export default function ActivationObjectives() {
     });
     setEditingId(id);
     setExpandedId(null);
+    resetEditorAi();
   }
 
   function cancelEdit() {
     setEditingId(null);
     setForm(emptyForm());
+    resetEditorAi();
   }
 
   async function saveForm() {
@@ -651,6 +665,211 @@ export default function ActivationObjectives() {
     setAiOpen(false);
   }
 
+  /**
+   * Enhancement-mode parser: returns ONLY fields the assistant explicitly
+   * emitted (no defaults), so that applyEnhancement can safely merge into the
+   * current draft without destroying user-entered values.
+   */
+  function parseObjectiveEnhancement(text: string): Partial<Omit<ActivationObjective, "id">> {
+    const get = (label: string): string | null => {
+      const re = new RegExp(`\\*\\*${label}:\\*\\*\\s*(.+?)(?=\\n\\*\\*|$)`, "is");
+      const m = text.match(re);
+      return m ? m[1].trim() : null;
+    };
+    const out: Partial<Omit<ActivationObjective, "id">> = {};
+
+    const name = get("Name");
+    if (name && /^[a-z][a-z0-9_]*$/.test(name)) out.name = name;
+
+    const displayName = get("Display Name");
+    if (displayName) out.displayName = displayName;
+
+    const description = get("Description");
+    if (description !== null) out.description = description;
+
+    const anchor = get("Anchor Event");
+    if (anchor) {
+      const v = anchor.toLowerCase().split(/\s|,|\|/)[0];
+      const validAnchors: AnchorEventType[] = ["discharge", "enrollment", "procedure", "custom"];
+      if (validAnchors.includes(v as AnchorEventType)) out.anchorEventType = v as AnchorEventType;
+    }
+
+    const anchorKey = get("Anchor Context Key");
+    if (anchorKey) out.anchorContextKey = anchorKey;
+
+    const windowDaysRaw = get("Window Days");
+    if (windowDaysRaw) {
+      const wd = parseInt(windowDaysRaw, 10);
+      if (!isNaN(wd) && wd > 0) out.windowDays = wd;
+    }
+
+    const observationName = get("Observation Name");
+    if (observationName) out.observationName = observationName;
+
+    const stagesRaw = get("Stages");
+    let parsedStages: Stage[] | null = null;
+    if (stagesRaw) {
+      parsedStages = stagesRaw.split(";").map((s, i) => {
+        const [n, d] = s.split("|").map(x => x.trim());
+        if (!n) return null;
+        return {
+          id: `stage_${Date.now()}_${i}`,
+          name: n.toLowerCase().replace(/[^a-z0-9_]+/g, "_"),
+          displayName: d || n,
+          description: "",
+          order: i + 1,
+        };
+      }).filter(Boolean) as Stage[];
+      if (parsedStages.length > 0) {
+        out.stages = parsedStages;
+      }
+    }
+    // Only set achievedStageId if AI explicitly emitted **Achieved Stage:**
+    const achievedRaw = get("Achieved Stage");
+    if (achievedRaw && (parsedStages || form.stages).length > 0) {
+      const stageList = parsedStages || form.stages;
+      const target = achievedRaw.toLowerCase().replace(/[^a-z0-9_]+/g, "_");
+      const match = stageList.find(s => s.name === target);
+      if (match) out.achievedStageId = match.id;
+    }
+
+    const valuesRaw = get("Extracted Values");
+    const validColors: EnumColor[] = ["GREEN", "YELLOW", "RED", "BLUE", "GRAY"];
+    let extractedValues: EnumValue[] | null = null;
+    if (valuesRaw) {
+      extractedValues = valuesRaw.split(",").map(part => {
+        const m = part.trim().match(/^(.+?)\s*\(([A-Z]+)\)$/);
+        if (!m) return { label: part.trim(), color: "GRAY" as EnumColor, promptHint: "" };
+        const color = (validColors.includes(m[2] as EnumColor) ? m[2] : "GRAY") as EnumColor;
+        return { label: m[1].trim(), color, promptHint: "" };
+      }).filter(v => v.label);
+      if (extractedValues.length > 0) out.extractedEnumValues = extractedValues;
+    }
+
+    const mappingsRaw = get("Stage Mappings");
+    if (mappingsRaw) {
+      // Use parsed stages if AI provided them, else current form stages — match case-insensitively
+      const stageList = parsedStages || form.stages;
+      const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9_]+/g, "_");
+      const mappings: StageMapping[] = mappingsRaw.split(";").map(part => {
+        const [val, st] = part.split("->").map(x => x.trim());
+        if (!val || !st) return null;
+        const target = norm(st);
+        const stage = stageList.find(s => norm(s.name) === target)
+          || stageList.find(s => s.displayName.toLowerCase() === st.toLowerCase());
+        if (!stage) return null;
+        return { extractedValue: val, stageId: stage.id };
+      }).filter(Boolean) as StageMapping[];
+      if (mappings.length > 0) out.stageMappings = mappings;
+    }
+
+    // If AI gave mappings but no extracted values, infer values from mapping keys
+    if (!out.extractedEnumValues && out.stageMappings && out.stageMappings.length > 0) {
+      const stageList = out.stages || form.stages;
+      const totalStages = stageList.length || 1;
+      const seen = new Set<string>();
+      out.extractedEnumValues = out.stageMappings
+        .map(sm => {
+          const key = sm.extractedValue.trim().toLowerCase();
+          if (seen.has(key)) return null;
+          seen.add(key);
+          const stageOrder = stageList.find(s => s.id === sm.stageId)?.order ?? 0;
+          let color: EnumColor = "GRAY";
+          if (stageOrder === totalStages) color = "GREEN";
+          else if (stageOrder >= Math.ceil(totalStages / 2)) color = "YELLOW";
+          else if (stageOrder > 0) color = "RED";
+          return { label: sm.extractedValue.trim(), color, promptHint: "" };
+        })
+        .filter(Boolean) as EnumValue[];
+    }
+
+    const promptGuidance = get("Prompt Guidance");
+    if (promptGuidance !== null) out.promptGuidance = promptGuidance;
+
+    return out;
+  }
+
+  async function sendEditorAiMessage() {
+    if (!editorAiMessage.trim() || editorAiLoading || !selectedCPId) return;
+    const userMsg = editorAiMessage.trim();
+    setEditorAiMessage("");
+    const newHistory = [...editorAiHistory, { role: "user", text: userMsg }];
+    setEditorAiHistory(newHistory);
+    setEditorAiLoading(true);
+    try {
+      const res = await fetch("/api/activation-objectives/ai-suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: userMsg,
+          history: editorAiHistory,
+          clientPathwayId: selectedCPId,
+          currentDraft: form,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setEditorAiHistory([...newHistory, { role: "assistant", text: data.response }]);
+      } else {
+        setEditorAiHistory([...newHistory, { role: "assistant", text: "Error: " + (data.error || "Failed to get response") }]);
+      }
+    } catch {
+      setEditorAiHistory([...newHistory, { role: "assistant", text: "Error: Failed to connect to AI assistant." }]);
+    } finally {
+      setEditorAiLoading(false);
+    }
+  }
+
+  function applyEnhancement(patch: Partial<Omit<ActivationObjective, "id">>) {
+    if (Object.keys(patch).length === 0) {
+      toast({ title: "No changes detected", description: "The AI response did not contain any fields to apply.", variant: "destructive" });
+      return;
+    }
+    // When stages are replaced, ids change — reconcile any field that
+    // references stage ids (mappings, thresholds, achievedStageId) by matching
+    // the user's existing values to the new stages by name/displayName, so the
+    // user's customizations are preserved instead of being silently reset.
+    const finalPatch: Partial<Omit<ActivationObjective, "id">> = { ...patch };
+    if (patch.stages) {
+      const newStages = patch.stages;
+      const findNew = (oldStageId: string) => {
+        const oldStage = form.stages.find(s => s.id === oldStageId);
+        if (!oldStage) return null;
+        return newStages.find(s => s.name === oldStage.name)
+          || newStages.find(s => s.displayName.toLowerCase() === oldStage.displayName.toLowerCase())
+          || null;
+      };
+      // Rebuild mappings (only if AI didn't supply its own)
+      if (!patch.stageMappings && form.stageMappings.length > 0) {
+        finalPatch.stageMappings = form.stageMappings
+          .map(sm => {
+            const match = findNew(sm.stageId);
+            return match ? { extractedValue: sm.extractedValue, stageId: match.id } : null;
+          })
+          .filter(Boolean) as StageMapping[];
+      }
+      // Rebuild thresholds — remap onTrackStageIds to new stage ids by name
+      if (!patch.thresholds) {
+        if (form.thresholds && form.thresholds.length > 0) {
+          finalPatch.thresholds = form.thresholds.map(t => ({
+            ...t,
+            onTrackStageIds: (t.onTrackStageIds || []).map(sid => findNew(sid)?.id).filter(Boolean) as string[],
+          }));
+        } else {
+          finalPatch.thresholds = DEFAULT_THRESHOLDS(newStages);
+        }
+      }
+      // Rebuild achievedStageId (only if AI didn't supply one)
+      if (!patch.achievedStageId) {
+        const reMapped = findNew(form.achievedStageId);
+        finalPatch.achievedStageId = reMapped?.id || newStages[newStages.length - 1].id;
+      }
+    }
+    setForm({ ...form, ...finalPatch });
+    const fieldList = Object.keys(finalPatch).join(", ");
+    toast({ title: "Enhancements applied", description: `Updated: ${fieldList}. Review and Save when ready.` });
+  }
+
   const isEditing = editingId !== null;
   const anchorContextOptions = useMemo(() =>
     contextParams.filter(p => p.dataType === "date" || p.name.toLowerCase().includes("date")), [contextParams]);
@@ -838,6 +1057,156 @@ export default function ActivationObjectives() {
         <div className="flex items-center justify-center p-8 text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading...
         </div>
+      )}
+
+      {isEditing && (
+        <div className="flex items-center justify-end -mb-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setEditorAiOpen(!editorAiOpen)}
+            className={editorAiOpen ? "border-primary text-primary" : ""}
+            data-testid="button-editor-ai-assistant"
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            {editorAiOpen ? "Hide AI Assistant" : "Enhance with AI"}
+          </Button>
+        </div>
+      )}
+
+      {isEditing && editorAiOpen && (
+        <Card className="border-primary/30 shadow-md bg-gradient-to-br from-primary/5 to-background" data-testid="panel-editor-ai-assistant">
+          <CardContent className="py-4 px-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                <span className="text-sm font-semibold text-foreground">Enhance this objective</span>
+                <span className="text-[10px] text-muted-foreground">(uses your current draft as context)</span>
+              </div>
+              <div className="flex gap-1.5">
+                {editorAiHistory.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditorAiHistory([])}
+                    className="h-7 text-xs text-muted-foreground"
+                    data-testid="button-editor-ai-clear"
+                  >
+                    Clear
+                  </Button>
+                )}
+                <Button variant="ghost" size="sm" onClick={() => setEditorAiOpen(false)} className="h-7 w-7 p-0" data-testid="button-editor-ai-close">
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            {editorAiHistory.length === 0 && (
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">Ask the AI to refine the objective you're editing — improve the description, suggest stages, propose stage mappings, tighten prompt guidance, or recommend the right anchor.</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    "Improve the description and prompt guidance",
+                    "Suggest better stage names and order",
+                    "Propose extracted values and stage mappings",
+                    "Recommend the right anchor event and window days",
+                  ].map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      className="text-[11px] px-2.5 py-1 rounded-full border border-primary/20 text-primary hover:bg-primary/10 transition-colors"
+                      onClick={() => setEditorAiMessage(suggestion)}
+                      data-testid="button-editor-ai-suggestion"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {editorAiHistory.length > 0 && (
+              <div
+                className="space-y-3 max-h-80 overflow-y-auto pr-1"
+                ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}
+                data-testid="editor-ai-chat-history"
+              >
+                {editorAiHistory.map((msg, i) => (
+                  <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                    <div
+                      className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
+                        msg.role === "user"
+                          ? "bg-primary text-white"
+                          : "bg-muted/50 border border-border/50 text-foreground"
+                      }`}
+                    >
+                      {msg.role === "assistant" ? (
+                        <>
+                          <div
+                            className="whitespace-pre-wrap text-[13px] leading-relaxed"
+                            dangerouslySetInnerHTML={{
+                              __html: msg.text
+                                .replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]!))
+                                .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+                                .replace(/\n/g, "<br/>"),
+                            }}
+                          />
+                          {(() => {
+                            const patch = parseObjectiveEnhancement(msg.text);
+                            const fieldCount = Object.keys(patch).length;
+                            if (fieldCount === 0) return null;
+                            return (
+                              <div className="mt-2 pt-2 border-t border-border/40 flex items-center gap-2">
+                                <Button
+                                  size="sm"
+                                  className="h-7 bg-primary hover:bg-primary/90 text-white text-xs"
+                                  onClick={() => applyEnhancement(patch)}
+                                  data-testid={`button-apply-enhancement-${i}`}
+                                >
+                                  <Save className="h-3 w-3 mr-1" />
+                                  Apply {fieldCount} field{fieldCount === 1 ? "" : "s"} to draft
+                                </Button>
+                              </div>
+                            );
+                          })()}
+                        </>
+                      ) : (
+                        <span>{msg.text}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {editorAiLoading && (
+                  <div className="flex justify-start">
+                    <div className="bg-muted/50 border border-border/50 rounded-lg px-3 py-2 text-sm flex items-center gap-2">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <span className="text-xs text-muted-foreground">Thinking...</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <Input
+                value={editorAiMessage}
+                onChange={e => setEditorAiMessage(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void sendEditorAiMessage(); } }}
+                placeholder="Ask how to improve this objective..."
+                disabled={editorAiLoading}
+                className="text-sm"
+                data-testid="input-editor-ai-message"
+              />
+              <Button
+                onClick={() => void sendEditorAiMessage()}
+                disabled={editorAiLoading || !editorAiMessage.trim()}
+                className="bg-primary hover:bg-primary/90"
+                data-testid="button-editor-ai-send"
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {isEditing && (
