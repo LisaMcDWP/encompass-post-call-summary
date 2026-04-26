@@ -261,8 +261,6 @@ export const activationObjectiveInteractionConfigSchema = z.object({
     requireCompletedWithPatientOrCaregiver: true,
     customRules: [],
   }),
-  extractedEnumValues: z.array(z.string()).default([]),
-  stageMappings: z.array(activationObjectiveStageMappingSchema).default([]),
   promptGuidance: z.string().default(""),
 });
 export type ActivationObjectiveInteractionConfig = z.infer<typeof activationObjectiveInteractionConfigSchema>;
@@ -278,6 +276,9 @@ export const insertActivationObjectiveSchema = z.object({
   stages: z.array(activationObjectiveStageSchema).default([]),
   achievedStageId: z.string().default(""),
   thresholds: z.array(activationObjectiveThresholdSchema).default([]),
+  observationName: z.string().default(""),
+  extractedEnumValues: z.array(z.string()).default([]),
+  stageMappings: z.array(activationObjectiveStageMappingSchema).default([]),
   interactions: z.array(activationObjectiveInteractionConfigSchema).default([]),
   isActive: z.boolean().default(true),
   displayOrder: z.number().int().default(0),
@@ -297,6 +298,9 @@ export interface ActivationObjective {
   stages: ActivationObjectiveStage[];
   achievedStageId: string;
   thresholds: ActivationObjectiveThreshold[];
+  observationName: string;
+  extractedEnumValues: string[];
+  stageMappings: ActivationObjectiveStageMapping[];
   interactions: ActivationObjectiveInteractionConfig[];
   isActive: boolean;
   displayOrder: number;

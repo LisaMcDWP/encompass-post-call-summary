@@ -429,6 +429,9 @@ async function ensureActivationObjectivesTable(): Promise<void> {
         stages STRING,
         achieved_stage_id STRING,
         thresholds STRING,
+        observation_name STRING,
+        extracted_enum_values STRING,
+        stage_mappings STRING,
         interactions STRING,
         is_active BOOL NOT NULL,
         display_order INT64 NOT NULL,
@@ -449,6 +452,9 @@ async function ensureActivationObjectivesTable(): Promise<void> {
   for (const stmt of [
     `ALTER TABLE \`${fullTable}\` ADD COLUMN IF NOT EXISTS interaction_context_key STRING`,
     `ALTER TABLE \`${fullTable}\` ADD COLUMN IF NOT EXISTS interactions STRING`,
+    `ALTER TABLE \`${fullTable}\` ADD COLUMN IF NOT EXISTS observation_name STRING`,
+    `ALTER TABLE \`${fullTable}\` ADD COLUMN IF NOT EXISTS extracted_enum_values STRING`,
+    `ALTER TABLE \`${fullTable}\` ADD COLUMN IF NOT EXISTS stage_mappings STRING`,
   ]) {
     try {
       await client.query({ query: stmt });
@@ -465,10 +471,38 @@ async function ensureActivationObjectivesTable(): Promise<void> {
 function rowToActivationObjective(row: any): ActivationObjective {
   let stages: ActivationObjectiveStage[] = [];
   let thresholds: ActivationObjectiveThreshold[] = [];
-  let interactions: ActivationObjectiveInteractionConfig[] = [];
+  let interactionsRaw: any[] = [];
+  let extractedEnumValues: string[] = [];
+  let stageMappings: any[] = [];
   try { if (row.stages) stages = JSON.parse(row.stages); } catch {}
   try { if (row.thresholds) thresholds = JSON.parse(row.thresholds); } catch {}
-  try { if (row.interactions) interactions = JSON.parse(row.interactions); } catch {}
+  try { if (row.interactions) interactionsRaw = JSON.parse(row.interactions); } catch {}
+  try { if (row.extracted_enum_values) extractedEnumValues = JSON.parse(row.extracted_enum_values); } catch {}
+  try { if (row.stage_mappings) stageMappings = JSON.parse(row.stage_mappings); } catch {}
+
+  // Backward-compat: legacy rows stored extractedEnumValues + stageMappings inside each
+  // interaction config. Hoist from the first interaction that has them if the new
+  // objective-level columns are empty.
+  if (extractedEnumValues.length === 0 || stageMappings.length === 0) {
+    for (const cfg of interactionsRaw) {
+      if (extractedEnumValues.length === 0 && Array.isArray(cfg?.extractedEnumValues) && cfg.extractedEnumValues.length > 0) {
+        extractedEnumValues = cfg.extractedEnumValues;
+      }
+      if (stageMappings.length === 0 && Array.isArray(cfg?.stageMappings) && cfg.stageMappings.length > 0) {
+        stageMappings = cfg.stageMappings;
+      }
+      if (extractedEnumValues.length > 0 && stageMappings.length > 0) break;
+    }
+  }
+
+  // Strip legacy fields from per-interaction configs so the typed shape matches.
+  const interactions: ActivationObjectiveInteractionConfig[] = interactionsRaw.map((c: any) => ({
+    interactionId: c.interactionId,
+    canResolveObjective: c.canResolveObjective !== false,
+    inclusionRules: c.inclusionRules || { requirePcpAssigned: false, requireCompletedWithPatientOrCaregiver: true, customRules: [] },
+    promptGuidance: c.promptGuidance || "",
+  }));
+
   return {
     id: row.id,
     name: row.name,
@@ -483,6 +517,9 @@ function rowToActivationObjective(row: any): ActivationObjective {
     stages,
     achievedStageId: row.achieved_stage_id || "",
     thresholds,
+    observationName: row.observation_name || "",
+    extractedEnumValues,
+    stageMappings,
     interactions,
     isActive: row.is_active,
     displayOrder: row.display_order,
@@ -1362,6 +1399,9 @@ export class BigQueryStorage implements IStorage {
       stages: JSON.stringify(data.stages || []),
       achieved_stage_id: data.achievedStageId || "",
       thresholds: JSON.stringify(data.thresholds || []),
+      observation_name: data.observationName || "",
+      extracted_enum_values: JSON.stringify(data.extractedEnumValues || []),
+      stage_mappings: JSON.stringify(data.stageMappings || []),
       interactions: JSON.stringify(data.interactions || []),
       is_active: data.isActive !== false,
       display_order: data.displayOrder ?? 0,
@@ -1370,7 +1410,7 @@ export class BigQueryStorage implements IStorage {
     };
 
     await client.query({
-      query: `INSERT INTO ${table} (id, name, display_name, description, anchor_event_type, anchor_context_key, interaction_context_key, window_days, stages, achieved_stage_id, thresholds, interactions, is_active, display_order, prompt_guidance, client_pathway_id) VALUES (@id, @name, @display_name, @description, @anchor_event_type, @anchor_context_key, @interaction_context_key, @window_days, @stages, @achieved_stage_id, @thresholds, @interactions, @is_active, @display_order, @prompt_guidance, @client_pathway_id)`,
+      query: `INSERT INTO ${table} (id, name, display_name, description, anchor_event_type, anchor_context_key, interaction_context_key, window_days, stages, achieved_stage_id, thresholds, observation_name, extracted_enum_values, stage_mappings, interactions, is_active, display_order, prompt_guidance, client_pathway_id) VALUES (@id, @name, @display_name, @description, @anchor_event_type, @anchor_context_key, @interaction_context_key, @window_days, @stages, @achieved_stage_id, @thresholds, @observation_name, @extracted_enum_values, @stage_mappings, @interactions, @is_active, @display_order, @prompt_guidance, @client_pathway_id)`,
       params: row,
     });
 
@@ -1396,6 +1436,9 @@ export class BigQueryStorage implements IStorage {
     if (data.stages !== undefined) { setClauses.push("stages = @stages"); params.stages = JSON.stringify(data.stages); }
     if (data.achievedStageId !== undefined) { setClauses.push("achieved_stage_id = @achievedStageId"); params.achievedStageId = data.achievedStageId; }
     if (data.thresholds !== undefined) { setClauses.push("thresholds = @thresholds"); params.thresholds = JSON.stringify(data.thresholds); }
+    if (data.observationName !== undefined) { setClauses.push("observation_name = @observationName"); params.observationName = data.observationName; }
+    if (data.extractedEnumValues !== undefined) { setClauses.push("extracted_enum_values = @extractedEnumValues"); params.extractedEnumValues = JSON.stringify(data.extractedEnumValues); }
+    if (data.stageMappings !== undefined) { setClauses.push("stage_mappings = @stageMappings"); params.stageMappings = JSON.stringify(data.stageMappings); }
     if (data.interactions !== undefined) { setClauses.push("interactions = @interactions"); params.interactions = JSON.stringify(data.interactions); }
     if (data.isActive !== undefined) { setClauses.push("is_active = @isActive"); params.isActive = data.isActive; }
     if (data.displayOrder !== undefined) { setClauses.push("display_order = @displayOrder"); params.displayOrder = data.displayOrder; }

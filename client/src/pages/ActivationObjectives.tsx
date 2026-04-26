@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Pencil, Trash2, X, Save, Loader2, Target, Calendar,
-  ArrowRight, GripVertical, ChevronDown, ChevronUp, Clock, AlertCircle, MessageSquare,
+  ArrowRight, GripVertical, ChevronDown, ChevronUp, Clock, AlertCircle, MessageSquare, ClipboardCheck,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useClientPathway } from "@/contexts/ClientPathwayContext";
@@ -51,8 +51,6 @@ interface ObjectiveInteractionConfig {
   interactionId: number;
   canResolveObjective: boolean;
   inclusionRules: InclusionRules;
-  extractedEnumValues: string[];
-  stageMappings: StageMapping[];
   promptGuidance: string;
 }
 
@@ -78,6 +76,9 @@ interface ActivationObjective {
   stages: Stage[];
   achievedStageId: string;
   thresholds: Threshold[];
+  observationName: string;
+  extractedEnumValues: string[];
+  stageMappings: StageMapping[];
   interactions: ObjectiveInteractionConfig[];
   interactionContextKey: string;
   isActive: boolean;
@@ -126,6 +127,9 @@ function emptyForm(): Omit<ActivationObjective, "id"> {
     stages,
     achievedStageId: "stage_3",
     thresholds: DEFAULT_THRESHOLDS(stages),
+    observationName: "",
+    extractedEnumValues: [],
+    stageMappings: [],
     interactions: [],
     interactionContextKey: "interaction_key",
     isActive: true,
@@ -224,14 +228,12 @@ export default function ActivationObjectives() {
       toast({ title: "Missing interaction context key", description: "Specify the request context field that carries the interaction key (e.g. interaction_key).", variant: "destructive" });
       return;
     }
-    // Validate every extracted enum value has a stage mapping
-    for (const cfg of form.interactions) {
-      const interaction = interactions.find(i => i.id === cfg.interactionId);
-      const label = interaction?.name || `Interaction #${cfg.interactionId}`;
-      const unmapped = cfg.extractedEnumValues.filter(v => !cfg.stageMappings.find(m => m.extractedValue === v && m.stageId));
+    // Validate every extracted enum value has a stage mapping (objective-level observation)
+    {
+      const unmapped = form.extractedEnumValues.filter(v => !form.stageMappings.find(m => m.extractedValue === v && m.stageId));
       if (unmapped.length > 0) {
         toast({
-          title: `"${label}" has unmapped values`,
+          title: "Observation has unmapped values",
           description: `Pick a stage for: ${unmapped.join(", ")}`,
           variant: "destructive",
         });
@@ -319,11 +321,8 @@ export default function ActivationObjectives() {
       ...t,
       onTrackStageIds: t.onTrackStageIds.filter(id => id !== removed.id),
     }));
-    const newInteractions = form.interactions.map(cfg => ({
-      ...cfg,
-      stageMappings: cfg.stageMappings.filter(m => m.stageId !== removed.id),
-    }));
-    updateForm({ stages: next, achievedStageId: newAchieved, thresholds: newThresholds, interactions: newInteractions });
+    const newStageMappings = form.stageMappings.filter(m => m.stageId !== removed.id);
+    updateForm({ stages: next, achievedStageId: newAchieved, thresholds: newThresholds, stageMappings: newStageMappings });
   }
 
   function moveStage(idx: number, dir: -1 | 1) {
@@ -354,8 +353,6 @@ export default function ActivationObjectives() {
       interactionId,
       canResolveObjective: false,
       inclusionRules: { requirePcpAssigned: false, requireCompletedWithPatientOrCaregiver: true, customRules: [] },
-      extractedEnumValues: [],
-      stageMappings: [],
       promptGuidance: "",
     };
     updateForm({ interactions: [...form.interactions, cfg] });
@@ -371,28 +368,25 @@ export default function ActivationObjectives() {
     updateForm({ interactions: form.interactions.filter((_, i) => i !== idx) });
   }
 
-  function addExtractedValue(cfgIdx: number, value: string) {
+  function addExtractedValue(value: string) {
     if (!value.trim()) return;
-    const cfg = form.interactions[cfgIdx];
-    if (cfg.extractedEnumValues.includes(value.trim())) return;
-    updateInteractionConfig(cfgIdx, { extractedEnumValues: [...cfg.extractedEnumValues, value.trim()] });
+    if (form.extractedEnumValues.includes(value.trim())) return;
+    updateForm({ extractedEnumValues: [...form.extractedEnumValues, value.trim()] });
   }
 
-  function removeExtractedValue(cfgIdx: number, value: string) {
-    const cfg = form.interactions[cfgIdx];
-    updateInteractionConfig(cfgIdx, {
-      extractedEnumValues: cfg.extractedEnumValues.filter(v => v !== value),
-      stageMappings: cfg.stageMappings.filter(m => m.extractedValue !== value),
+  function removeExtractedValue(value: string) {
+    updateForm({
+      extractedEnumValues: form.extractedEnumValues.filter(v => v !== value),
+      stageMappings: form.stageMappings.filter(m => m.extractedValue !== value),
     });
   }
 
-  function setMapping(cfgIdx: number, extractedValue: string, stageId: string) {
-    const cfg = form.interactions[cfgIdx];
-    const exists = cfg.stageMappings.some(m => m.extractedValue === extractedValue);
+  function setMapping(extractedValue: string, stageId: string) {
+    const exists = form.stageMappings.some(m => m.extractedValue === extractedValue);
     const newMappings = exists
-      ? cfg.stageMappings.map(m => m.extractedValue === extractedValue ? { ...m, stageId } : m)
-      : [...cfg.stageMappings, { extractedValue, stageId }];
-    updateInteractionConfig(cfgIdx, { stageMappings: newMappings });
+      ? form.stageMappings.map(m => m.extractedValue === extractedValue ? { ...m, stageId } : m)
+      : [...form.stageMappings, { extractedValue, stageId }];
+    updateForm({ stageMappings: newMappings });
   }
 
   // ----------------------------------------
@@ -545,6 +539,16 @@ function ObjectiveCard({
           <div className="mt-4 pt-4 border-t space-y-3">
             <StagesPreview stages={obj.stages || []} achievedStageId={obj.achievedStageId} />
             <ThresholdsPreview thresholds={obj.thresholds || []} stages={obj.stages || []} />
+            {(obj.extractedEnumValues || []).length > 0 && (
+              <div className="text-sm">
+                <Label className="text-xs text-muted-foreground uppercase tracking-wider">
+                  Observation{obj.observationName ? `: ${obj.observationName}` : ""}
+                </Label>
+                <div className="mt-2 text-xs text-muted-foreground">
+                  {obj.extractedEnumValues.length} value{obj.extractedEnumValues.length !== 1 ? "s" : ""} · {(obj.stageMappings || []).filter(m => m.stageId).length} mapped to stages
+                </div>
+              </div>
+            )}
             {(obj.interactions || []).length > 0 && (
               <div className="text-sm">
                 <Label className="text-xs text-muted-foreground uppercase tracking-wider">Configured interactions</Label>
@@ -552,7 +556,6 @@ function ObjectiveCard({
                   {obj.interactions.map(cfg => (
                     <div key={cfg.interactionId} className="flex items-center gap-3 text-sm">
                       <Badge variant="outline" className="font-mono text-[11px]">interaction #{cfg.interactionId}</Badge>
-                      <span className="text-muted-foreground">{cfg.stageMappings.length} mapping{cfg.stageMappings.length !== 1 ? "s" : ""}</span>
                       {cfg.canResolveObjective && <Badge variant="secondary" className="text-[10px]">can resolve</Badge>}
                     </div>
                   ))}
@@ -660,9 +663,9 @@ interface EditorProps {
   addInteractionConfig: (interactionId: number) => void;
   updateInteractionConfig: (idx: number, patch: Partial<ObjectiveInteractionConfig>) => void;
   removeInteractionConfig: (idx: number) => void;
-  addExtractedValue: (cfgIdx: number, value: string) => void;
-  removeExtractedValue: (cfgIdx: number, value: string) => void;
-  setMapping: (cfgIdx: number, extractedValue: string, stageId: string) => void;
+  addExtractedValue: (value: string) => void;
+  removeExtractedValue: (value: string) => void;
+  setMapping: (extractedValue: string, stageId: string) => void;
   onCancel: () => void;
   onSave: () => void;
   saving: boolean;
@@ -973,17 +976,25 @@ function ObjectiveEditor(p: EditorProps) {
                 cfg={cfg}
                 idx={idx}
                 interaction={interaction}
-                stages={p.form.stages}
                 update={(patch) => p.updateInteractionConfig(idx, patch)}
                 onRemove={() => p.removeInteractionConfig(idx)}
-                addExtracted={(v) => p.addExtractedValue(idx, v)}
-                removeExtracted={(v) => p.removeExtractedValue(idx, v)}
-                setMapping={(v, sid) => p.setMapping(idx, v, sid)}
               />
             );
           })}
         </CardContent>
       </Card>
+
+      {/* Observation card — objective-level extracted value set + stage mappings */}
+      <ObservationEditor
+        observationName={p.form.observationName}
+        extractedEnumValues={p.form.extractedEnumValues}
+        stageMappings={p.form.stageMappings}
+        stages={p.form.stages}
+        onNameChange={(v) => p.updateForm({ observationName: v })}
+        addExtracted={p.addExtractedValue}
+        removeExtracted={p.removeExtractedValue}
+        setMapping={p.setMapping}
+      />
 
       {/* Optional general prompt guidance */}
       <Card>
@@ -1049,23 +1060,18 @@ function AddInteractionPicker({
 }
 
 // ============================================================
-// Touchpoint editor
+// Interaction editor (per-objective inclusion/resolve config)
 // ============================================================
 
 function InteractionConfigEditor({
-  cfg, idx, interaction, stages, update, onRemove, addExtracted, removeExtracted, setMapping,
+  cfg, idx, interaction, update, onRemove,
 }: {
   cfg: ObjectiveInteractionConfig;
   idx: number;
   interaction: ActivationInteraction | undefined;
-  stages: Stage[];
   update: (patch: Partial<ObjectiveInteractionConfig>) => void;
   onRemove: () => void;
-  addExtracted: (v: string) => void;
-  removeExtracted: (v: string) => void;
-  setMapping: (extracted: string, stageId: string) => void;
 }) {
-  const [newValue, setNewValue] = useState("");
   return (
     <div className="border rounded-md p-4 space-y-3 bg-muted/20" data-testid={`card-interaction-config-${idx}`}>
       <div className="flex items-start gap-3">
@@ -1132,46 +1138,91 @@ function InteractionConfigEditor({
             data-testid={`textarea-cfg-guidance-${idx}`} />
         </div>
       </div>
-
-      <div className="pt-2 border-t">
-        <Label className="text-xs uppercase tracking-wider text-muted-foreground">Extracted enum values → progress stage mapping</Label>
-        <p className="text-[11px] text-muted-foreground mb-2">Define what values the model can output for this interaction, and which stage each one maps to.</p>
-        <div className="flex gap-2 mb-2">
-          <Input value={newValue} onChange={e => setNewValue(e.target.value)}
-            placeholder="e.g. patient_confirmed_appointment" className="h-8 text-sm"
-            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addExtracted(newValue); setNewValue(""); } }}
-            data-testid={`input-cfg-newvalue-${idx}`} />
-          <Button size="sm" type="button" onClick={() => { addExtracted(newValue); setNewValue(""); }} data-testid={`button-cfg-addvalue-${idx}`}>
-            <Plus className="h-3.5 w-3.5 mr-1" /> Add value
-          </Button>
-        </div>
-        {cfg.extractedEnumValues.length === 0 ? (
-          <div className="text-xs text-muted-foreground italic">No extracted values yet.</div>
-        ) : (
-          <div className="space-y-1.5">
-            {cfg.extractedEnumValues.map(v => {
-              const mapping = cfg.stageMappings.find(m => m.extractedValue === v);
-              return (
-                <div key={v} className="flex items-center gap-2 text-sm" data-testid={`row-cfg-mapping-${idx}-${v}`}>
-                  <Badge variant="outline" className="font-mono text-xs">{v}</Badge>
-                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-                  <Select value={mapping?.stageId || ""} onValueChange={(sid) => setMapping(v, sid)}>
-                    <SelectTrigger className="h-7 text-xs w-48" data-testid={`select-cfg-mapping-${idx}-${v}`}>
-                      <SelectValue placeholder="Pick a stage..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {stages.map(s => <SelectItem key={s.id} value={s.id}>{s.displayName}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => removeExtracted(v)} data-testid={`button-cfg-removevalue-${idx}-${v}`}>
-                    <X className="h-3 w-3" />
-                  </Button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
     </div>
+  );
+}
+
+// ============================================================
+// Observation editor (objective-level extracted enum + stage mapping)
+// ============================================================
+
+function ObservationEditor({
+  observationName, extractedEnumValues, stageMappings, stages,
+  onNameChange, addExtracted, removeExtracted, setMapping,
+}: {
+  observationName: string;
+  extractedEnumValues: string[];
+  stageMappings: StageMapping[];
+  stages: Stage[];
+  onNameChange: (v: string) => void;
+  addExtracted: (v: string) => void;
+  removeExtracted: (v: string) => void;
+  setMapping: (extracted: string, stageId: string) => void;
+}) {
+  const [newValue, setNewValue] = useState("");
+  return (
+    <Card data-testid="card-observation">
+      <CardContent className="p-5 space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold flex items-center gap-2">
+            <ClipboardCheck className="h-4 w-4 text-primary" />
+            Observation
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            One observation per objective. Define the value set the model is allowed to extract from any configured interaction, and map each value to a progress stage.
+          </p>
+        </div>
+
+        <div>
+          <Label className="text-xs uppercase tracking-wider text-muted-foreground">Observation name (optional)</Label>
+          <Input value={observationName}
+            onChange={e => onNameChange(e.target.value)}
+            placeholder="e.g. PCP follow-up status"
+            className="h-9 text-sm mt-1 max-w-md"
+            data-testid="input-observation-name" />
+        </div>
+
+        <div>
+          <Label className="text-xs uppercase tracking-wider text-muted-foreground">Allowed extracted values → progress stage</Label>
+          <p className="text-[11px] text-muted-foreground mb-2">These values are shared across every interaction configured above. The model must pick one (or null if not discussed).</p>
+          <div className="flex gap-2 mb-2">
+            <Input value={newValue} onChange={e => setNewValue(e.target.value)}
+              placeholder="e.g. scheduled, attended, plans_to_schedule"
+              className="h-8 text-sm max-w-md"
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addExtracted(newValue); setNewValue(""); } }}
+              data-testid="input-observation-newvalue" />
+            <Button size="sm" type="button" onClick={() => { addExtracted(newValue); setNewValue(""); }} data-testid="button-observation-addvalue">
+              <Plus className="h-3.5 w-3.5 mr-1" /> Add value
+            </Button>
+          </div>
+          {extractedEnumValues.length === 0 ? (
+            <div className="text-xs text-muted-foreground italic">No extracted values yet.</div>
+          ) : (
+            <div className="space-y-1.5">
+              {extractedEnumValues.map(v => {
+                const mapping = stageMappings.find(m => m.extractedValue === v);
+                return (
+                  <div key={v} className="flex items-center gap-2 text-sm" data-testid={`row-observation-mapping-${v}`}>
+                    <Badge variant="outline" className="font-mono text-xs">{v}</Badge>
+                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                    <Select value={mapping?.stageId || ""} onValueChange={(sid) => setMapping(v, sid)}>
+                      <SelectTrigger className="h-7 text-xs w-48" data-testid={`select-observation-mapping-${v}`}>
+                        <SelectValue placeholder="Pick a stage..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {stages.map(s => <SelectItem key={s.id} value={s.id}>{s.displayName}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => removeExtracted(v)} data-testid={`button-observation-removevalue-${v}`}>
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
