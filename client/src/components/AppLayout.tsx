@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Settings, FlaskConical, LayoutDashboard, BookOpen, ChevronRight, FileText, Variable, Eye, Phone, Box, Code2, Layers, Package, ShieldAlert, ClipboardCheck, ClipboardList, Building2, ChevronDown, BarChart3, Plus, ChevronUp, ListTree, Target, MessageSquare } from "lucide-react";
+import { Settings, LayoutDashboard, BookOpen, ChevronRight, FileText, Variable, Eye, Phone, Box, Code2, Layers, Package, ShieldAlert, ClipboardCheck, ClipboardList, Building2, ChevronDown, BarChart3, Plus, ChevronUp, ListTree, Target, MessageSquare } from "lucide-react";
 import { useClientPathway } from "@/contexts/ClientPathwayContext";
 import { useState } from "react";
 
@@ -28,10 +28,6 @@ const ANALYTICS_ITEMS: NavItem[] = [
   { label: "Call Reviews", href: "/call-reviews", icon: <ClipboardCheck className="h-4 w-4" />, section: "analytics" },
   { label: "Call Volume", href: "/call-stats", icon: <BarChart3 className="h-4 w-4" />, section: "analytics" },
   { label: "Batch Processing", href: "/batch", icon: <Package className="h-4 w-4" />, section: "analytics" },
-];
-
-const TOOLS_ITEMS: NavItem[] = [
-  { label: "API Playground", href: "/", icon: <FlaskConical className="h-4 w-4" />, section: "tools" },
 ];
 
 const OVERVIEW_ITEMS: NavItem[] = [
@@ -208,7 +204,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               />
             )}
 
-            <NavSection label="Tools" items={TOOLS_ITEMS} location={location} />
             <NavSection label="Analytics" items={ANALYTICS_ITEMS} location={location} />
             <NavSection label="Overview" items={OVERVIEW_ITEMS} location={location} />
           </nav>
