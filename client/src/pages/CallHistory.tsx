@@ -107,6 +107,7 @@ interface CallActivationObjective {
     name: string;
     displayName: string;
     value: string | null;
+    detail: string | null;
     evidence: string | null;
   }>;
   processed_at: any;
@@ -1148,21 +1149,31 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
                             {ao.observations.map((obs) => {
                               const c = colorForObsValue(obs.topicId, obs.value);
                               return (
-                                <div key={`${ao.objective_id}-${obs.topicId}`} className="flex items-center gap-2 text-xs flex-wrap" data-testid={`obs-${ao.objective_id}-${obs.topicId}`}>
-                                  <span className="text-muted-foreground shrink-0">{obs.displayName}:</span>
-                                  {obs.value ? (
-                                    <span
-                                      className="inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full border"
-                                      style={{ backgroundColor: c.bg, color: c.fg, borderColor: c.border }}
-                                      data-testid={`obs-value-${ao.objective_id}-${obs.topicId}`}
+                                <div key={`${ao.objective_id}-${obs.topicId}`} className="space-y-0.5" data-testid={`obs-${ao.objective_id}-${obs.topicId}`}>
+                                  <div className="flex items-center gap-2 text-xs flex-wrap">
+                                    <span className="text-muted-foreground shrink-0">{obs.displayName}:</span>
+                                    {obs.value ? (
+                                      <span
+                                        className="inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full border"
+                                        style={{ backgroundColor: c.bg, color: c.fg, borderColor: c.border }}
+                                        data-testid={`obs-value-${ao.objective_id}-${obs.topicId}`}
+                                      >
+                                        {obs.value}
+                                      </span>
+                                    ) : (
+                                      <span className="italic text-muted-foreground">not detected</span>
+                                    )}
+                                    {obs.evidence && (
+                                      <span className="text-muted-foreground italic truncate">— "{obs.evidence}"</span>
+                                    )}
+                                  </div>
+                                  {obs.detail && (
+                                    <p
+                                      className="text-[11px] text-muted-foreground italic leading-relaxed pl-2"
+                                      data-testid={`obs-detail-${ao.objective_id}-${obs.topicId}`}
                                     >
-                                      {obs.value}
-                                    </span>
-                                  ) : (
-                                    <span className="italic text-muted-foreground">not detected</span>
-                                  )}
-                                  {obs.evidence && (
-                                    <span className="text-muted-foreground italic truncate">— "{obs.evidence}"</span>
+                                      {obs.detail}
+                                    </p>
                                   )}
                                 </div>
                               );
