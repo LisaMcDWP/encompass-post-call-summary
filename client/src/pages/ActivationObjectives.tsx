@@ -11,10 +11,11 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Pencil, Trash2, X, Save, Loader2, Target, Calendar,
   ArrowRight, GripVertical, ChevronDown, ChevronUp, Clock, AlertCircle, MessageSquare, ClipboardCheck,
-  ArrowUp, ArrowDown, Sparkles, Send,
+  ArrowUp, ArrowDown, Sparkles, Send, FileDown,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useClientPathway } from "@/contexts/ClientPathwayContext";
+import { exportObjectivesPdf } from "@/lib/exportObjectivesPdf";
 
 type AnchorEventType = "discharge" | "enrollment" | "procedure" | "custom";
 type BandLabel = "early" | "near_window" | "at_window" | "post_window" | "default";
@@ -197,7 +198,7 @@ function bandTimingLabel(b: BandLabel): { label: string; example: string } {
 }
 
 export default function ActivationObjectives() {
-  const { selectedCPId } = useClientPathway();
+  const { selectedCPId, selectedCP } = useClientPathway();
   const { toast } = useToast();
   const [items, setItems] = useState<ActivationObjective[]>([]);
   const [contextParams, setContextParams] = useState<ContextParameter[]>([]);
@@ -986,6 +987,28 @@ export default function ActivationObjectives() {
         </div>
         {!isEditing && (
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (items.length === 0) {
+                  toast({ title: "Nothing to export", description: "Create at least one activation objective first.", variant: "destructive" });
+                  return;
+                }
+                const pathwayLabel = selectedCP
+                  ? `${selectedCP.client} — ${selectedCP.pathway}`
+                  : "Pathway";
+                exportObjectivesPdf(
+                  pathwayLabel,
+                  items,
+                  interactions,
+                  observationTopics,
+                );
+              }}
+              data-testid="button-export-pdf"
+              title="Download a PDF of every objective in this pathway"
+            >
+              <FileDown className="h-4 w-4 mr-2" /> Export PDF
+            </Button>
             <Button
               variant="outline"
               onClick={() => setAiOpen(!aiOpen)}
