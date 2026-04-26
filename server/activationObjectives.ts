@@ -29,12 +29,23 @@ function pickBand(
   thresholds: ActivationObjectiveThreshold[],
   daysRemaining: number,
 ): ActivationObjectiveThreshold | null {
+  // Day-bound bands first; the "default" band is a fallback used only when
+  // no day-bound band matches.
+  let defaultBand: ActivationObjectiveThreshold | null = null;
   for (const t of thresholds) {
+    if (t.bandLabel === "default") {
+      defaultBand = t;
+      continue;
+    }
     const minOk = t.daysRemainingMin === null || t.daysRemainingMin === undefined || daysRemaining >= t.daysRemainingMin;
     const maxOk = t.daysRemainingMax === null || t.daysRemainingMax === undefined || daysRemaining <= t.daysRemainingMax;
     if (minOk && maxOk) return t;
   }
-  return null;
+  return defaultBand;
+}
+
+function findDefaultBand(thresholds: ActivationObjectiveThreshold[]): ActivationObjectiveThreshold | null {
+  return (thresholds || []).find((t) => t.bandLabel === "default") || null;
 }
 
 /**
@@ -151,7 +162,10 @@ export function computeActivationObjectiveResults(args: {
 
     const targetDate = anchorDate ? addDaysISO(anchorDate, obj.windowDays) : null;
     const daysRemaining = anchorDate && targetDate ? diffDaysISO(callDate, targetDate) : null;
-    const band = daysRemaining !== null ? pickBand(obj.thresholds || [], daysRemaining) : null;
+    // When daysRemaining is unknown (no anchor), still use the default band if configured.
+    const band = daysRemaining !== null
+      ? pickBand(obj.thresholds || [], daysRemaining)
+      : findDefaultBand(obj.thresholds || []);
     const ext = extByKey.get(`${obj.name}::${interaction.key}`) || extByKey.get(`${obj.name}::`) || null;
     const extractedValue = ext?.extracted_value && ext.extracted_value.trim() ? ext.extracted_value.trim() : null;
 

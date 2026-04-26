@@ -17,7 +17,7 @@ import { Link } from "wouter";
 import { useClientPathway } from "@/contexts/ClientPathwayContext";
 
 type AnchorEventType = "discharge" | "enrollment" | "procedure" | "custom";
-type BandLabel = "early" | "near_window" | "at_window" | "post_window";
+type BandLabel = "early" | "near_window" | "at_window" | "post_window" | "default";
 type EnumColor = "GREEN" | "YELLOW" | "RED" | "BLUE" | "GRAY";
 
 interface EnumValue {
@@ -169,6 +169,7 @@ function bandTimingLabel(b: BandLabel): { label: string; example: string } {
     case "near_window": return { label: "Near window", example: "e.g. day 6" };
     case "at_window": return { label: "At window", example: "e.g. day 7" };
     case "post_window": return { label: "Post window", example: "e.g. day 8+" };
+    case "default": return { label: "Default", example: "fallback when no other band matches" };
   }
 }
 
@@ -370,6 +371,24 @@ export default function ActivationObjectives() {
     updateForm({ thresholds: next });
   }
 
+  function addDefaultBand() {
+    if (form.thresholds.some(t => t.bandLabel === "default")) return;
+    const defaultBand: Threshold = {
+      bandLabel: "default",
+      bandDisplayName: "Default",
+      daysRemainingMin: null,
+      daysRemainingMax: null,
+      onTrackStageIds: [],
+      satisfiedLabel: "On track",
+      unsatisfiedLabel: "At risk",
+    };
+    updateForm({ thresholds: [...form.thresholds, defaultBand] });
+  }
+
+  function removeBand(idx: number) {
+    updateForm({ thresholds: form.thresholds.filter((_, i) => i !== idx) });
+  }
+
   function addInteractionConfig(interactionId: number) {
     if (form.interactions.some(c => c.interactionId === interactionId)) return;
     const cfg: ObjectiveInteractionConfig = {
@@ -519,6 +538,8 @@ export default function ActivationObjectives() {
           moveStage={moveStage}
           toggleThresholdStage={toggleThresholdStage}
           updateThreshold={updateThreshold}
+          addDefaultBand={addDefaultBand}
+          removeBand={removeBand}
           addInteractionConfig={addInteractionConfig}
           updateInteractionConfig={updateInteractionConfig}
           removeInteractionConfig={removeInteractionConfig}
@@ -750,6 +771,8 @@ interface EditorProps {
   moveStage: (idx: number, dir: -1 | 1) => void;
   toggleThresholdStage: (idx: number, stageId: string) => void;
   updateThreshold: (idx: number, patch: Partial<Threshold>) => void;
+  addDefaultBand: () => void;
+  removeBand: (idx: number) => void;
   addInteractionConfig: (interactionId: number) => void;
   updateInteractionConfig: (idx: number, patch: Partial<ObjectiveInteractionConfig>) => void;
   removeInteractionConfig: (idx: number) => void;
@@ -997,23 +1020,39 @@ function ObjectiveEditor(p: EditorProps) {
               <tbody>
                 {p.form.thresholds.map((t, i) => {
                   const timing = bandTimingLabel(t.bandLabel);
+                  const isDefault = t.bandLabel === "default";
                   return (
-                    <tr key={t.bandLabel} className="border-t" data-testid={`row-threshold-${t.bandLabel}`}>
+                    <tr key={t.bandLabel} className={`border-t ${isDefault ? "bg-primary/5" : ""}`} data-testid={`row-threshold-${t.bandLabel}`}>
                       <td className="px-3 py-2 align-top">
-                        <div className="font-medium">{t.bandDisplayName || timing.label}</div>
+                        <div className="flex items-center gap-2">
+                          <div className="font-medium">{t.bandDisplayName || timing.label}</div>
+                          {isDefault && (
+                            <Button size="icon" variant="ghost" className="h-5 w-5"
+                              onClick={() => p.removeBand(i)}
+                              data-testid={`button-remove-band-${t.bandLabel}`}>
+                              <X className="h-3 w-3 text-destructive" />
+                            </Button>
+                          )}
+                        </div>
                         <div className="text-xs text-muted-foreground">{timing.example}</div>
                       </td>
                       <td className="px-3 py-2 align-top">
-                        <div className="flex items-center gap-1.5">
-                          <Input type="number" placeholder="min" value={t.daysRemainingMin ?? ""}
-                            onChange={e => p.updateThreshold(i, { daysRemainingMin: e.target.value === "" ? null : parseInt(e.target.value) })}
-                            className="w-16 h-7 text-xs" data-testid={`input-threshold-min-${t.bandLabel}`} />
-                          <span className="text-muted-foreground">/</span>
-                          <Input type="number" placeholder="max" value={t.daysRemainingMax ?? ""}
-                            onChange={e => p.updateThreshold(i, { daysRemainingMax: e.target.value === "" ? null : parseInt(e.target.value) })}
-                            className="w-16 h-7 text-xs" data-testid={`input-threshold-max-${t.bandLabel}`} />
-                        </div>
-                        <div className="text-[10px] text-muted-foreground mt-1">{bandRangeLabel(t)}</div>
+                        {isDefault ? (
+                          <Badge variant="outline" className="text-[11px]">Any days · fallback</Badge>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-1.5">
+                              <Input type="number" placeholder="min" value={t.daysRemainingMin ?? ""}
+                                onChange={e => p.updateThreshold(i, { daysRemainingMin: e.target.value === "" ? null : parseInt(e.target.value) })}
+                                className="w-16 h-7 text-xs" data-testid={`input-threshold-min-${t.bandLabel}`} />
+                              <span className="text-muted-foreground">/</span>
+                              <Input type="number" placeholder="max" value={t.daysRemainingMax ?? ""}
+                                onChange={e => p.updateThreshold(i, { daysRemainingMax: e.target.value === "" ? null : parseInt(e.target.value) })}
+                                className="w-16 h-7 text-xs" data-testid={`input-threshold-max-${t.bandLabel}`} />
+                            </div>
+                            <div className="text-[10px] text-muted-foreground mt-1">{bandRangeLabel(t)}</div>
+                          </>
+                        )}
                       </td>
                       <td className="px-3 py-2 align-top">
                         {t.bandLabel === "post_window" ? (
@@ -1053,6 +1092,14 @@ function ObjectiveEditor(p: EditorProps) {
               </tbody>
             </table>
           </div>
+          {!p.form.thresholds.some(t => t.bandLabel === "default") && (
+            <div className="flex items-center gap-2 pt-1">
+              <Button size="sm" variant="outline" onClick={p.addDefaultBand} data-testid="button-add-default-band">
+                <Plus className="h-3.5 w-3.5 mr-1" /> Add default band
+              </Button>
+              <p className="text-[11px] text-muted-foreground">A fallback band with no day range — applied when no day-bound band matches (e.g. anchor date not provided in the request).</p>
+            </div>
+          )}
         </CardContent>
       </Card>
 

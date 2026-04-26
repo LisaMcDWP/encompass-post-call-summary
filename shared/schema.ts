@@ -209,7 +209,7 @@ export const activationObjectiveStageSchema = z.object({
 export type ActivationObjectiveStage = z.infer<typeof activationObjectiveStageSchema>;
 
 export const activationObjectiveThresholdSchema = z.object({
-  bandLabel: z.enum(["early", "near_window", "at_window", "post_window"]),
+  bandLabel: z.enum(["early", "near_window", "at_window", "post_window", "default"]),
   bandDisplayName: z.string().default(""),
   daysRemainingMin: z.number().int().nullable(),
   daysRemainingMax: z.number().int().nullable(),
