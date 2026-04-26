@@ -51,6 +51,7 @@ interface Threshold {
   onTrackStageIds: string[];
   satisfiedLabel: string;
   unsatisfiedLabel: string;
+  expectedInteractionId?: number | null;
 }
 
 interface StageMapping {
@@ -140,10 +141,10 @@ const DEFAULT_THRESHOLDS = (stages: Stage[]): Threshold[] => {
   const last = progress[progress.length - 1]?.id || "";
   const middleAndLast = progress.slice(1).map(s => s.id);
   return [
-    { bandLabel: "early", bandDisplayName: "Early", daysRemainingMin: 3, daysRemainingMax: null, onTrackStageIds: middleAndLast, satisfiedLabel: "On track", unsatisfiedLabel: "At risk" },
-    { bandLabel: "near_window", bandDisplayName: "Near window", daysRemainingMin: 1, daysRemainingMax: 2, onTrackStageIds: last ? [last] : [], satisfiedLabel: "On track", unsatisfiedLabel: "At risk" },
-    { bandLabel: "at_window", bandDisplayName: "At window", daysRemainingMin: 0, daysRemainingMax: 0, onTrackStageIds: last ? [last] : [], satisfiedLabel: "On track", unsatisfiedLabel: "At risk" },
-    { bandLabel: "post_window", bandDisplayName: "Post window", daysRemainingMin: null, daysRemainingMax: -1, onTrackStageIds: last ? [last] : [], satisfiedLabel: "Achieved", unsatisfiedLabel: "Not achieved" },
+    { bandLabel: "early", bandDisplayName: "Early", daysRemainingMin: 3, daysRemainingMax: null, onTrackStageIds: middleAndLast, satisfiedLabel: "On track", unsatisfiedLabel: "At risk", expectedInteractionId: null },
+    { bandLabel: "near_window", bandDisplayName: "Near window", daysRemainingMin: 1, daysRemainingMax: 2, onTrackStageIds: last ? [last] : [], satisfiedLabel: "On track", unsatisfiedLabel: "At risk", expectedInteractionId: null },
+    { bandLabel: "at_window", bandDisplayName: "At window", daysRemainingMin: 0, daysRemainingMax: 0, onTrackStageIds: last ? [last] : [], satisfiedLabel: "On track", unsatisfiedLabel: "At risk", expectedInteractionId: null },
+    { bandLabel: "post_window", bandDisplayName: "Post window", daysRemainingMin: null, daysRemainingMax: -1, onTrackStageIds: last ? [last] : [], satisfiedLabel: "Achieved", unsatisfiedLabel: "Not achieved", expectedInteractionId: null },
   ];
 };
 
@@ -486,6 +487,7 @@ export default function ActivationObjectives() {
       onTrackStageIds: [],
       satisfiedLabel: "On track",
       unsatisfiedLabel: "At risk",
+      expectedInteractionId: null,
     };
     updateForm({ thresholds: [...form.thresholds, defaultBand] });
   }
@@ -1358,6 +1360,7 @@ export default function ActivationObjectives() {
             <ObjectiveCard
               key={obj.id}
               obj={obj}
+              interactions={interactions}
               expanded={expandedId === obj.id}
               onToggleExpand={() => setExpandedId(expandedId === obj.id ? null : obj.id)}
               onEdit={() => startEdit(obj)}
@@ -1375,9 +1378,10 @@ export default function ActivationObjectives() {
 // ============================================================
 
 function ObjectiveCard({
-  obj, expanded, onToggleExpand, onEdit, onDelete,
+  obj, interactions, expanded, onToggleExpand, onEdit, onDelete,
 }: {
   obj: ActivationObjective;
+  interactions: ActivationInteraction[];
   expanded: boolean;
   onToggleExpand: () => void;
   onEdit: () => void;
@@ -1424,7 +1428,7 @@ function ObjectiveCard({
         {expanded && (
           <div className="mt-4 pt-4 border-t space-y-3">
             <StagesPreview stages={obj.stages || []} achievedStageId={obj.achievedStageId} />
-            <ThresholdsPreview thresholds={obj.thresholds || []} stages={obj.stages || []} />
+            <ThresholdsPreview thresholds={obj.thresholds || []} stages={obj.stages || []} interactions={interactions} />
             {(obj.extractedEnumValues || []).length > 0 && (
               <div className="text-sm">
                 <Label className="text-xs text-muted-foreground uppercase tracking-wider">
@@ -1479,8 +1483,9 @@ function StagesPreview({ stages, achievedStageId }: { stages: Stage[]; achievedS
   );
 }
 
-function ThresholdsPreview({ thresholds, stages }: { thresholds: Threshold[]; stages: Stage[] }) {
+function ThresholdsPreview({ thresholds, stages, interactions }: { thresholds: Threshold[]; stages: Stage[]; interactions: ActivationInteraction[] }) {
   const stageById = new Map(stages.map(s => [s.id, s.displayName]));
+  const interactionById = new Map(interactions.map(x => [x.id, x.name]));
   if (thresholds.length === 0) {
     return (
       <div>
@@ -1507,11 +1512,19 @@ function ThresholdsPreview({ thresholds, stages }: { thresholds: Threshold[]; st
           <tbody>
             {thresholds.map((t, i) => {
               const timing = bandTimingLabel(t.bandLabel);
+              const expectedName = t.bandLabel !== "post_window" && t.expectedInteractionId != null
+                ? interactionById.get(t.expectedInteractionId)
+                : null;
               return (
                 <tr key={i} className="border-t">
                   <td className="px-3 py-2">
                     <div className="font-medium">{t.bandDisplayName || timing.label}</div>
                     <div className="text-xs text-muted-foreground">{timing.example}</div>
+                    {expectedName && (
+                      <div className="text-[10px] text-muted-foreground italic mt-0.5" data-testid={`text-band-expected-interaction-${t.bandLabel}`}>
+                        typically: {expectedName}
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-2">
                     <Badge variant="outline" className="font-mono text-xs">{bandRangeLabel(t)}</Badge>
@@ -2088,6 +2101,8 @@ function ObjectiveEditor(p: EditorProps) {
                 {p.form.thresholds.map((t, i) => {
                   const timing = bandTimingLabel(t.bandLabel);
                   const isDefault = t.bandLabel === "default";
+                  const isPostWindow = t.bandLabel === "post_window";
+                  const expectedId = t.expectedInteractionId ?? null;
                   return (
                     <tr key={t.bandLabel} className={`border-t ${isDefault ? "bg-primary/5" : ""}`} data-testid={`row-threshold-${t.bandLabel}`}>
                       <td className="px-3 py-2 align-top">
@@ -2102,6 +2117,26 @@ function ObjectiveEditor(p: EditorProps) {
                           )}
                         </div>
                         <div className="text-xs text-muted-foreground">{timing.example}</div>
+                        {!isPostWindow && (
+                          <div className="mt-2">
+                            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Typically</Label>
+                            <Select
+                              value={expectedId === null ? "__none__" : String(expectedId)}
+                              onValueChange={(v) => p.updateThreshold(i, { expectedInteractionId: v === "__none__" ? null : parseInt(v) })}
+                            >
+                              <SelectTrigger className="h-7 text-xs mt-0.5" data-testid={`select-band-expected-interaction-${t.bandLabel}`}>
+                                <SelectValue placeholder="No hint" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__"><span className="text-muted-foreground italic">No hint</span></SelectItem>
+                                {p.interactions.filter(x => x.isActive).map(x => (
+                                  <SelectItem key={x.id} value={String(x.id)}>{x.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <p className="text-[10px] text-muted-foreground mt-0.5 italic">Display only — does not affect routing.</p>
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-2 align-top">
                         {isDefault ? (

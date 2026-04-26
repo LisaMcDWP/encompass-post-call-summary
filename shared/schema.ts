@@ -216,6 +216,9 @@ export const activationObjectiveThresholdSchema = z.object({
   onTrackStageIds: z.array(z.string()).default([]),
   satisfiedLabel: z.string().default("On track"),
   unsatisfiedLabel: z.string().default("At risk"),
+  // Display-only hint: which configured interaction is typically expected to land in this band.
+  // Has no runtime effect on extraction or scoring — purely a label for editor readability.
+  expectedInteractionId: z.number().int().nullable().default(null),
 });
 export type ActivationObjectiveThreshold = z.infer<typeof activationObjectiveThresholdSchema>;
 
