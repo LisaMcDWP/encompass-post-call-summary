@@ -3,18 +3,20 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Save, RotateCcw, FileText, Info } from "lucide-react";
+import { Loader2, Save, RotateCcw, FileText, Info, FileDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useClientPathway } from "@/contexts/ClientPathwayContext";
+import { exportPathwayPdf } from "@/lib/exportPathwayPdf";
 
 export default function SummaryPrompt() {
-  const { selectedCPId } = useClientPathway();
+  const { selectedCPId, selectedCP } = useClientPathway();
   const [instruction, setInstruction] = useState("");
   const [defaultInstruction, setDefaultInstruction] = useState("");
   const [isCustom, setIsCustom] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const { toast } = useToast();
 
   const cpParam = selectedCPId ? `clientPathwayId=${selectedCPId}` : "";
@@ -81,6 +83,20 @@ export default function SummaryPrompt() {
 
   const hasChanges = instruction !== defaultInstruction || isCustom;
 
+  async function handleExportPdf() {
+    if (!selectedCPId || !selectedCP) return;
+    try {
+      setExporting(true);
+      const label = `${selectedCP.client} — ${selectedCP.pathway}`;
+      await exportPathwayPdf(selectedCPId, label);
+      toast({ title: "PDF generated", description: "Pathway configuration downloaded." });
+    } catch (err: any) {
+      toast({ title: "Export failed", description: err?.message || "Unable to generate PDF.", variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
+  }
+
   if (!selectedCPId) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -112,11 +128,22 @@ export default function SummaryPrompt() {
             Configure the instruction that tells Gemini how to generate the call summary.
           </p>
         </div>
-        {isCustom && (
-          <Badge variant="outline" className="border-orange-400 text-orange-500" data-testid="badge-custom">
-            Custom
-          </Badge>
-        )}
+        <div className="flex items-center gap-2">
+          {isCustom && (
+            <Badge variant="outline" className="border-orange-400 text-orange-500" data-testid="badge-custom">
+              Custom
+            </Badge>
+          )}
+          <Button
+            variant="outline"
+            onClick={handleExportPdf}
+            disabled={exporting || !selectedCPId}
+            data-testid="button-export-pathway-pdf"
+          >
+            {exporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileDown className="h-4 w-4 mr-2" />}
+            Export PDF
+          </Button>
+        </div>
       </div>
 
       <Card className="border-border/60 bg-card shadow-md">

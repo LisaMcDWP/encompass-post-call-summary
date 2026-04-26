@@ -1,5 +1,17 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import {
+  BRAND,
+  TOP_AFTER_HEADER,
+  ensureSpace,
+  drawHeader as drawHeaderShared,
+  drawFooter,
+  sectionHeading,
+  keyValue,
+  paragraph,
+  chipList,
+  slugify,
+} from "./pdfHelpers";
 
 interface Stage {
   id: string;
@@ -79,15 +91,6 @@ export interface ObjectiveForPdf {
   observationTopicIds: number[];
 }
 
-const BRAND = {
-  primary: [0, 152, 219] as [number, number, number],
-  ink: [23, 41, 56] as [number, number, number],
-  accent: [150, 212, 16] as [number, number, number],
-  muted: [110, 120, 130] as [number, number, number],
-  border: [220, 224, 230] as [number, number, number],
-  unresolved: [180, 80, 80] as [number, number, number],
-};
-
 const ANCHOR_LABELS: Record<string, string> = {
   discharge: "Discharge date",
   enrollment: "Enrollment date",
@@ -104,133 +107,14 @@ function fmtDays(t: Threshold): string {
   return `${lo}–${hi} days remaining`;
 }
 
-function ensureSpace(doc: jsPDF, y: number, needed: number, marginBottom = 40): number {
-  const pageH = doc.internal.pageSize.getHeight();
-  if (y + needed > pageH - marginBottom) {
-    doc.addPage();
-    return 56;
-  }
-  return y;
-}
-
 function drawHeader(doc: jsPDF, pathwayName: string, totalObjectives: number) {
-  const pageW = doc.internal.pageSize.getWidth();
-  doc.setFillColor(...BRAND.ink);
-  doc.rect(0, 0, pageW, 44, "F");
-
-  doc.setTextColor(255, 255, 255);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.text("Activation Objectives Configuration", 40, 22);
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.text(pathwayName, 40, 36);
-
   const stamp = new Date().toLocaleString();
-  doc.setFontSize(9);
-  doc.text(`${totalObjectives} objective${totalObjectives === 1 ? "" : "s"}  ·  ${stamp}`, pageW - 40, 36, { align: "right" });
-}
-
-function drawFooter(doc: jsPDF) {
-  const pageW = doc.internal.pageSize.getWidth();
-  const pageH = doc.internal.pageSize.getHeight();
-  const total = doc.getNumberOfPages();
-  for (let i = 1; i <= total; i++) {
-    doc.setPage(i);
-    doc.setDrawColor(...BRAND.border);
-    doc.setLineWidth(0.5);
-    doc.line(40, pageH - 28, pageW - 40, pageH - 28);
-    doc.setTextColor(...BRAND.muted);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.text("Guideway Care", 40, pageH - 16);
-    doc.text(`Page ${i} of ${total}`, pageW - 40, pageH - 16, { align: "right" });
-  }
-}
-
-function sectionHeading(doc: jsPDF, label: string, y: number): number {
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(...BRAND.primary);
-  doc.text(label.toUpperCase(), 40, y);
-  doc.setDrawColor(...BRAND.border);
-  doc.setLineWidth(0.5);
-  doc.line(40, y + 3, doc.internal.pageSize.getWidth() - 40, y + 3);
-  return y + 14;
-}
-
-function keyValue(doc: jsPDF, items: Array<[string, string]>, y: number): number {
-  doc.setFontSize(9);
-  const pageW = doc.internal.pageSize.getWidth();
-  const colW = (pageW - 80) / 2;
-  let row = y;
-  let col = 0;
-  for (const [k, v] of items) {
-    const x = 40 + col * colW;
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(...BRAND.muted);
-    doc.text(k.toUpperCase(), x, row);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(...BRAND.ink);
-    const wrapped = doc.splitTextToSize(v || "—", colW - 8);
-    doc.text(wrapped, x, row + 11);
-    col = col === 0 ? 1 : 0;
-    if (col === 0) row += 28;
-  }
-  if (col === 1) row += 28;
-  return row + 4;
-}
-
-function paragraph(doc: jsPDF, text: string, y: number): number {
-  if (!text || !text.trim()) return y;
-  const pageW = doc.internal.pageSize.getWidth();
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9.5);
-  doc.setTextColor(...BRAND.ink);
-  const lines = doc.splitTextToSize(text, pageW - 80);
-  y = ensureSpace(doc, y, lines.length * 12);
-  doc.text(lines, 40, y);
-  return y + lines.length * 12 + 4;
-}
-
-function chipList(doc: jsPDF, label: string, values: string[], y: number, opts?: { dashed?: boolean }): number {
-  if (!values || values.length === 0) return y;
-  const pageW = doc.internal.pageSize.getWidth();
-  const maxW = pageW - 80;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  doc.setTextColor(...BRAND.muted);
-  doc.text(label.toUpperCase(), 40, y);
-  y += 10;
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  let x = 40;
-  const chipH = 14;
-  const padX = 6;
-  const gap = 4;
-  for (const v of values) {
-    const w = doc.getTextWidth(v) + padX * 2;
-    if (x + w > 40 + maxW) {
-      x = 40;
-      y += chipH + gap;
-      y = ensureSpace(doc, y, chipH + gap);
-    }
-    doc.setDrawColor(...(opts?.dashed ? BRAND.muted : BRAND.border));
-    doc.setFillColor(245, 247, 250);
-    if (opts?.dashed && (doc as any).setLineDashPattern) {
-      (doc as any).setLineDashPattern([2, 2], 0);
-    }
-    doc.roundedRect(x, y - chipH + 4, w, chipH, 3, 3, "FD");
-    if (opts?.dashed && (doc as any).setLineDashPattern) {
-      (doc as any).setLineDashPattern([], 0);
-    }
-    doc.setTextColor(...BRAND.ink);
-    doc.text(v, x + padX, y + 1);
-    x += w + gap;
-  }
-  return y + chipH + 8;
+  drawHeaderShared(
+    doc,
+    "Activation Objectives Configuration",
+    pathwayName,
+    `${totalObjectives} objective${totalObjectives === 1 ? "" : "s"}  ·  ${stamp}`,
+  );
 }
 
 function objectiveTitleBlock(doc: jsPDF, idx: number, total: number, obj: ObjectiveForPdf, y: number): number {
@@ -371,14 +255,16 @@ export function exportObjectivesPdf(
     }
 
     // Non-stage value bins
-    if (obj.knownContextExtractedValues.length || obj.excludedExtractedValues.length) {
+    const knownCtx = obj.knownContextExtractedValues ?? [];
+    const excluded = obj.excludedExtractedValues ?? [];
+    if (knownCtx.length || excluded.length) {
       y = ensureSpace(doc, y, 40);
       y = sectionHeading(doc, "Non-stage values", y);
-      if (obj.knownContextExtractedValues.length) {
-        y = chipList(doc, "Known Context  (captured but not used for staging)", obj.knownContextExtractedValues, y + 4, { dashed: true });
+      if (knownCtx.length) {
+        y = chipList(doc, "Known Context  (captured but not used for staging)", knownCtx, y + 4, { dashed: true });
       }
-      if (obj.excludedExtractedValues.length) {
-        y = chipList(doc, "Excluded  (dropped — not in denominator)", obj.excludedExtractedValues, y + 4, { dashed: true });
+      if (excluded.length) {
+        y = chipList(doc, "Excluded  (dropped — not in denominator)", excluded, y + 4, { dashed: true });
       }
     }
 

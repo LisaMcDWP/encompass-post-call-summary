@@ -1550,6 +1550,7 @@ export async function registerRoutes(
       const stored = await storage.getSetting(cpId, "observations_prompt_guidance");
       res.json({
         guidance: stored || "",
+        defaultGuidance: "",
         isCustom: stored !== null,
       });
     } catch (error: any) {
