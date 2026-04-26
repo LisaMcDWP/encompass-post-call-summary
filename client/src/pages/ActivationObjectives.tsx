@@ -109,6 +109,7 @@ interface ActivationObjective {
   isActive: boolean;
   displayOrder: number;
   promptGuidance: string;
+  observationTopicIds: number[];
 }
 
 interface ContextParameter {
@@ -160,6 +161,7 @@ function emptyForm(): Omit<ActivationObjective, "id"> {
     isActive: true,
     displayOrder: 0,
     promptGuidance: "",
+    observationTopicIds: [],
   };
 }
 
@@ -243,6 +245,7 @@ export default function ActivationObjectives() {
       thresholds,
       interactions: rest.interactions || [],
       interactionContextKey: rest.interactionContextKey || "interaction_key",
+      observationTopicIds: rest.observationTopicIds || [],
     });
     setEditingId(id);
     setExpandedId(null);
@@ -1192,12 +1195,53 @@ function ObjectiveEditor(p: EditorProps) {
 
       {/* Optional general prompt guidance */}
       <Card>
-        <CardContent className="p-5 space-y-2">
-          <Label className="text-sm font-semibold">Objective-level prompt guidance (optional)</Label>
-          <p className="text-xs text-muted-foreground">Extra context that applies across all interactions — e.g. how to interpret ambiguous patient statements about appointment status.</p>
-          <Textarea value={p.form.promptGuidance} onChange={e => p.updateForm({ promptGuidance: e.target.value })}
-            rows={3} placeholder="If the patient mentions 'I have an appointment' without a date, infer 'scheduled' unless they say it already occurred."
-            data-testid="textarea-objective-guidance" />
+        <CardContent className="p-5 space-y-4">
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold">Objective-level prompt guidance (optional)</Label>
+            <p className="text-xs text-muted-foreground">Extra context that applies across all interactions — e.g. how to interpret ambiguous patient statements about appointment status.</p>
+            <Textarea value={p.form.promptGuidance} onChange={e => p.updateForm({ promptGuidance: e.target.value })}
+              rows={3} placeholder="If the patient mentions 'I have an appointment' without a date, infer 'scheduled' unless they say it already occurred."
+              data-testid="textarea-objective-guidance" />
+          </div>
+          <div className="space-y-2 pt-2 border-t">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-semibold">Always-extract observation topics (objective fallback)</Label>
+              {(p.form.observationTopicIds || []).length > 0 && (
+                <Badge variant="secondary" className="text-[10px]">{(p.form.observationTopicIds || []).length} selected</Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">These observation topics are extracted on every call where this objective is configured — even when no interaction is matched (e.g. an ad-hoc follow-up call). Topics selected here are merged with any per-interaction topics below.</p>
+            {p.observationTopics.filter(t => t.isActive).length === 0 ? (
+              <p className="text-xs italic text-muted-foreground">No observation topics defined for this client pathway yet.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {p.observationTopics.filter(t => t.isActive).map(topic => {
+                  const active = (p.form.observationTopicIds || []).includes(topic.id);
+                  return (
+                    <button
+                      key={topic.id}
+                      type="button"
+                      onClick={() => {
+                        const current = p.form.observationTopicIds || [];
+                        const next = current.includes(topic.id)
+                          ? current.filter(id => id !== topic.id)
+                          : [...current, topic.id];
+                        p.updateForm({ observationTopicIds: next });
+                      }}
+                      data-testid={`chip-objective-topic-${topic.id}`}
+                      className={`text-xs px-2 py-1 rounded-full border transition-colors ${
+                        active
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-background text-foreground border-border hover:bg-muted"
+                      }`}
+                    >
+                      {topic.displayName}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
     </div>

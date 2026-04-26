@@ -455,6 +455,7 @@ async function ensureActivationObjectivesTable(): Promise<void> {
     `ALTER TABLE \`${fullTable}\` ADD COLUMN IF NOT EXISTS observation_name STRING`,
     `ALTER TABLE \`${fullTable}\` ADD COLUMN IF NOT EXISTS extracted_enum_values STRING`,
     `ALTER TABLE \`${fullTable}\` ADD COLUMN IF NOT EXISTS stage_mappings STRING`,
+    `ALTER TABLE \`${fullTable}\` ADD COLUMN IF NOT EXISTS observation_topic_ids STRING`,
   ]) {
     try {
       await client.query({ query: stmt });
@@ -474,11 +475,18 @@ function rowToActivationObjective(row: any): ActivationObjective {
   let interactionsRaw: any[] = [];
   let rawExtracted: any[] = [];
   let stageMappings: any[] = [];
+  let observationTopicIds: number[] = [];
   try { if (row.stages) stages = JSON.parse(row.stages); } catch {}
   try { if (row.thresholds) thresholds = JSON.parse(row.thresholds); } catch {}
   try { if (row.interactions) interactionsRaw = JSON.parse(row.interactions); } catch {}
   try { if (row.extracted_enum_values) rawExtracted = JSON.parse(row.extracted_enum_values); } catch {}
   try { if (row.stage_mappings) stageMappings = JSON.parse(row.stage_mappings); } catch {}
+  try {
+    if (row.observation_topic_ids) {
+      const parsed = JSON.parse(row.observation_topic_ids);
+      if (Array.isArray(parsed)) observationTopicIds = parsed.filter((id) => typeof id === "number");
+    }
+  } catch {}
 
   // Backward-compat: legacy rows stored extractedEnumValues + stageMappings inside each
   // interaction config. Hoist from the first interaction that has them if the new
@@ -546,6 +554,7 @@ function rowToActivationObjective(row: any): ActivationObjective {
     isActive: row.is_active,
     displayOrder: row.display_order,
     promptGuidance: row.prompt_guidance || "",
+    observationTopicIds,
   };
 }
 
@@ -1428,11 +1437,12 @@ export class BigQueryStorage implements IStorage {
       is_active: data.isActive !== false,
       display_order: data.displayOrder ?? 0,
       prompt_guidance: data.promptGuidance || "",
+      observation_topic_ids: JSON.stringify(data.observationTopicIds || []),
       client_pathway_id: clientPathwayId,
     };
 
     await client.query({
-      query: `INSERT INTO ${table} (id, name, display_name, description, anchor_event_type, anchor_context_key, interaction_context_key, window_days, stages, achieved_stage_id, thresholds, observation_name, extracted_enum_values, stage_mappings, interactions, is_active, display_order, prompt_guidance, client_pathway_id) VALUES (@id, @name, @display_name, @description, @anchor_event_type, @anchor_context_key, @interaction_context_key, @window_days, @stages, @achieved_stage_id, @thresholds, @observation_name, @extracted_enum_values, @stage_mappings, @interactions, @is_active, @display_order, @prompt_guidance, @client_pathway_id)`,
+      query: `INSERT INTO ${table} (id, name, display_name, description, anchor_event_type, anchor_context_key, interaction_context_key, window_days, stages, achieved_stage_id, thresholds, observation_name, extracted_enum_values, stage_mappings, interactions, is_active, display_order, prompt_guidance, observation_topic_ids, client_pathway_id) VALUES (@id, @name, @display_name, @description, @anchor_event_type, @anchor_context_key, @interaction_context_key, @window_days, @stages, @achieved_stage_id, @thresholds, @observation_name, @extracted_enum_values, @stage_mappings, @interactions, @is_active, @display_order, @prompt_guidance, @observation_topic_ids, @client_pathway_id)`,
       params: row,
     });
 
@@ -1465,6 +1475,7 @@ export class BigQueryStorage implements IStorage {
     if (data.isActive !== undefined) { setClauses.push("is_active = @isActive"); params.isActive = data.isActive; }
     if (data.displayOrder !== undefined) { setClauses.push("display_order = @displayOrder"); params.displayOrder = data.displayOrder; }
     if (data.promptGuidance !== undefined) { setClauses.push("prompt_guidance = @promptGuidance"); params.promptGuidance = data.promptGuidance; }
+    if (data.observationTopicIds !== undefined) { setClauses.push("observation_topic_ids = @observationTopicIds"); params.observationTopicIds = JSON.stringify(data.observationTopicIds || []); }
     if (setClauses.length === 0) return existing;
 
     await client.query({ query: `UPDATE ${table} SET ${setClauses.join(", ")} WHERE id = @id`, params });

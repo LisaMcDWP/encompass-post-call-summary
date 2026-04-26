@@ -300,6 +300,7 @@ export const insertActivationObjectiveSchema = z.object({
   isActive: z.boolean().default(true),
   displayOrder: z.number().int().default(0),
   promptGuidance: z.string().default(""),
+  observationTopicIds: z.array(z.number().int()).default([]),
 });
 export type InsertActivationObjective = z.infer<typeof insertActivationObjectiveSchema>;
 
@@ -322,6 +323,7 @@ export interface ActivationObjective {
   isActive: boolean;
   displayOrder: number;
   promptGuidance: string;
+  observationTopicIds: number[];
 }
 
 export interface CallActivationObjectiveResult {

@@ -118,8 +118,8 @@ export interface ActivationObjectivesContext {
 
 interface ResolvedObjectiveTask {
   objective: ActivationObjective;
-  interaction: ActivationInteraction;
-  config: ActivationObjectiveInteractionConfig;
+  interaction: ActivationInteraction | null;
+  config: ActivationObjectiveInteractionConfig | null;
   anchorDate: string | null;
   callDayOffset: number | null;
   observationTopics: Observation[];
@@ -165,26 +165,43 @@ export function pickApplicableInteraction(
 export function resolveObjectiveTasks(ctx: ActivationObjectivesContext | undefined): ResolvedObjectiveTask[] {
   if (!ctx || !ctx.objectives || ctx.objectives.length === 0) return [];
   const tasks: ResolvedObjectiveTask[] = [];
+  const obsById = new Map<number, Observation>();
+  for (const o of ctx.observations || []) {
+    if (o && o.isActive) obsById.set(o.id, o);
+  }
   for (const obj of ctx.objectives) {
     if (!obj.isActive) continue;
     // Anchor date is OPTIONAL: if missing, we still build the extraction task
     // but the prompt simply won't reference a window/day-offset.
     const anchorDate = ctx.contextValues?.[obj.anchorContextKey] ?? null;
-    const { interaction, config } = pickApplicableInteraction(obj, ctx.contextValues, ctx.activeInteractions);
-    if (!interaction || !config) continue;
-    const allowed = (obj.extractedEnumValues || [])
-      .map((v) => v?.label || "")
-      .filter((v) => v && v.trim());
-    if (allowed.length === 0) continue;
     const callDayOffset = anchorDate ? diffDaysISO(anchorDate, ctx.callDate) : null;
-    const obsById = new Map<number, Observation>();
-    for (const o of ctx.observations || []) {
-      if (o && o.isActive) obsById.set(o.id, o);
+
+    const objectiveLevelTopicIds = obj.observationTopicIds || [];
+    const { interaction, config } = pickApplicableInteraction(obj, ctx.contextValues, ctx.activeInteractions);
+
+    if (interaction && config) {
+      const allowed = (obj.extractedEnumValues || [])
+        .map((v) => v?.label || "")
+        .filter((v) => v && v.trim());
+      if (allowed.length === 0) continue;
+      const mergedTopicIds = Array.from(new Set([
+        ...objectiveLevelTopicIds,
+        ...((config.observationTopicIds) || []),
+      ]));
+      const observationTopics = mergedTopicIds
+        .map((id) => obsById.get(id))
+        .filter((o): o is Observation => !!o);
+      tasks.push({ objective: obj, interaction, config, anchorDate, callDayOffset, observationTopics });
+    } else if (objectiveLevelTopicIds.length > 0) {
+      // No interaction routed for this call, but the objective declares
+      // topics to extract regardless — emit an observation-only task.
+      const observationTopics = objectiveLevelTopicIds
+        .map((id) => obsById.get(id))
+        .filter((o): o is Observation => !!o);
+      if (observationTopics.length > 0) {
+        tasks.push({ objective: obj, interaction: null, config: null, anchorDate, callDayOffset, observationTopics });
+      }
     }
-    const observationTopics = (config.observationTopicIds || [])
-      .map((id) => obsById.get(id))
-      .filter((o): o is Observation => !!o);
-    tasks.push({ objective: obj, interaction, config, anchorDate, callDayOffset, observationTopics });
   }
   return tasks;
 }
@@ -200,7 +217,7 @@ function buildActivationObjectivesPromptBlock(tasks: ResolvedObjectiveTask[]): s
     const hintsBlock = hintLines.length > 0
       ? `\n    Value hints:\n${hintLines.join("\n")}`
       : "";
-    const guidance = (t.config.promptGuidance || t.objective.promptGuidance || "").trim();
+    const guidance = ((t.config?.promptGuidance) || t.objective.promptGuidance || "").trim();
     const guidanceLine = guidance ? ` | Guidance: ${guidance}` : "";
     const dayPart = t.anchorDate && t.callDayOffset !== null
       ? `Patient is on day ${t.callDayOffset} of a ${t.objective.windowDays}-day window from ${t.objective.anchorContextKey}=${t.anchorDate}.`
@@ -208,7 +225,7 @@ function buildActivationObjectivesPromptBlock(tasks: ResolvedObjectiveTask[]): s
         ? `Window: ${t.objective.windowDays} days from ${t.objective.anchorContextKey}=${t.anchorDate}.`
         : `Anchor date (${t.objective.anchorContextKey}) not provided in request context — assess based on call content alone.`;
     const obsBlock = t.observationTopics.length > 0
-      ? `\n    Observation topics for this objective+interaction (output one entry per topic in the observations array):\n` +
+      ? `\n    Observation topics for this objective (output one entry per topic in the observations array):\n` +
         t.observationTopics.map((o) => {
           const allowedVals = o.valueType === "enum" && Array.isArray(o.value) && o.value.length > 0
             ? `Allowed values: ${(o.value as EnumValue[]).map(v => `"${v.label}"`).join(", ")}, or null if not discussed`
@@ -219,10 +236,14 @@ function buildActivationObjectivesPromptBlock(tasks: ResolvedObjectiveTask[]): s
           return `      - topic_name="${o.name}" (${o.displayName}) — ${allowedVals}.${hint}`;
         }).join("\n")
       : "";
+    if (!t.interaction || !t.config) {
+      // Observation-only task: no interaction routed for this call, no extracted_value to pick.
+      return `  • objective_name="${t.objective.name}" (${t.objective.displayName}) | interaction_key="" (no interaction routed — OBSERVATION-ONLY task) | ${dayPart} | extracted_value MUST be null for this task.${guidanceLine}${obsBlock}`;
+    }
     return `  • objective_name="${t.objective.name}" (${t.objective.displayName}) | interaction_key="${t.interaction.key}" (${t.interaction.name}) | ${dayPart} | Allowed values: ${allowed}, or null if not discussed.${guidanceLine}${hintsBlock}${obsBlock}`;
   });
   return `\n###ACTIVATION OBJECTIVES (${tasks.length} task${tasks.length === 1 ? "" : "s"})
-For each task below, decide the patient's current status for that activation objective based ONLY on what was discussed in this call. Choose the single best match from the allowed values for that task, or null if the topic was not discussed in enough detail to assess. Do NOT invent values that are not in the allowed list. For tasks that list observation topics, also extract a value for each listed topic into the per-objective observations array — copy the topic_name exactly.
+For each task below, decide the patient's current status for that activation objective based ONLY on what was discussed in this call. Choose the single best match from the allowed values for that task, or null if the topic was not discussed in enough detail to assess. Do NOT invent values that are not in the allowed list. For OBSERVATION-ONLY tasks (interaction_key=""), set extracted_value to null and rationale to ""; only fill the observations array. For tasks that list observation topics, also extract a value for each listed topic into the per-objective observations array — copy the topic_name exactly.
 ${lines.join("\n")}
 `;
 }

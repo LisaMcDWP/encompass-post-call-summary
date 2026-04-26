@@ -167,7 +167,35 @@ export function computeActivationObjectiveResults(args: {
         default:
           reason = `Could not resolve an interaction for this objective`;
       }
-      results.push(makeIneligibleResult(callId, callDate, obj, anchorDate, processedAt, reason, interaction));
+      // Even when no interaction is routed, we may still have objective-level
+      // observation topics that should always be extracted. Look up the
+      // observation-only extraction (interaction_key="") and surface any values.
+      const fallbackTopicIds = obj.observationTopicIds || [];
+      let fallbackObservations: CallActivationObjectiveObservation[] = [];
+      if (fallbackTopicIds.length > 0) {
+        const ext = extByKey.get(`${obj.name}::`) || null;
+        const extractedObs = ext?.observations || [];
+        const extObsByName = new Map<string, typeof extractedObs[number]>();
+        for (const eo of extractedObs) {
+          if (eo && eo.topic_name) extObsByName.set(eo.topic_name, eo);
+        }
+        fallbackObservations = fallbackTopicIds
+          .map((id) => {
+            const topic = obsById.get(id);
+            if (!topic) return null;
+            const eo = extObsByName.get(topic.name);
+            const value = eo?.value && String(eo.value).trim() ? String(eo.value).trim() : null;
+            return {
+              topicId: topic.id,
+              name: topic.name,
+              displayName: topic.displayName,
+              value,
+              evidence: eo?.evidence || null,
+            };
+          })
+          .filter((o): o is CallActivationObjectiveObservation => !!o);
+      }
+      results.push(makeIneligibleResult(callId, callDate, obj, anchorDate, processedAt, reason, interaction, fallbackObservations));
       continue;
     }
 
@@ -209,7 +237,10 @@ export function computeActivationObjectiveResults(args: {
       onTrackStatus = "unmapped_value";
     }
 
-    const configuredTopicIds = config.observationTopicIds || [];
+    const configuredTopicIds = Array.from(new Set([
+      ...(obj.observationTopicIds || []),
+      ...(config.observationTopicIds || []),
+    ]));
     const extractedObs = ext?.observations || [];
     const extObsByName = new Map<string, typeof extractedObs[number]>();
     for (const eo of extractedObs) {
@@ -267,6 +298,7 @@ function makeIneligibleResult(
   processedAt: string,
   reason: string,
   interaction?: ActivationInteraction | null,
+  observations: CallActivationObjectiveObservation[] = [],
 ): CallActivationObjectiveResult {
   return {
     callId,
@@ -288,7 +320,7 @@ function makeIneligibleResult(
     isEligible: false,
     exclusionReason: reason,
     rationale: "",
-    observations: [],
+    observations,
     processedAt,
   };
 }
