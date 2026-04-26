@@ -262,6 +262,7 @@ export interface ActivationInteraction {
 
 export const activationObjectiveInteractionConfigSchema = z.object({
   interactionId: z.number().int(),
+  isDefault: z.boolean().default(false),
   canResolveObjective: z.boolean().default(true),
   inclusionRules: activationObjectiveInclusionRulesSchema.default({
     requirePcpAssigned: false,

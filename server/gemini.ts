@@ -112,7 +112,7 @@ interface ResolvedObjectiveTask {
   objective: ActivationObjective;
   interaction: ActivationInteraction;
   config: ActivationObjectiveInteractionConfig;
-  anchorDate: string;
+  anchorDate: string | null;
   callDayOffset: number | null;
 }
 
@@ -132,11 +132,25 @@ export function pickApplicableInteraction(
 ): { interaction: ActivationInteraction | null; config: ActivationObjectiveInteractionConfig | null } {
   const keyName = obj.interactionContextKey || "interaction_key";
   const value = contextValues?.[keyName];
-  if (!value) return { interaction: null, config: null };
-  const interaction = activeInteractions.find((i) => i.key === value) || null;
-  if (!interaction) return { interaction: null, config: null };
-  const config = (obj.interactions || []).find((c) => c.interactionId === interaction.id) || null;
-  return { interaction, config };
+
+  // 1. Try exact match by key from request context.
+  if (value) {
+    const interaction = activeInteractions.find((i) => i.key === value) || null;
+    if (interaction) {
+      const config = (obj.interactions || []).find((c) => c.interactionId === interaction.id) || null;
+      if (config) return { interaction, config };
+      // Known key but not configured for this objective — fall through to default.
+    }
+  }
+
+  // 2. Fall back to the objective's default interaction (if marked).
+  const defaultConfig = (obj.interactions || []).find((c) => c.isDefault) || null;
+  if (defaultConfig) {
+    const defaultInteraction = activeInteractions.find((i) => i.id === defaultConfig.interactionId) || null;
+    if (defaultInteraction) return { interaction: defaultInteraction, config: defaultConfig };
+  }
+
+  return { interaction: null, config: null };
 }
 
 export function resolveObjectiveTasks(ctx: ActivationObjectivesContext | undefined): ResolvedObjectiveTask[] {
@@ -144,15 +158,16 @@ export function resolveObjectiveTasks(ctx: ActivationObjectivesContext | undefin
   const tasks: ResolvedObjectiveTask[] = [];
   for (const obj of ctx.objectives) {
     if (!obj.isActive) continue;
-    const anchorDate = ctx.contextValues?.[obj.anchorContextKey];
-    if (!anchorDate) continue;
+    // Anchor date is OPTIONAL: if missing, we still build the extraction task
+    // but the prompt simply won't reference a window/day-offset.
+    const anchorDate = ctx.contextValues?.[obj.anchorContextKey] ?? null;
     const { interaction, config } = pickApplicableInteraction(obj, ctx.contextValues, ctx.activeInteractions);
     if (!interaction || !config) continue;
     const allowed = (obj.extractedEnumValues || [])
       .map((v) => v?.label || "")
       .filter((v) => v && v.trim());
     if (allowed.length === 0) continue;
-    const callDayOffset = diffDaysISO(anchorDate, ctx.callDate);
+    const callDayOffset = anchorDate ? diffDaysISO(anchorDate, ctx.callDate) : null;
     tasks.push({ objective: obj, interaction, config, anchorDate, callDayOffset });
   }
   return tasks;
@@ -171,9 +186,11 @@ function buildActivationObjectivesPromptBlock(tasks: ResolvedObjectiveTask[]): s
       : "";
     const guidance = (t.config.promptGuidance || t.objective.promptGuidance || "").trim();
     const guidanceLine = guidance ? ` | Guidance: ${guidance}` : "";
-    const dayPart = t.callDayOffset !== null
+    const dayPart = t.anchorDate && t.callDayOffset !== null
       ? `Patient is on day ${t.callDayOffset} of a ${t.objective.windowDays}-day window from ${t.objective.anchorContextKey}=${t.anchorDate}.`
-      : `Window: ${t.objective.windowDays} days from ${t.objective.anchorContextKey}=${t.anchorDate}.`;
+      : t.anchorDate
+        ? `Window: ${t.objective.windowDays} days from ${t.objective.anchorContextKey}=${t.anchorDate}.`
+        : `Anchor date (${t.objective.anchorContextKey}) not provided in request context — assess based on call content alone.`;
     return `  • objective_name="${t.objective.name}" (${t.objective.displayName}) | interaction_key="${t.interaction.key}" (${t.interaction.name}) | ${dayPart} | Allowed values: ${allowed}, or null if not discussed.${guidanceLine}${hintsBlock}`;
   });
   return `\n###ACTIVATION OBJECTIVES (${tasks.length} task${tasks.length === 1 ? "" : "s"})

@@ -516,6 +516,7 @@ function rowToActivationObjective(row: any): ActivationObjective {
   // Strip legacy fields from per-interaction configs so the typed shape matches.
   const interactions: ActivationObjectiveInteractionConfig[] = interactionsRaw.map((c: any) => ({
     interactionId: c.interactionId,
+    isDefault: c.isDefault === true,
     canResolveObjective: c.canResolveObjective !== false,
     inclusionRules: c.inclusionRules || { requirePcpAssigned: false, requireCompletedWithPatientOrCaregiver: true, customRules: [] },
     promptGuidance: c.promptGuidance || "",

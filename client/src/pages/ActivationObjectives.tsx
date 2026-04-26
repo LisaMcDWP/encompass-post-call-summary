@@ -65,6 +65,7 @@ interface InclusionRules {
 
 interface ObjectiveInteractionConfig {
   interactionId: number;
+  isDefault: boolean;
   canResolveObjective: boolean;
   inclusionRules: InclusionRules;
   promptGuidance: string;
@@ -367,6 +368,7 @@ export default function ActivationObjectives() {
     if (form.interactions.some(c => c.interactionId === interactionId)) return;
     const cfg: ObjectiveInteractionConfig = {
       interactionId,
+      isDefault: false,
       canResolveObjective: false,
       inclusionRules: { requirePcpAssigned: false, requireCompletedWithPatientOrCaregiver: true, customRules: [] },
       promptGuidance: "",
@@ -375,7 +377,13 @@ export default function ActivationObjectives() {
   }
 
   function updateInteractionConfig(idx: number, patch: Partial<ObjectiveInteractionConfig>) {
-    const next = form.interactions.map((c, i) => i === idx ? { ...c, ...patch } : c);
+    // Enforce at most one default — turning one on clears the flag on all others.
+    const turningOnDefault = patch.isDefault === true;
+    const next = form.interactions.map((c, i) => {
+      if (i === idx) return { ...c, ...patch };
+      if (turningOnDefault) return { ...c, isDefault: false };
+      return c;
+    });
     updateForm({ interactions: next });
   }
 
@@ -622,6 +630,7 @@ function ObjectiveCard({
                   {obj.interactions.map(cfg => (
                     <div key={cfg.interactionId} className="flex items-center gap-3 text-sm">
                       <Badge variant="outline" className="font-mono text-[11px]">interaction #{cfg.interactionId}</Badge>
+                      {cfg.isDefault && <Badge className="text-[10px] bg-primary/15 text-primary border-primary/30 hover:bg-primary/15">default</Badge>}
                       {cfg.canResolveObjective && <Badge variant="secondary" className="text-[10px]">can resolve</Badge>}
                     </div>
                   ))}
@@ -1206,13 +1215,23 @@ function InteractionConfigEditor({
               <p className="text-[11px] text-muted-foreground mt-1">{interaction.description}</p>
             )}
           </div>
-          <div className="pt-5">
-            <div className="flex items-center gap-2">
-              <Switch checked={cfg.canResolveObjective}
-                onCheckedChange={c => update({ canResolveObjective: c })} data-testid={`switch-cfg-resolves-${idx}`} />
-              <Label className="text-sm">Can resolve objective</Label>
+          <div className="pt-5 space-y-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <Switch checked={cfg.isDefault}
+                  onCheckedChange={c => update({ isDefault: c })} data-testid={`switch-cfg-default-${idx}`} />
+                <Label className="text-sm">Use as default interaction</Label>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1 leading-tight">When the request's interaction key is missing or doesn't match a configured interaction, fall back to this one. Only one default per objective.</p>
             </div>
-            <p className="text-[10px] text-muted-foreground mt-1 leading-tight">Enable for terminal interactions (e.g. on or after the target date) where the call's extracted stage is the final answer for the objective.</p>
+            <div>
+              <div className="flex items-center gap-2">
+                <Switch checked={cfg.canResolveObjective}
+                  onCheckedChange={c => update({ canResolveObjective: c })} data-testid={`switch-cfg-resolves-${idx}`} />
+                <Label className="text-sm">Can resolve objective</Label>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1 leading-tight">Enable for terminal interactions (e.g. on or after the target date) where the call's extracted stage is the final answer for the objective.</p>
+            </div>
           </div>
         </div>
         <Button size="icon" variant="ghost" onClick={onRemove} data-testid={`button-remove-cfg-${idx}`}>
