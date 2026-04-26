@@ -45,16 +45,15 @@ ${clone.innerHTML}
 export default function ApiReference() {
   const contentRef = useRef<HTMLDivElement>(null);
   return (
-    <div className="h-full overflow-y-auto bg-background">
-      <div className="max-w-4xl mx-auto px-6 py-8" ref={contentRef}>
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-              <BookOpen className="h-6 w-6 text-primary" />
-              GWC Observation Summarization
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">API Reference — POST /gwc_observation_summarization</p>
-          </div>
+    <div className="p-6 max-w-6xl mx-auto space-y-6" ref={contentRef}>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold flex items-center gap-2" data-testid="text-page-title">
+            <BookOpen className="h-6 w-6 text-primary" />
+            GWC Observation Summarization
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">API Reference — POST /gwc_observation_summarization</p>
+        </div>
           <Button
             variant="outline"
             size="sm"
@@ -440,7 +439,6 @@ export default function ApiReference() {
           </CardContent>
         </Card>
 
-      </div>
     </div>
   );
 }

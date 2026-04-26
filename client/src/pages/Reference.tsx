@@ -646,17 +646,16 @@ function exportReferencePdf() {
 export default function Reference() {
   const contentRef = useRef<HTMLDivElement>(null);
   return (
-    <div className="h-full overflow-y-auto bg-background">
-      <div className="max-w-4xl mx-auto px-6 py-8" ref={contentRef}>
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-              <BookOpen className="h-6 w-6 text-primary" />
-              API Reference
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">Guideway Care Post-Call Analysis API</p>
-          </div>
-          <div className="flex gap-2 export-hide">
+    <div className="p-6 max-w-6xl mx-auto space-y-6" ref={contentRef}>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold flex items-center gap-2" data-testid="text-page-title">
+            <BookOpen className="h-6 w-6 text-primary" />
+            API Reference
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">Guideway Care Post-Call Analysis API</p>
+        </div>
+        <div className="flex gap-2 export-hide">
             <Button
               variant="outline"
               size="sm"
@@ -2489,7 +2488,6 @@ gcloud builds submit --config cloudbuild.yaml`}
         <div className="text-center py-6">
           <p className="text-muted-foreground text-sm">Guideway Care Post-Call Analysis API</p>
         </div>
-      </div>
     </div>
   );
 }

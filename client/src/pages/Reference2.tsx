@@ -1,18 +1,21 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Building2, Layers, Database, Server, Settings, Globe, Eye, ListTree, ClipboardCheck, ClipboardList, Variable, FileText, ShieldAlert, BarChart3 } from "lucide-react";
+import { Building2, Layers, Database, Server, Settings, Globe, Eye, ListTree, ClipboardCheck, ClipboardList, Variable, FileText, ShieldAlert, BarChart3, BookOpen } from "lucide-react";
 
 export default function Reference2() {
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-12">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-foreground tracking-tight" data-testid="text-reference2-title" style={{ fontFamily: "Montserrat, sans-serif" }}>
-          Reference 2 — Config & Deployment
-        </h1>
-        <p className="text-muted-foreground mt-2">
-          System configuration overview, per-client setup, deployment architecture, and data model.
-        </p>
+    <div className="p-6 max-w-6xl mx-auto space-y-6 pb-12">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold flex items-center gap-2" data-testid="text-page-title">
+            <BookOpen className="h-6 w-6 text-primary" />
+            Reference 2 — Config & Deployment
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            System configuration overview, per-client setup, deployment architecture, and data model.
+          </p>
+        </div>
       </div>
 
       <Card className="border-border/60 shadow-sm mb-6">

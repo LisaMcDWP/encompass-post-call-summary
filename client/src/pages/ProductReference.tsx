@@ -636,50 +636,50 @@ export default function ProductReference() {
   const progress = Math.round((doneStories / totalStories) * 100);
 
   return (
-    <div className="h-full bg-background text-foreground font-sans">
-      <div className="max-w-5xl mx-auto p-6 md:p-8 space-y-8">
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground" data-testid="text-page-title">
-              Product Reference
-            </h1>
-            <p className="text-muted-foreground text-sm mt-1">
-              Agile breakdown of GWC Call Observation Extraction — North Star, themes, epics, and user stories.
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            data-testid="button-export-pdf"
-            onClick={() => exportProductReferencePdf()}
-          >
-            <FileText className="h-4 w-4 mr-2" />
-            Export PDF
-          </Button>
+    <div className="p-6 max-w-6xl mx-auto space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold flex items-center gap-2" data-testid="text-page-title">
+            <Layers className="h-6 w-6 text-primary" />
+            Product Reference
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Agile breakdown of GWC Call Observation Extraction — North Star, themes, epics, and user stories.
+          </p>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          data-testid="button-export-pdf"
+          onClick={() => exportProductReferencePdf()}
+        >
+          <FileText className="h-4 w-4 mr-2" />
+          Export PDF
+        </Button>
+      </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
-            <p className="text-2xl font-bold text-green-700">{doneStories}</p>
-            <p className="text-[10px] text-green-600 uppercase font-semibold">Done</p>
-          </div>
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
-            <p className="text-2xl font-bold text-blue-700">{inProgressStories}</p>
-            <p className="text-[10px] text-blue-600 uppercase font-semibold">In Progress</p>
-          </div>
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
-            <p className="text-2xl font-bold text-amber-700">{plannedStories}</p>
-            <p className="text-[10px] text-amber-600 uppercase font-semibold">Planned</p>
-          </div>
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-center">
-            <p className="text-2xl font-bold text-gray-600">{backlogStories}</p>
-            <p className="text-[10px] text-gray-500 uppercase font-semibold">Backlog</p>
-          </div>
-          <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-center">
-            <p className="text-2xl font-bold text-primary">{progress}%</p>
-            <p className="text-[10px] text-primary uppercase font-semibold">Complete</p>
-          </div>
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div className="bg-[#96d410]/10 border border-[#96d410]/30 rounded-lg p-3 text-center">
+          <p className="text-2xl font-bold text-[#5a8200]">{doneStories}</p>
+          <p className="text-[10px] text-[#5a8200] uppercase font-semibold">Done</p>
         </div>
+        <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-center">
+          <p className="text-2xl font-bold text-primary">{inProgressStories}</p>
+          <p className="text-[10px] text-primary uppercase font-semibold">In Progress</p>
+        </div>
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
+          <p className="text-2xl font-bold text-amber-700">{plannedStories}</p>
+          <p className="text-[10px] text-amber-600 uppercase font-semibold">Planned</p>
+        </div>
+        <div className="bg-muted/40 border border-border/60 rounded-lg p-3 text-center">
+          <p className="text-2xl font-bold text-muted-foreground">{backlogStories}</p>
+          <p className="text-[10px] text-muted-foreground uppercase font-semibold">Backlog</p>
+        </div>
+        <div className="bg-secondary/5 border border-secondary/20 rounded-lg p-3 text-center">
+          <p className="text-2xl font-bold text-secondary">{progress}%</p>
+          <p className="text-[10px] text-secondary uppercase font-semibold">Complete</p>
+        </div>
+      </div>
 
         <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-background shadow-md">
           <CardHeader className="pb-3">
@@ -852,7 +852,6 @@ export default function ProductReference() {
             </div>
           </CardContent>
         </Card>
-      </div>
     </div>
   );
 }

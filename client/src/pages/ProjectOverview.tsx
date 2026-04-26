@@ -444,10 +444,10 @@ export default function ProjectOverview() {
   const totalStories = EPICS.reduce((sum, e) => sum + e.stories.length, 0);
 
   return (
-    <div className="h-full overflow-y-auto bg-background">
-      <div className="max-w-4xl mx-auto px-6 py-8">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-secondary tracking-tight flex items-center gap-2" data-testid="heading-project-overview">
+    <div className="p-6 max-w-6xl mx-auto space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold flex items-center gap-2" data-testid="text-page-title">
             <Box className="h-6 w-6 text-primary" />
             Project Overview
           </h1>
@@ -455,46 +455,46 @@ export default function ProjectOverview() {
             Guideway Care Call Observation Extraction — Epics & Stories
           </p>
         </div>
+      </div>
 
-        <Card className="border-primary/20 bg-primary/5 shadow-sm mb-8" data-testid="card-project-summary">
-          <CardContent className="pt-6">
-            <div className="flex flex-wrap gap-6 mb-4">
-              <div className="text-center">
-                <p className="text-3xl font-bold text-primary" data-testid="stat-epics">{EPICS.length}</p>
-                <p className="text-xs text-muted-foreground uppercase tracking-wider">Epics</p>
-              </div>
-              <div className="text-center">
-                <p className="text-3xl font-bold text-primary" data-testid="stat-stories">{totalStories}</p>
-                <p className="text-xs text-muted-foreground uppercase tracking-wider">Stories</p>
-              </div>
-              <div className="text-center">
-                <p className="text-3xl font-bold text-[#96d410]" data-testid="stat-completed">{totalStories}</p>
-                <p className="text-xs text-muted-foreground uppercase tracking-wider">Completed</p>
-              </div>
+      <Card className="border-primary/20 bg-primary/5 shadow-sm" data-testid="card-project-summary">
+        <CardContent className="pt-6">
+          <div className="flex flex-wrap gap-6 mb-4">
+            <div className="text-center">
+              <p className="text-3xl font-bold text-primary" data-testid="stat-epics">{EPICS.length}</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">Epics</p>
             </div>
-            <Separator className="my-4" />
-            <p className="text-sm text-foreground leading-relaxed">
-              A full-stack, multi-tenant API on GCP Cloud Run that accepts post-discharge call transcripts, processes them through Vertex AI Gemini, and returns structured clinical analysis. Built on a Client & Pathway architecture where each tenant has its own observations, context parameters, prompt settings, Call QA prompts, and barriers guidance. Features include a Call Volume analytics dashboard, dynamic BigQuery-driven observation definitions, configurable context parameters, per-observation prompt guidance, barriers-to-care extraction, Call QA evaluation, prompt versioning, batch processing, a management UI, and CI/CD via GitHub and Cloud Build.
-            </p>
-            <div className="flex flex-wrap gap-2 mt-4">
-              <Badge variant="secondary" className="text-xs">React + Vite</Badge>
-              <Badge variant="secondary" className="text-xs">Express.js</Badge>
-              <Badge variant="secondary" className="text-xs">TypeScript</Badge>
-              <Badge variant="secondary" className="text-xs">Vertex AI Gemini</Badge>
-              <Badge variant="secondary" className="text-xs">BigQuery</Badge>
-              <Badge variant="secondary" className="text-xs">Cloud Run</Badge>
-              <Badge variant="secondary" className="text-xs">Cloud Build</Badge>
-              <Badge variant="secondary" className="text-xs">Tailwind CSS</Badge>
-              <Badge variant="secondary" className="text-xs">shadcn/ui</Badge>
+            <div className="text-center">
+              <p className="text-3xl font-bold text-primary" data-testid="stat-stories">{totalStories}</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">Stories</p>
             </div>
-          </CardContent>
-        </Card>
+            <div className="text-center">
+              <p className="text-3xl font-bold text-[#96d410]" data-testid="stat-completed">{totalStories}</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">Completed</p>
+            </div>
+          </div>
+          <Separator className="my-4" />
+          <p className="text-sm text-foreground leading-relaxed">
+            A full-stack, multi-tenant API on GCP Cloud Run that accepts post-discharge call transcripts, processes them through Vertex AI Gemini, and returns structured clinical analysis. Built on a Client & Pathway architecture where each tenant has its own observations, context parameters, prompt settings, Call QA prompts, and barriers guidance. Features include a Call Volume analytics dashboard, dynamic BigQuery-driven observation definitions, configurable context parameters, per-observation prompt guidance, barriers-to-care extraction, Call QA evaluation, prompt versioning, batch processing, a management UI, and CI/CD via GitHub and Cloud Build.
+          </p>
+          <div className="flex flex-wrap gap-2 mt-4">
+            <Badge variant="secondary" className="text-xs">React + Vite</Badge>
+            <Badge variant="secondary" className="text-xs">Express.js</Badge>
+            <Badge variant="secondary" className="text-xs">TypeScript</Badge>
+            <Badge variant="secondary" className="text-xs">Vertex AI Gemini</Badge>
+            <Badge variant="secondary" className="text-xs">BigQuery</Badge>
+            <Badge variant="secondary" className="text-xs">Cloud Run</Badge>
+            <Badge variant="secondary" className="text-xs">Cloud Build</Badge>
+            <Badge variant="secondary" className="text-xs">Tailwind CSS</Badge>
+            <Badge variant="secondary" className="text-xs">shadcn/ui</Badge>
+          </div>
+        </CardContent>
+      </Card>
 
-        <div className="space-y-6">
-          {EPICS.map((epic) => (
-            <EpicCard key={epic.id} epic={epic} />
-          ))}
-        </div>
+      <div className="space-y-6">
+        {EPICS.map((epic) => (
+          <EpicCard key={epic.id} epic={epic} />
+        ))}
       </div>
     </div>
   );
