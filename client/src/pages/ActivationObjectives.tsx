@@ -1579,7 +1579,95 @@ interface EditorProps {
   setEditorAiOpen: (open: boolean) => void;
 }
 
+// ============================================================
+// Collapsible section wrapper (per-objective editor)
+// ============================================================
+
+const SECTION_IDS = [
+  "basics",
+  "target-date",
+  "observation",
+  "stages",
+  "thresholds",
+  "interaction-routing",
+  "configured-interactions",
+  "guidance",
+] as const;
+type SectionId = typeof SECTION_IDS[number];
+const SECTION_STORAGE_KEY = "ao-editor-sections-open-v1";
+
+function loadSectionsState(): Record<SectionId, boolean> {
+  try {
+    const raw = typeof window !== "undefined" ? window.localStorage.getItem(SECTION_STORAGE_KEY) : null;
+    const parsed = raw ? JSON.parse(raw) : {};
+    return Object.fromEntries(SECTION_IDS.map(id => [id, parsed[id] !== false])) as Record<SectionId, boolean>;
+  } catch {
+    return Object.fromEntries(SECTION_IDS.map(id => [id, true])) as Record<SectionId, boolean>;
+  }
+}
+
+function Section({
+  id, title, subtitle, icon, right, open, onToggle, cardClassName, contentClassName, children,
+}: {
+  id: SectionId;
+  title: React.ReactNode;
+  subtitle?: React.ReactNode;
+  icon?: React.ReactNode;
+  right?: React.ReactNode;
+  open: boolean;
+  onToggle: () => void;
+  cardClassName?: string;
+  contentClassName?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card className={cardClassName} data-testid={`section-${id}`}>
+      <div className="px-5 pt-4 pb-3 flex items-start justify-between gap-3">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={open}
+          className="flex-1 min-w-0 text-left flex items-start gap-3 hover-elevate rounded-md -mx-1 px-1 py-0.5"
+          data-testid={`section-toggle-${id}`}
+        >
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold text-base flex items-center gap-2">
+              {icon}
+              {title}
+            </h3>
+            {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
+          </div>
+          <ChevronDown
+            className={`h-4 w-4 shrink-0 mt-1 transition-transform text-muted-foreground ${open ? "rotate-180" : ""}`}
+            data-testid={`section-chevron-${id}`}
+          />
+        </button>
+        {right && (
+          <div className="flex items-center gap-2 shrink-0">
+            {right}
+          </div>
+        )}
+      </div>
+      {open && (
+        <CardContent className={`pt-0 px-5 pb-5 ${contentClassName ?? "space-y-4"}`}>
+          {children}
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
 function ObjectiveEditor(p: EditorProps) {
+  const [sectionsOpen, setSectionsOpen] = useState<Record<SectionId, boolean>>(loadSectionsState);
+  useEffect(() => {
+    try { window.localStorage.setItem(SECTION_STORAGE_KEY, JSON.stringify(sectionsOpen)); } catch {}
+  }, [sectionsOpen]);
+  const toggleSection = (id: SectionId) =>
+    setSectionsOpen(prev => ({ ...prev, [id]: !prev[id] }));
+  const setAllSections = (open: boolean) =>
+    setSectionsOpen(Object.fromEntries(SECTION_IDS.map(id => [id, open])) as Record<SectionId, boolean>);
+  const allOpen = SECTION_IDS.every(id => sectionsOpen[id]);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between sticky top-0 bg-background z-10 py-2 border-b">
@@ -1590,6 +1678,16 @@ function ObjectiveEditor(p: EditorProps) {
           <p className="text-xs text-muted-foreground">Configure anchor, stages, on-track rules, and touchpoints.</p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setAllSections(!allOpen)}
+            data-testid="button-toggle-all-sections"
+            title={allOpen ? "Collapse all sections" : "Expand all sections"}
+          >
+            {allOpen ? <ChevronUp className="h-4 w-4 mr-1" /> : <ChevronDown className="h-4 w-4 mr-1" />}
+            {allOpen ? "Collapse all" : "Expand all"}
+          </Button>
           <Button
             variant="outline"
             onClick={() => p.setEditorAiOpen(!p.editorAiOpen)}
@@ -1610,46 +1708,49 @@ function ObjectiveEditor(p: EditorProps) {
         </div>
       </div>
 
-      {/* Basic info card */}
-      <Card>
-        <CardContent className="p-5 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="ao-display">Display name *</Label>
-              <Input id="ao-display" value={p.form.displayName} onChange={e => p.updateForm({ displayName: e.target.value })}
-                placeholder="PCP follow-up — activation objective" data-testid="input-display-name" />
-            </div>
-            <div>
-              <Label htmlFor="ao-name">Internal name *</Label>
-              <Input id="ao-name" value={p.form.name} onChange={e => p.updateForm({ name: e.target.value })}
-                placeholder="pcp_followup_7day" data-testid="input-name" />
-              <p className="text-[11px] text-muted-foreground mt-1">Snake_case identifier used in BigQuery and code.</p>
-            </div>
+      {/* Basics */}
+      <Section
+        id="basics"
+        title="Basics"
+        subtitle="Display name, internal name, description, and active status."
+        open={sectionsOpen.basics}
+        onToggle={() => toggleSection("basics")}
+      >
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="ao-display">Display name *</Label>
+            <Input id="ao-display" value={p.form.displayName} onChange={e => p.updateForm({ displayName: e.target.value })}
+              placeholder="PCP follow-up — activation objective" data-testid="input-display-name" />
           </div>
           <div>
-            <Label htmlFor="ao-desc">Description</Label>
-            <Input id="ao-desc" value={p.form.description} onChange={e => p.updateForm({ description: e.target.value })}
-              placeholder="PCP follow-up attended within 7 days of discharge" data-testid="input-description" />
+            <Label htmlFor="ao-name">Internal name *</Label>
+            <Input id="ao-name" value={p.form.name} onChange={e => p.updateForm({ name: e.target.value })}
+              placeholder="pcp_followup_7day" data-testid="input-name" />
+            <p className="text-[11px] text-muted-foreground mt-1">Snake_case identifier used in BigQuery and code.</p>
           </div>
-          <div className="flex items-center gap-3">
-            <Switch checked={p.form.isActive} onCheckedChange={c => p.updateForm({ isActive: c })} data-testid="switch-active" />
-            <Label>Active</Label>
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+        <div>
+          <Label htmlFor="ao-desc">Description</Label>
+          <Input id="ao-desc" value={p.form.description} onChange={e => p.updateForm({ description: e.target.value })}
+            placeholder="PCP follow-up attended within 7 days of discharge" data-testid="input-description" />
+        </div>
+        <div className="flex items-center gap-3">
+          <Switch checked={p.form.isActive} onCheckedChange={c => p.updateForm({ isActive: c })} data-testid="switch-active" />
+          <Label>Active</Label>
+        </div>
+      </Section>
 
-      {/* Target date card (matches screenshot) */}
-      <Card className="border-2 border-blue-500/40 bg-blue-50/30 dark:bg-blue-950/10">
-        <CardContent className="p-5 space-y-4">
-          <div className="flex items-start justify-between">
-            <div>
-              <h3 className="font-semibold text-base">Target date — how it is calculated per patient</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">Anchor event + window days = target date. Drives all on-track and progress metrics.</p>
-            </div>
-            <Badge variant="outline" className="bg-white dark:bg-background">activation objective</Badge>
-          </div>
-
-          <div className="flex items-end gap-3 flex-wrap">
+      {/* Target date */}
+      <Section
+        id="target-date"
+        title="Target date — how it is calculated per patient"
+        subtitle="Anchor event + window days = target date. Drives all on-track and progress metrics."
+        open={sectionsOpen["target-date"]}
+        onToggle={() => toggleSection("target-date")}
+        cardClassName="border-2 border-blue-500/40 bg-blue-50/30 dark:bg-blue-950/10"
+        right={<Badge variant="outline" className="bg-white dark:bg-background">activation objective</Badge>}
+      >
+        <div className="flex items-end gap-3 flex-wrap">
             <div className="min-w-[180px]">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">Anchor event</Label>
               <Select value={p.form.anchorEventType} onValueChange={v => p.updateForm({ anchorEventType: v as AnchorEventType })}>
@@ -1694,35 +1795,43 @@ function ObjectiveEditor(p: EditorProps) {
               Target date<br /><span className="text-[10px] opacity-80 font-normal">PER PATIENT · DRIVES ALL METRICS</span>
             </div>
           </div>
-        </CardContent>
-      </Card>
+      </Section>
 
-      {/* Observation card — objective-level extracted value set (mapped to stages below) */}
-      <ObservationEditor
-        observationName={p.form.observationName}
-        extractedEnumValues={p.form.extractedEnumValues}
-        onNameChange={(v) => p.updateForm({ observationName: v })}
-        addExtracted={p.addExtractedValue}
-        removeExtracted={p.removeExtractedValue}
-        setColor={p.setExtractedValueColor}
-        setLabel={p.setExtractedValueLabel}
-        setHint={p.setExtractedValueHint}
-        move={p.moveExtractedValue}
-      />
+      {/* Observation */}
+      <Section
+        id="observation"
+        title={<><ClipboardCheck className="h-4 w-4 text-primary" /> Observation</>}
+        subtitle="One observation per objective. Define the value set the model is allowed to extract, color-code each value by its sentiment, and assign each to a progress stage below."
+        open={sectionsOpen.observation}
+        onToggle={() => toggleSection("observation")}
+      >
+        <ObservationEditor
+          observationName={p.form.observationName}
+          extractedEnumValues={p.form.extractedEnumValues}
+          onNameChange={(v) => p.updateForm({ observationName: v })}
+          addExtracted={p.addExtractedValue}
+          removeExtracted={p.removeExtractedValue}
+          setColor={p.setExtractedValueColor}
+          setLabel={p.setExtractedValueLabel}
+          setHint={p.setExtractedValueHint}
+          move={p.moveExtractedValue}
+        />
+      </Section>
 
-      {/* Stages card */}
-      <Card>
-        <CardContent className="p-5 space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-semibold text-base">Progress stages — in order</h3>
-              <p className="text-xs text-muted-foreground">Stages represent advancement toward the objective. Pick which stage means "objective achieved", and assign observation values to the stages they signal.</p>
-            </div>
-            <Button size="sm" variant="outline" onClick={p.addStage} data-testid="button-add-stage">
-              <Plus className="h-3.5 w-3.5 mr-1" /> Add stage
-            </Button>
-          </div>
-
+      {/* Stages */}
+      <Section
+        id="stages"
+        title="Progress stages — in order"
+        subtitle={`Stages represent advancement toward the objective. Pick which stage means "objective achieved", and assign observation values to the stages they signal.`}
+        open={sectionsOpen.stages}
+        onToggle={() => toggleSection("stages")}
+        contentClassName="space-y-3"
+        right={
+          <Button size="sm" variant="outline" onClick={p.addStage} data-testid="button-add-stage">
+            <Plus className="h-3.5 w-3.5 mr-1" /> Add stage
+          </Button>
+        }
+      >
           {/* Stage 0 — Unresolved (visually distinct, not a progress stage) */}
           {(() => {
             const u = p.form.stages.find(s => s.order === 0);
@@ -1953,16 +2062,17 @@ function ObjectiveEditor(p: EditorProps) {
               </SelectContent>
             </Select>
           </div>
-        </CardContent>
-      </Card>
+      </Section>
 
-      {/* Thresholds card */}
-      <Card>
-        <CardContent className="p-5 space-y-3">
-          <div>
-            <h3 className="font-semibold text-base">On-track threshold rules — by days remaining to target date</h3>
-            <p className="text-xs text-muted-foreground">Days remaining = target date − call date. Rules apply to every touchpoint for this objective.</p>
-          </div>
+      {/* Thresholds */}
+      <Section
+        id="thresholds"
+        title="On-track threshold rules — by days remaining to target date"
+        subtitle="Days remaining = target date − call date. Rules apply to every touchpoint for this objective."
+        open={sectionsOpen.thresholds}
+        onToggle={() => toggleSection("thresholds")}
+        contentClassName="space-y-3"
+      >
           <div className="border rounded-md overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/40">
@@ -2057,18 +2167,18 @@ function ObjectiveEditor(p: EditorProps) {
               <p className="text-[11px] text-muted-foreground">A fallback band with no day range — applied when no day-bound band matches (e.g. anchor date not provided in the request).</p>
             </div>
           )}
-        </CardContent>
-      </Card>
+      </Section>
 
-      {/* Interaction routing card */}
-      <Card className="border-2 border-[#96d410]/40 bg-[#96d410]/5">
-        <CardContent className="p-5 space-y-3">
-          <div>
-            <h3 className="font-semibold text-base flex items-center gap-2">
-              <MessageSquare className="h-4 w-4 text-primary" /> Interaction routing
-            </h3>
-            <p className="text-xs text-muted-foreground">Each call carries an interaction key in the API request context. The matching configured interaction below decides how this objective is extracted.</p>
-          </div>
+      {/* Interaction routing */}
+      <Section
+        id="interaction-routing"
+        title={<><MessageSquare className="h-4 w-4 text-primary" /> Interaction routing</>}
+        subtitle="Each call carries an interaction key in the API request context. The matching configured interaction below decides how this objective is extracted."
+        open={sectionsOpen["interaction-routing"]}
+        onToggle={() => toggleSection("interaction-routing")}
+        cardClassName="border-2 border-[#96d410]/40 bg-[#96d410]/5"
+        contentClassName="space-y-3"
+      >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
             <div>
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">Interaction context key *</Label>
@@ -2083,24 +2193,24 @@ function ObjectiveEditor(p: EditorProps) {
               </Link>
             </div>
           </div>
-        </CardContent>
-      </Card>
+      </Section>
 
-      {/* Per-interaction extraction config */}
-      <Card>
-        <CardContent className="p-5 space-y-3">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div>
-              <h3 className="font-semibold text-base">Configured interactions</h3>
-              <p className="text-xs text-muted-foreground">Pick which interactions this objective should be extracted from, and how each one maps to the progress stages.</p>
-            </div>
-            <AddInteractionPicker
-              interactions={p.interactions}
-              configured={p.form.interactions}
-              onAdd={p.addInteractionConfig}
-            />
-          </div>
-
+      {/* Configured interactions */}
+      <Section
+        id="configured-interactions"
+        title="Configured interactions"
+        subtitle="Pick which interactions this objective should be extracted from, and how each one maps to the progress stages."
+        open={sectionsOpen["configured-interactions"]}
+        onToggle={() => toggleSection("configured-interactions")}
+        contentClassName="space-y-3"
+        right={
+          <AddInteractionPicker
+            interactions={p.interactions}
+            configured={p.form.interactions}
+            onAdd={p.addInteractionConfig}
+          />
+        }
+      >
           {p.interactions.length === 0 && (
             <div className="text-sm text-muted-foreground border border-dashed rounded-md p-6 text-center">
               No activation interactions defined for this pathway yet.{" "}
@@ -2130,12 +2240,16 @@ function ObjectiveEditor(p: EditorProps) {
               />
             );
           })}
-        </CardContent>
-      </Card>
+      </Section>
 
       {/* Optional general prompt guidance */}
-      <Card>
-        <CardContent className="p-5 space-y-4">
+      <Section
+        id="guidance"
+        title="Objective-level prompt guidance (optional)"
+        subtitle="Extra context across all interactions, plus always-extract observation topics."
+        open={sectionsOpen.guidance}
+        onToggle={() => toggleSection("guidance")}
+      >
           <div className="space-y-2">
             <Label className="text-sm font-semibold">Objective-level prompt guidance (optional)</Label>
             <p className="text-xs text-muted-foreground">Extra context that applies across all interactions — e.g. how to interpret ambiguous patient statements about appointment status.</p>
@@ -2182,8 +2296,7 @@ function ObjectiveEditor(p: EditorProps) {
               </div>
             )}
           </div>
-        </CardContent>
-      </Card>
+      </Section>
     </div>
   );
 }
@@ -2399,18 +2512,7 @@ function ObservationEditor({
   };
 
   return (
-    <Card data-testid="card-observation">
-      <CardContent className="p-5 space-y-4">
-        <div>
-          <h3 className="text-sm font-semibold flex items-center gap-2">
-            <ClipboardCheck className="h-4 w-4 text-primary" />
-            Observation
-          </h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            One observation per objective. Define the value set the model is allowed to extract, color-code each value by its sentiment, sequence them, and add an optional prompt hint per value. Then assign each to a progress stage below.
-          </p>
-        </div>
-
+    <div className="space-y-4" data-testid="card-observation">
         <div>
           <Label className="text-xs uppercase tracking-wider text-muted-foreground">Observation name (optional)</Label>
           <Input value={observationName}
@@ -2545,7 +2647,6 @@ function ObservationEditor({
             </Button>
           </div>
         </div>
-      </CardContent>
-    </Card>
+    </div>
   );
 }
