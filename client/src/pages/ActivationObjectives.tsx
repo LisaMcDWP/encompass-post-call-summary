@@ -104,6 +104,7 @@ interface ActivationObjective {
   observationName: string;
   extractedEnumValues: EnumValue[];
   stageMappings: StageMapping[];
+  excludedExtractedValues: string[];
   interactions: ObjectiveInteractionConfig[];
   interactionContextKey: string;
   isActive: boolean;
@@ -126,9 +127,16 @@ const ANCHOR_TYPES: { value: AnchorEventType; label: string }[] = [
   { value: "custom", label: "Custom anchor" },
 ];
 
+// Stage 0 (order === 0) is the special "Unresolved" bin — patient remains in
+// the denominator but no progress can be assigned. Progress stages have order > 0.
+const isUnresolvedStage = (s: Stage) => s.order === 0;
+const progressStages = (stages: Stage[]) => stages.filter(s => s.order > 0).sort((a, b) => a.order - b.order);
+const unresolvedStage = (stages: Stage[]) => stages.find(isUnresolvedStage) || null;
+
 const DEFAULT_THRESHOLDS = (stages: Stage[]): Threshold[] => {
-  const last = stages[stages.length - 1]?.id || "";
-  const middleAndLast = stages.slice(1).map(s => s.id);
+  const progress = progressStages(stages);
+  const last = progress[progress.length - 1]?.id || "";
+  const middleAndLast = progress.slice(1).map(s => s.id);
   return [
     { bandLabel: "early", bandDisplayName: "Early", daysRemainingMin: 3, daysRemainingMax: null, onTrackStageIds: middleAndLast, satisfiedLabel: "On track", unsatisfiedLabel: "At risk" },
     { bandLabel: "near_window", bandDisplayName: "Near window", daysRemainingMin: 1, daysRemainingMax: 2, onTrackStageIds: last ? [last] : [], satisfiedLabel: "On track", unsatisfiedLabel: "At risk" },
@@ -139,9 +147,11 @@ const DEFAULT_THRESHOLDS = (stages: Stage[]): Threshold[] => {
 
 function emptyForm(): Omit<ActivationObjective, "id"> {
   const stages: Stage[] = [
-    { id: "stage_1", name: "not_scheduled", displayName: "Not scheduled", description: "no progress", order: 1 },
-    { id: "stage_2", name: "scheduled", displayName: "Scheduled", description: "in progress", order: 2 },
-    { id: "stage_3", name: "attended", displayName: "Attended", description: "objective achieved", order: 3 },
+    { id: "stage_unresolved", name: "unresolved", displayName: "Unresolved", description: "patient in denominator, no progress assigned", order: 0 },
+    { id: "stage_no_appointment", name: "no_appointment", displayName: "No appointment", description: "patient confirmed nothing is booked", order: 1 },
+    { id: "stage_intent", name: "intent_to_schedule", displayName: "Intent to schedule", description: "patient expressed intent but no confirmed booking", order: 2 },
+    { id: "stage_scheduled", name: "scheduled", displayName: "Scheduled", description: "confirmed appointment with date and time", order: 3 },
+    { id: "stage_completed", name: "visit_completed", displayName: "Visit completed", description: "patient attended the visit", order: 4 },
   ];
   return {
     name: "",
@@ -151,11 +161,12 @@ function emptyForm(): Omit<ActivationObjective, "id"> {
     anchorContextKey: "",
     windowDays: 7,
     stages,
-    achievedStageId: "stage_3",
+    achievedStageId: "stage_completed",
     thresholds: DEFAULT_THRESHOLDS(stages),
     observationName: "",
     extractedEnumValues: [],
     stageMappings: [],
+    excludedExtractedValues: [],
     interactions: [],
     interactionContextKey: "interaction_key",
     isActive: true,
@@ -262,6 +273,7 @@ export default function ActivationObjectives() {
       interactions: rest.interactions || [],
       interactionContextKey: rest.interactionContextKey || "interaction_key",
       observationTopicIds: rest.observationTopicIds || [],
+      excludedExtractedValues: rest.excludedExtractedValues || [],
     });
     setEditingId(id);
     setExpandedId(null);
@@ -284,13 +296,17 @@ export default function ActivationObjectives() {
       toast({ title: "Missing interaction context key", description: "Specify the request context field that carries the interaction key (e.g. interaction_key).", variant: "destructive" });
       return;
     }
-    // Validate every extracted enum value has a stage mapping (objective-level observation)
+    // Validate every extracted enum value is either mapped to a stage or marked excluded.
     {
-      const unmapped = form.extractedEnumValues.filter(v => !form.stageMappings.find(m => m.extractedValue === v.label && m.stageId));
+      const excluded = new Set(form.excludedExtractedValues);
+      const unmapped = form.extractedEnumValues.filter(v =>
+        !excluded.has(v.label) &&
+        !form.stageMappings.find(m => m.extractedValue === v.label && m.stageId)
+      );
       if (unmapped.length > 0) {
         toast({
-          title: "Observation has unmapped values",
-          description: `Pick a stage for: ${unmapped.map(v => v.label).join(", ")}`,
+          title: "Observation has unassigned values",
+          description: `Assign each to a stage or move to Excluded: ${unmapped.map(v => v.label).join(", ")}`,
           variant: "destructive",
         });
         return;
@@ -351,27 +367,49 @@ export default function ActivationObjectives() {
   }
 
   function addStage() {
-    const nextOrder = (form.stages[form.stages.length - 1]?.order || 0) + 1;
+    // Append a new progress stage after the highest existing progress order.
+    const progress = progressStages(form.stages);
+    const nextOrder = (progress[progress.length - 1]?.order || 0) + 1;
     const newId = `stage_${Date.now()}`;
     const newStage: Stage = { id: newId, name: `stage_${nextOrder}`, displayName: `Stage ${nextOrder}`, description: "", order: nextOrder };
     updateForm({ stages: [...form.stages, newStage] });
   }
 
+  function addUnresolvedStage() {
+    if (unresolvedStage(form.stages)) return;
+    const newStage: Stage = {
+      id: "stage_unresolved",
+      name: "unresolved",
+      displayName: "Unresolved",
+      description: "patient in denominator, no progress assigned",
+      order: 0,
+    };
+    updateForm({ stages: [newStage, ...form.stages] });
+  }
+
   function updateStage(idx: number, patch: Partial<Stage>) {
-    const next = form.stages.map((s, i) => i === idx ? { ...s, ...patch } : s);
+    // Don't let edits change the order field of stages — order is managed
+    // structurally (Stage 0 stays at 0; progress stages keep their slot).
+    const { order: _ignored, ...safePatch } = patch;
+    const next = form.stages.map((s, i) => i === idx ? { ...s, ...safePatch } : s);
     updateForm({ stages: next });
   }
 
   function removeStage(idx: number) {
     const removed = form.stages[idx];
     if (!removed) return;
-    if (form.stages.length <= 1) {
-      toast({ title: "Cannot remove", description: "At least one stage is required.", variant: "destructive" });
+    const remainingProgress = progressStages(form.stages).filter(s => s.id !== removed.id);
+    if (!isUnresolvedStage(removed) && remainingProgress.length === 0) {
+      toast({ title: "Cannot remove", description: "At least one progress stage is required.", variant: "destructive" });
       return;
     }
-    const next = form.stages.filter((_, i) => i !== idx).map((s, i) => ({ ...s, order: i + 1 }));
+    // Renumber only progress stages; Stage 0 keeps order 0.
+    let pOrder = 1;
+    const next = form.stages
+      .filter((_, i) => i !== idx)
+      .map(s => isUnresolvedStage(s) ? s : { ...s, order: pOrder++ });
     const newAchieved = form.achievedStageId === removed.id
-      ? next[next.length - 1]?.id || ""
+      ? (progressStages(next)[progressStages(next).length - 1]?.id || "")
       : form.achievedStageId;
     const newThresholds = form.thresholds.map(t => ({
       ...t,
@@ -382,12 +420,34 @@ export default function ActivationObjectives() {
   }
 
   function moveStage(idx: number, dir: -1 | 1) {
-    const newIdx = idx + dir;
-    if (newIdx < 0 || newIdx >= form.stages.length) return;
-    const next = [...form.stages];
-    [next[idx], next[newIdx]] = [next[newIdx], next[idx]];
-    next.forEach((s, i) => s.order = i + 1);
+    // Move only operates on progress stages — Stage 0 is fixed.
+    const stage = form.stages[idx];
+    if (!stage || isUnresolvedStage(stage)) return;
+    const progress = progressStages(form.stages);
+    const pIdx = progress.findIndex(s => s.id === stage.id);
+    const newPIdx = pIdx + dir;
+    if (newPIdx < 0 || newPIdx >= progress.length) return;
+    const reordered = [...progress];
+    [reordered[pIdx], reordered[newPIdx]] = [reordered[newPIdx], reordered[pIdx]];
+    reordered.forEach((s, i) => s.order = i + 1);
+    // Rebuild stages array preserving Stage 0 first, then the new progress order.
+    const u = unresolvedStage(form.stages);
+    const next: Stage[] = u ? [u, ...reordered] : reordered;
     updateForm({ stages: next });
+  }
+
+  function setExcluded(label: string, excluded: boolean) {
+    const isCurrentlyExcluded = form.excludedExtractedValues.includes(label);
+    if (excluded === isCurrentlyExcluded) return;
+    const next = excluded
+      ? [...form.excludedExtractedValues, label]
+      : form.excludedExtractedValues.filter(v => v !== label);
+    // When marking a value as excluded, also clear any stage mapping for it
+    // (excluded values cannot be assigned to a stage).
+    const newMappings = excluded
+      ? form.stageMappings.filter(m => m.extractedValue !== label)
+      : form.stageMappings;
+    updateForm({ excludedExtractedValues: next, stageMappings: newMappings });
   }
 
   function toggleThresholdStage(thresholdIdx: number, stageId: string) {
@@ -671,6 +731,7 @@ export default function ActivationObjectives() {
       observationName,
       extractedEnumValues,
       stageMappings,
+      excludedExtractedValues: [],
       interactions: [],
       interactionContextKey: "interaction_key",
       isActive: true,
@@ -1232,9 +1293,11 @@ export default function ActivationObjectives() {
           interactions={interactions}
           observationTopics={observationTopics}
           addStage={addStage}
+          addUnresolvedStage={addUnresolvedStage}
           updateStage={updateStage}
           removeStage={removeStage}
           moveStage={moveStage}
+          setExcluded={setExcluded}
           toggleThresholdStage={toggleThresholdStage}
           updateThreshold={updateThreshold}
           addDefaultBand={addDefaultBand}
@@ -1466,9 +1529,11 @@ interface EditorProps {
   interactions: ActivationInteraction[];
   observationTopics: ObservationTopic[];
   addStage: () => void;
+  addUnresolvedStage: () => void;
   updateStage: (idx: number, patch: Partial<Stage>) => void;
   removeStage: (idx: number) => void;
   moveStage: (idx: number, dir: -1 | 1) => void;
+  setExcluded: (label: string, excluded: boolean) => void;
   toggleThresholdStage: (idx: number, stageId: string) => void;
   updateThreshold: (idx: number, patch: Partial<Threshold>) => void;
   addDefaultBand: () => void;
@@ -1623,29 +1688,112 @@ function ObjectiveEditor(p: EditorProps) {
             </Button>
           </div>
 
-          <div className="space-y-2">
-            {p.form.stages.map((s, i) => {
+          {/* Stage 0 — Unresolved (visually distinct, not a progress stage) */}
+          {(() => {
+            const u = p.form.stages.find(s => s.order === 0);
+            const absIdx = u ? p.form.stages.findIndex(s => s.id === u.id) : -1;
+            if (!u) {
               return (
-                <div key={s.id} className="flex flex-col gap-2 p-2 rounded-md border bg-card" data-testid={`row-stage-${i}`}>
+                <div className="rounded-md border-2 border-dashed border-muted-foreground/30 bg-muted/30 p-2 flex items-center justify-between" data-testid="row-stage-unresolved-empty">
+                  <p className="text-xs text-muted-foreground italic">No "Unresolved" bin — values like "Not discussed", "Unknown", or "Patient deferred" have nowhere to go.</p>
+                  <Button size="sm" variant="outline" onClick={p.addUnresolvedStage} data-testid="button-add-unresolved">
+                    <Plus className="h-3.5 w-3.5 mr-1" /> Add Unresolved bin
+                  </Button>
+                </div>
+              );
+            }
+            return (
+              <div className="rounded-md border-2 border-dashed border-muted-foreground/40 bg-muted/30 p-2 flex flex-col gap-2" data-testid="row-stage-unresolved">
+                <div className="flex items-center gap-2">
+                  <div className="w-12 shrink-0" />
+                  <div className="w-7 h-7 rounded-full border-2 border-dashed border-muted-foreground/50 flex items-center justify-center text-xs font-semibold text-muted-foreground bg-background">0</div>
+                  <div className="flex-1 grid grid-cols-3 gap-2">
+                    <Input value={u.name} onChange={e => p.updateStage(absIdx, { name: e.target.value })}
+                      placeholder="snake_case_name" className="h-8 text-sm" data-testid="input-stage-name-unresolved" />
+                    <Input value={u.displayName} onChange={e => p.updateStage(absIdx, { displayName: e.target.value })}
+                      placeholder="Display name" className="h-8 text-sm" data-testid="input-stage-display-unresolved" />
+                    <Input value={u.description} onChange={e => p.updateStage(absIdx, { description: e.target.value })}
+                      placeholder="Sublabel (optional)" className="h-8 text-sm" data-testid="input-stage-desc-unresolved" />
+                  </div>
+                  <Button size="icon" variant="ghost" onClick={() => p.removeStage(absIdx)} data-testid="button-remove-stage-unresolved" title="Remove the Unresolved bin">
+                    <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                  </Button>
+                </div>
+                <div className="ml-12 text-[11px] text-muted-foreground italic">
+                  Patient remains in the denominator but no progress can be assigned. Triggers re-contact or call quality review.
+                </div>
+                {p.form.extractedEnumValues.length > 0 && (
+                  <div className="ml-12 flex items-center gap-2 flex-wrap">
+                    <Label className="text-[10px] uppercase tracking-wider text-muted-foreground shrink-0">Observation values</Label>
+                    {p.form.extractedEnumValues.map(v => {
+                      const mapping = p.form.stageMappings.find(m => m.extractedValue === v.label);
+                      const isExcluded = p.form.excludedExtractedValues.includes(v.label);
+                      const onThisStage = mapping?.stageId === u.id;
+                      const onOtherStage = !!mapping?.stageId && mapping.stageId !== u.id;
+                      const otherStageName = onOtherStage
+                        ? p.form.stages.find(st => st.id === mapping?.stageId)?.displayName
+                        : null;
+                      const c = COLOR_MAP[v.color] || COLOR_MAP.GRAY;
+                      if (isExcluded) {
+                        return (
+                          <span key={v.label} className="text-[11px] font-mono px-2 py-0.5 rounded-md border border-dashed text-muted-foreground bg-background opacity-60" title="Excluded — not assignable to any stage">
+                            {v.label}
+                          </span>
+                        );
+                      }
+                      return (
+                        <button key={v.label} type="button"
+                          onClick={() => p.setMapping(v.label, onThisStage ? "" : u.id)}
+                          title={onOtherStage ? `Currently mapped to "${otherStageName}". Click to move here.` : undefined}
+                          className={
+                            "text-[11px] font-mono px-2 py-0.5 rounded-md border transition-colors " +
+                            (onThisStage
+                              ? c.chipActive
+                              : onOtherStage
+                                ? `${c.bg} ${c.text} border-dashed ${c.border} opacity-60 hover:opacity-100`
+                                : `${c.bg} ${c.text} ${c.border} hover:opacity-80`)
+                          }
+                          data-testid={`chip-stage-value-unresolved-${v.label}`}
+                        >
+                          {v.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Progress stages (order > 0) */}
+          <div className="space-y-2">
+            {p.form.stages.map((s, absIdx) => {
+              if (s.order === 0) return null;
+              const progress = p.form.stages.filter(x => x.order > 0).sort((a, b) => a.order - b.order);
+              const pIdx = progress.findIndex(x => x.id === s.id);
+              const isFirstProgress = pIdx === 0;
+              const isLastProgress = pIdx === progress.length - 1;
+              return (
+                <div key={s.id} className="flex flex-col gap-2 p-2 rounded-md border bg-card" data-testid={`row-stage-${absIdx}`}>
                   <div className="flex items-center gap-2">
                     <div className="flex flex-col">
-                      <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => p.moveStage(i, -1)} disabled={i === 0}>
+                      <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => p.moveStage(absIdx, -1)} disabled={isFirstProgress}>
                         <ChevronUp className="h-3 w-3" />
                       </Button>
-                      <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => p.moveStage(i, 1)} disabled={i === p.form.stages.length - 1}>
+                      <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => p.moveStage(absIdx, 1)} disabled={isLastProgress}>
                         <ChevronDown className="h-3 w-3" />
                       </Button>
                     </div>
-                    <div className="w-7 h-7 rounded-full border-2 border-muted-foreground/30 flex items-center justify-center text-xs font-semibold">{i + 1}</div>
+                    <div className="w-7 h-7 rounded-full border-2 border-muted-foreground/30 flex items-center justify-center text-xs font-semibold">{s.order}</div>
                     <div className="flex-1 grid grid-cols-3 gap-2">
-                      <Input value={s.name} onChange={e => p.updateStage(i, { name: e.target.value })}
-                        placeholder="snake_case_name" className="h-8 text-sm" data-testid={`input-stage-name-${i}`} />
-                      <Input value={s.displayName} onChange={e => p.updateStage(i, { displayName: e.target.value })}
-                        placeholder="Display name" className="h-8 text-sm" data-testid={`input-stage-display-${i}`} />
-                      <Input value={s.description} onChange={e => p.updateStage(i, { description: e.target.value })}
-                        placeholder="Sublabel (optional)" className="h-8 text-sm" data-testid={`input-stage-desc-${i}`} />
+                      <Input value={s.name} onChange={e => p.updateStage(absIdx, { name: e.target.value })}
+                        placeholder="snake_case_name" className="h-8 text-sm" data-testid={`input-stage-name-${absIdx}`} />
+                      <Input value={s.displayName} onChange={e => p.updateStage(absIdx, { displayName: e.target.value })}
+                        placeholder="Display name" className="h-8 text-sm" data-testid={`input-stage-display-${absIdx}`} />
+                      <Input value={s.description} onChange={e => p.updateStage(absIdx, { description: e.target.value })}
+                        placeholder="Sublabel (optional)" className="h-8 text-sm" data-testid={`input-stage-desc-${absIdx}`} />
                     </div>
-                    <Button size="icon" variant="ghost" onClick={() => p.removeStage(i)} data-testid={`button-remove-stage-${i}`}>
+                    <Button size="icon" variant="ghost" onClick={() => p.removeStage(absIdx)} data-testid={`button-remove-stage-${absIdx}`}>
                       <Trash2 className="h-3.5 w-3.5 text-destructive" />
                     </Button>
                   </div>
@@ -1654,12 +1802,20 @@ function ObjectiveEditor(p: EditorProps) {
                       <Label className="text-[10px] uppercase tracking-wider text-muted-foreground shrink-0">Observation values</Label>
                       {p.form.extractedEnumValues.map(v => {
                         const mapping = p.form.stageMappings.find(m => m.extractedValue === v.label);
+                        const isExcluded = p.form.excludedExtractedValues.includes(v.label);
                         const onThisStage = mapping?.stageId === s.id;
                         const onOtherStage = !!mapping?.stageId && mapping.stageId !== s.id;
                         const otherStageName = onOtherStage
                           ? p.form.stages.find(st => st.id === mapping?.stageId)?.displayName
                           : null;
                         const c = COLOR_MAP[v.color] || COLOR_MAP.GRAY;
+                        if (isExcluded) {
+                          return (
+                            <span key={v.label} className="text-[11px] font-mono px-2 py-0.5 rounded-md border border-dashed text-muted-foreground bg-background opacity-60" title="Excluded — not assignable to any stage">
+                              {v.label}
+                            </span>
+                          );
+                        }
                         return (
                           <button
                             key={v.label}
@@ -1674,7 +1830,7 @@ function ObjectiveEditor(p: EditorProps) {
                                   ? `${c.bg} ${c.text} border-dashed ${c.border} opacity-60 hover:opacity-100`
                                   : `${c.bg} ${c.text} ${c.border} hover:opacity-80`)
                             }
-                            data-testid={`chip-stage-value-${i}-${v.label}`}
+                            data-testid={`chip-stage-value-${absIdx}-${v.label}`}
                           >
                             {v.label}
                           </button>
@@ -1687,12 +1843,53 @@ function ObjectiveEditor(p: EditorProps) {
             })}
           </div>
 
+          {/* Excluded bin — permanent, not a stage */}
+          <div className="rounded-md border-2 border-dashed border-muted-foreground/40 bg-muted/20 p-2 flex flex-col gap-2" data-testid="row-stage-excluded">
+            <div className="flex items-center gap-2">
+              <div className="w-12 shrink-0" />
+              <Badge variant="outline" className="border-dashed text-muted-foreground">Excluded</Badge>
+              <span className="text-xs text-muted-foreground">Not a stage — patient does not enter the denominator at all.</span>
+            </div>
+            {p.form.extractedEnumValues.length > 0 && (
+              <div className="ml-12 flex items-center gap-2 flex-wrap">
+                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground shrink-0">Observation values</Label>
+                {p.form.extractedEnumValues.map(v => {
+                  const isExcluded = p.form.excludedExtractedValues.includes(v.label);
+                  const mapping = p.form.stageMappings.find(m => m.extractedValue === v.label);
+                  const onAStage = !!mapping?.stageId;
+                  const stageName = onAStage ? p.form.stages.find(st => st.id === mapping?.stageId)?.displayName : null;
+                  return (
+                    <button
+                      key={v.label}
+                      type="button"
+                      onClick={() => p.setExcluded(v.label, !isExcluded)}
+                      title={isExcluded ? "Click to remove from Excluded" : (onAStage ? `Currently mapped to "${stageName}". Click to mark Excluded (clears stage mapping).` : "Click to mark Excluded")}
+                      className={
+                        "text-[11px] font-mono px-2 py-0.5 rounded-md border transition-colors " +
+                        (isExcluded
+                          ? "bg-foreground text-background border-foreground"
+                          : onAStage
+                            ? "bg-background text-muted-foreground border-dashed border-muted-foreground/40 opacity-60 hover:opacity-100"
+                            : "bg-background text-muted-foreground border-muted-foreground/40 hover:bg-muted")
+                      }
+                      data-testid={`chip-excluded-${v.label}`}
+                    >
+                      {v.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           <div className="pt-2 border-t flex items-center gap-2">
             <Label className="text-sm">Objective achieved when stage =</Label>
             <Select value={p.form.achievedStageId} onValueChange={v => p.updateForm({ achievedStageId: v })}>
               <SelectTrigger className="w-64 h-8" data-testid="select-achieved-stage"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {p.form.stages.map(s => <SelectItem key={s.id} value={s.id}>{s.displayName}</SelectItem>)}
+                {p.form.stages.filter(s => s.order > 0).sort((a, b) => a.order - b.order).map(s => (
+                  <SelectItem key={s.id} value={s.id}>{s.displayName}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -1764,7 +1961,7 @@ function ObjectiveEditor(p: EditorProps) {
                           </div>
                         ) : (
                           <div className="flex flex-wrap gap-1.5">
-                            {p.form.stages.map(s => {
+                            {p.form.stages.filter(s => s.order > 0).sort((a, b) => a.order - b.order).map(s => {
                               const active = t.onTrackStageIds.includes(s.id);
                               return (
                                 <button key={s.id} type="button"

@@ -296,6 +296,7 @@ export const insertActivationObjectiveSchema = z.object({
     z.array(observationEnumValueSchema).default([])
   ),
   stageMappings: z.array(activationObjectiveStageMappingSchema).default([]),
+  excludedExtractedValues: z.array(z.string()).default([]),
   interactions: z.array(activationObjectiveInteractionConfigSchema).default([]),
   isActive: z.boolean().default(true),
   displayOrder: z.number().int().default(0),
@@ -319,6 +320,7 @@ export interface ActivationObjective {
   observationName: string;
   extractedEnumValues: ObservationEnumValue[];
   stageMappings: ActivationObjectiveStageMapping[];
+  excludedExtractedValues: string[];
   interactions: ActivationObjectiveInteractionConfig[];
   isActive: boolean;
   displayOrder: number;
