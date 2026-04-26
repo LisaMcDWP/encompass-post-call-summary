@@ -181,12 +181,30 @@ Returns service connectivity status.
 - **Safety**: Parameterized SQL, atomic claim semantics (pending→processing prevents duplicate work), status validation
 
 ## GCP Cloud Run Deployment
-- **Dockerfile**: Multi-stage build (builder + runner) with Node 20
-- **cloudbuild.yaml**: Builds Docker image, pushes to GCR, deploys to Cloud Run
-- **deploy.sh**: Manual deployment via `gcloud` CLI
+- **Host project**: `guidewaycare-476802` (Cloud Build, GCR, Cloud Run all live here)
+- **Service**: `guideway-care-api`
 - **Region**: us-central1
 - **Port**: 8080 (Cloud Run default, read from PORT env var)
-- **Secrets**: GCP_SERVICE_ACCOUNT_KEY stored in GCP Secret Manager
+- **Image**: `gcr.io/guidewaycare-476802/guideway-care-api:<sha>` and `:latest`
+- **Secrets**: `GCP_SERVICE_ACCOUNT_KEY` stored in GCP Secret Manager, mounted via `--set-secrets`
+- **Dockerfile**: Multi-stage build (builder + runner) with Node 20
+- **cloudbuild.yaml**: Builds Docker image, pushes to GCR, deploys to Cloud Run (`--min-instances 1`)
+- **deploy.sh**: Manual deployment via `gcloud` CLI (`--min-instances 0`)
+
+### Standard Deploy Procedure (DO NOT DEVIATE)
+This is how Lisa deploys every time. Don't propose alternative paths unless asked.
+
+1. **From Replit**: commit and `git push` to the repo. The Cloud Build trigger on `guidewaycare-476802` fires automatically off the push and runs `cloudbuild.yaml` end-to-end (build → push GCR → deploy Cloud Run revision).
+2. **From GCP Cloud Shell** (project already set to `guidewaycare-476802`), monitor with:
+   ```bash
+   # Stream the build that the git push just triggered
+   gcloud beta builds log --stream $(gcloud builds list --limit 1 --format='value(id)')
+
+   # Tail the live Cloud Run service after the new revision rolls out
+   gcloud beta run services logs tail guideway-care-api --region us-central1
+   ```
+   Note: `beta` is required — plain `gcloud builds log --stream` and `gcloud run services logs tail` don't exist in the GA track in Cloud Shell.
+3. On the first request after a new revision goes live, expect "Schema migration ok for activation_*: ensured column ..." lines as the lazy BigQuery migrations run.
 
 ## Branding
 - Guideway Care branding (colors from guidewaycare.com)
