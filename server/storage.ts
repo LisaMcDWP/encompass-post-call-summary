@@ -449,19 +449,24 @@ async function ensureActivationObjectivesTable(): Promise<void> {
   }
 
   // Idempotent migration: add new columns if missing (legacy table had `touchpoints` column).
-  for (const stmt of [
-    `ALTER TABLE \`${fullTable}\` ADD COLUMN IF NOT EXISTS interaction_context_key STRING`,
-    `ALTER TABLE \`${fullTable}\` ADD COLUMN IF NOT EXISTS interactions STRING`,
-    `ALTER TABLE \`${fullTable}\` ADD COLUMN IF NOT EXISTS observation_name STRING`,
-    `ALTER TABLE \`${fullTable}\` ADD COLUMN IF NOT EXISTS extracted_enum_values STRING`,
-    `ALTER TABLE \`${fullTable}\` ADD COLUMN IF NOT EXISTS stage_mappings STRING`,
-    `ALTER TABLE \`${fullTable}\` ADD COLUMN IF NOT EXISTS observation_topic_ids STRING`,
-  ]) {
+  const migrationColumns: { col: string; type: string }[] = [
+    { col: "interaction_context_key", type: "STRING" },
+    { col: "interactions", type: "STRING" },
+    { col: "observation_name", type: "STRING" },
+    { col: "extracted_enum_values", type: "STRING" },
+    { col: "stage_mappings", type: "STRING" },
+    { col: "observation_topic_ids", type: "STRING" },
+  ];
+  for (const { col, type } of migrationColumns) {
     try {
-      await client.query({ query: stmt });
+      await client.query({
+        query: `ALTER TABLE \`${fullTable}\` ADD COLUMN IF NOT EXISTS ${col} ${type}`,
+      });
+      console.log(`Schema migration ok for ${ACTIVATION_OBJECTIVES_TABLE_ID}: ensured column ${col}`);
     } catch (err: any) {
-      if (!err.message?.includes("Column already exists") && !err.message?.includes("already exists")) {
-        console.warn(`Schema migration warning for ${ACTIVATION_OBJECTIVES_TABLE_ID}: ${err.message}`);
+      const msg = err?.message || String(err);
+      if (!/already exists/i.test(msg)) {
+        console.warn(`Schema migration warning for ${ACTIVATION_OBJECTIVES_TABLE_ID}.${col}: ${msg}`);
       }
     }
   }
