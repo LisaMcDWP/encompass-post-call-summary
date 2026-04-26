@@ -1170,21 +1170,6 @@ export default function ActivationObjectives() {
         </div>
       )}
 
-      {isEditing && (
-        <div className="flex items-center justify-end -mb-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setEditorAiOpen(!editorAiOpen)}
-            className={editorAiOpen ? "border-primary text-primary" : ""}
-            data-testid="button-editor-ai-assistant"
-          >
-            <Sparkles className="h-4 w-4 mr-2" />
-            {editorAiOpen ? "Hide AI Assistant" : "Enhance with AI"}
-          </Button>
-        </div>
-      )}
-
       {isEditing && editorAiOpen && (
         <Card className="border-primary/30 shadow-md bg-gradient-to-br from-primary/5 to-background" data-testid="panel-editor-ai-assistant">
           <CardContent className="py-4 px-5 space-y-3">
@@ -1352,6 +1337,8 @@ export default function ActivationObjectives() {
           onSave={saveForm}
           saving={saving}
           isNew={editingId === "new"}
+          editorAiOpen={editorAiOpen}
+          setEditorAiOpen={setEditorAiOpen}
         />
       )}
 
@@ -1588,6 +1575,8 @@ interface EditorProps {
   onSave: () => void;
   saving: boolean;
   isNew: boolean;
+  editorAiOpen: boolean;
+  setEditorAiOpen: (open: boolean) => void;
 }
 
 function ObjectiveEditor(p: EditorProps) {
@@ -1601,6 +1590,16 @@ function ObjectiveEditor(p: EditorProps) {
           <p className="text-xs text-muted-foreground">Configure anchor, stages, on-track rules, and touchpoints.</p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => p.setEditorAiOpen(!p.editorAiOpen)}
+            disabled={p.saving}
+            className={p.editorAiOpen ? "border-primary text-primary" : ""}
+            data-testid="button-editor-ai-assistant"
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            {p.editorAiOpen ? "Hide AI Assistant" : "Enhance with AI"}
+          </Button>
           <Button variant="outline" onClick={p.onCancel} disabled={p.saving} data-testid="button-cancel">
             <X className="h-4 w-4 mr-2" /> Cancel
           </Button>
