@@ -641,7 +641,7 @@ export default function Observations() {
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingId ? "Edit Observation" : "New Observation"}</DialogTitle>
           </DialogHeader>
@@ -816,8 +816,8 @@ export default function Observations() {
                               setForm({ ...form, value: updated });
                             }}
                             placeholder={`Optional prompt hint — when should Gemini pick "${v.label || "this value"}"? e.g. "Patient confirmed they picked up the medication, even if late."`}
-                            rows={2}
-                            className="text-xs resize-none bg-background"
+                            rows={3}
+                            className="text-xs resize bg-background"
                             data-testid={`textarea-enum-hint-${i}`}
                           />
                         </div>
