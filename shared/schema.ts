@@ -404,22 +404,10 @@ export const insertActivationObjectiveSchema = z.object({
   achievedStageId: z.string().default(""),
   thresholds: z.array(activationObjectiveThresholdSchema).default([]),
   observationName: z.string().default(""),
-  extractedEnumValues: z.preprocess(
-    (val) => {
-      if (!Array.isArray(val)) return val;
-      return val.map((v) =>
-        typeof v === "string" ? { label: v, color: "GRAY" } : v
-      );
-    },
-    z.array(observationEnumValueSchema).default([])
-  ),
   stageMappings: z.array(activationObjectiveStageMappingSchema).default([]),
-  knownContextExtractedValues: z.array(z.string()).default([]),
-  excludedExtractedValues: z.array(z.string()).default([]),
   interactions: z.array(activationObjectiveInteractionConfigSchema).default([]),
   isActive: z.boolean().default(true),
   displayOrder: z.number().int().default(0),
-  promptGuidance: z.string().default(""),
   observationTopicIds: z.array(z.number().int()).default([]),
 });
 export type InsertActivationObjective = z.infer<typeof insertActivationObjectiveSchema>;
@@ -437,14 +425,10 @@ export interface ActivationObjective {
   achievedStageId: string;
   thresholds: ActivationObjectiveThreshold[];
   observationName: string;
-  extractedEnumValues: ObservationEnumValue[];
   stageMappings: ActivationObjectiveStageMapping[];
-  knownContextExtractedValues: string[];
-  excludedExtractedValues: string[];
   interactions: ActivationObjectiveInteractionConfig[];
   isActive: boolean;
   displayOrder: number;
-  promptGuidance: string;
   observationTopicIds: number[];
 }
 

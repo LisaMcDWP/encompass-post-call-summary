@@ -78,6 +78,11 @@ interface ObservationTopic {
   id: number;
   name: string;
   displayName: string;
+  description?: string;
+  domain?: string;
+  valueType?: string;
+  value?: EnumValue[];
+  promptGuidance?: string;
   isActive: boolean;
 }
 
@@ -108,15 +113,11 @@ interface ActivationObjective {
   achievedStageId: string;
   thresholds: Threshold[];
   observationName: string;
-  extractedEnumValues: EnumValue[];
   stageMappings: StageMapping[];
-  knownContextExtractedValues: string[];
-  excludedExtractedValues: string[];
   interactions: ObjectiveInteractionConfig[];
   interactionContextKey: string;
   isActive: boolean;
   displayOrder: number;
-  promptGuidance: string;
   observationTopicIds: number[];
 }
 
@@ -171,15 +172,11 @@ function emptyForm(): Omit<ActivationObjective, "id"> {
     achievedStageId: "stage_completed",
     thresholds: DEFAULT_THRESHOLDS(stages),
     observationName: "",
-    extractedEnumValues: [],
     stageMappings: [],
-    knownContextExtractedValues: [],
-    excludedExtractedValues: [],
     interactions: [],
     interactionContextKey: "interaction_key",
     isActive: true,
     displayOrder: 0,
-    promptGuidance: "",
     observationTopicIds: [],
   };
 }
@@ -281,8 +278,6 @@ export default function ActivationObjectives() {
       interactions: rest.interactions || [],
       interactionContextKey: rest.interactionContextKey || "interaction_key",
       observationTopicIds: rest.observationTopicIds || [],
-      knownContextExtractedValues: rest.knownContextExtractedValues || [],
-      excludedExtractedValues: rest.excludedExtractedValues || [],
     });
     setEditingId(id);
     setExpandedId(null);
@@ -305,19 +300,52 @@ export default function ActivationObjectives() {
       toast({ title: "Missing interaction context key", description: "Specify the request context field that carries the interaction key (e.g. interaction_key).", variant: "destructive" });
       return;
     }
-    // Validate every extracted enum value is mapped to a stage, marked Known Context, or Excluded.
+    // Validate the linked Observation: it must be set, resolve to an active
+    // enum observation in this pathway, and every one of its values must be
+    // mapped to a stage. Without this, runtime extraction silently skips the
+    // objective (gemini.ts: linkedAllowed is empty → continue).
     {
-      const knownCtx = new Set(form.knownContextExtractedValues);
-      const excluded = new Set(form.excludedExtractedValues);
-      const unmapped = form.extractedEnumValues.filter(v =>
-        !knownCtx.has(v.label) &&
-        !excluded.has(v.label) &&
-        !form.stageMappings.find(m => m.extractedValue === v.label && m.stageId)
+      if (!form.observationName.trim()) {
+        toast({
+          title: "Linked observation required",
+          description: "Pick an observation in the Observation section so the model knows what to extract.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const linked = observationTopics.find(o => o.name === form.observationName);
+      if (!linked) {
+        toast({
+          title: "Linked observation missing",
+          description: `"${form.observationName}" isn't an observation in this pathway. Pick an existing one or create it on the Observations page.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      if (!linked.isActive) {
+        toast({
+          title: "Linked observation is inactive",
+          description: `"${linked.displayName}" is marked inactive and won't run at extraction time. Activate it on the Observations page or pick a different one.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      if (linked.valueType !== "enum" || !Array.isArray(linked.value) || linked.value.length === 0) {
+        toast({
+          title: "Linked observation has no enum values",
+          description: `"${linked.displayName}" must be an enum with at least one value before it can drive stages.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      const linkedValues = linked.value.map(v => v.label);
+      const unmapped = linkedValues.filter(label =>
+        !form.stageMappings.find(m => m.extractedValue === label && m.stageId)
       );
       if (unmapped.length > 0) {
         toast({
-          title: "Observation has unassigned values",
-          description: `Assign each to a stage, Known Context, or Excluded: ${unmapped.map(v => v.label).join(", ")}`,
+          title: "Linked observation has unassigned values",
+          description: `Assign each to a stage: ${unmapped.join(", ")}`,
           variant: "destructive",
         });
         return;
@@ -447,27 +475,6 @@ export default function ActivationObjectives() {
     updateForm({ stages: next });
   }
 
-  // Set a value's non-stage role: "known_context" (capture but no progression),
-  // "excluded" (drop entirely), or null (clear → returns to "needs assignment").
-  // The three roles (mapped, known_context, excluded) are mutually exclusive.
-  function setNonStage(label: string, kind: "known_context" | "excluded" | null) {
-    const knownNext = kind === "known_context"
-      ? Array.from(new Set([...form.knownContextExtractedValues, label]))
-      : form.knownContextExtractedValues.filter(v => v !== label);
-    const excludedNext = kind === "excluded"
-      ? Array.from(new Set([...form.excludedExtractedValues, label]))
-      : form.excludedExtractedValues.filter(v => v !== label);
-    // When moving a value into a non-stage bin, clear any stage mapping for it.
-    const newMappings = (kind === "known_context" || kind === "excluded")
-      ? form.stageMappings.filter(m => m.extractedValue !== label)
-      : form.stageMappings;
-    updateForm({
-      knownContextExtractedValues: knownNext,
-      excludedExtractedValues: excludedNext,
-      stageMappings: newMappings,
-    });
-  }
-
   function toggleThresholdStage(thresholdIdx: number, stageId: string) {
     const t = form.thresholds[thresholdIdx];
     const has = t.onTrackStageIds.includes(stageId);
@@ -527,65 +534,6 @@ export default function ActivationObjectives() {
   function removeInteractionConfig(idx: number) {
     if (!confirm("Remove this interaction configuration from the objective?")) return;
     updateForm({ interactions: form.interactions.filter((_, i) => i !== idx) });
-  }
-
-  function setExtractedValueLabel(oldLabel: string, newLabel: string) {
-    const trimmed = newLabel.trim();
-    if (!trimmed || trimmed === oldLabel) return;
-    if (form.extractedEnumValues.some(v => v.label === trimmed)) {
-      toast({
-        title: "Duplicate value",
-        description: `"${trimmed}" already exists. Pick a different label.`,
-        variant: "destructive",
-      });
-      return;
-    }
-    updateForm({
-      extractedEnumValues: form.extractedEnumValues.map(v =>
-        v.label === oldLabel ? { ...v, label: trimmed } : v
-      ),
-      stageMappings: form.stageMappings.map(m =>
-        m.extractedValue === oldLabel ? { ...m, extractedValue: trimmed } : m
-      ),
-    });
-  }
-
-  function setExtractedValueHint(label: string, hint: string) {
-    updateForm({
-      extractedEnumValues: form.extractedEnumValues.map(v =>
-        v.label === label ? { ...v, promptHint: hint } : v
-      ),
-    });
-  }
-
-  function moveExtractedValue(label: string, dir: "up" | "down") {
-    const list = [...form.extractedEnumValues];
-    const i = list.findIndex(v => v.label === label);
-    if (i < 0) return;
-    const j = dir === "up" ? i - 1 : i + 1;
-    if (j < 0 || j >= list.length) return;
-    [list[i], list[j]] = [list[j], list[i]];
-    updateForm({ extractedEnumValues: list });
-  }
-
-  function addExtractedValue(label: string, color: EnumColor = "GRAY") {
-    const trimmed = label.trim();
-    if (!trimmed) return;
-    if (form.extractedEnumValues.find(v => v.label === trimmed)) return;
-    updateForm({ extractedEnumValues: [...form.extractedEnumValues, { label: trimmed, color, promptHint: "" }] });
-  }
-
-  function removeExtractedValue(label: string) {
-    updateForm({
-      extractedEnumValues: form.extractedEnumValues.filter(v => v.label !== label),
-      stageMappings: form.stageMappings.filter(m => m.extractedValue !== label),
-    });
-  }
-
-  function setExtractedValueColor(label: string, color: EnumColor) {
-    updateForm({
-      extractedEnumValues: form.extractedEnumValues.map(v => v.label === label ? { ...v, color } : v),
-    });
   }
 
   function setMapping(extractedValue: string, stageId: string) {
@@ -698,9 +646,6 @@ export default function ActivationObjectives() {
       || parsedStages[parsedStages.length - 1]?.id
       || "";
 
-    const valuesRaw = get("Extracted Values");
-    let extractedEnumValues: EnumValue[] = parseExtractedValuesLine(valuesRaw);
-
     const mappingsRaw = get("Stage Mappings");
     let stageMappings: StageMapping[] = [];
     if (mappingsRaw) {
@@ -714,29 +659,6 @@ export default function ActivationObjectives() {
       }).filter(Boolean) as StageMapping[];
     }
 
-    // If the model omitted "Extracted Values" but provided "Stage Mappings",
-    // infer the enum values from the mapping keys so the objective is usable
-    // for extraction. Also infer color from the achieved-stage convention.
-    if (extractedEnumValues.length === 0 && stageMappings.length > 0) {
-      const seen = new Set<string>();
-      extractedEnumValues = stageMappings
-        .map(sm => {
-          const key = sm.extractedValue.trim().toLowerCase();
-          if (seen.has(key)) return null;
-          seen.add(key);
-          const stageOrder = parsedStages.find(s => s.id === sm.stageId)?.order ?? 0;
-          const totalStages = parsedStages.length || 1;
-          let color: EnumColor = "GRAY";
-          if (stageOrder === totalStages) color = "GREEN";
-          else if (stageOrder >= Math.ceil(totalStages / 2)) color = "YELLOW";
-          else if (stageOrder > 0) color = "RED";
-          return { label: sm.extractedValue.trim(), color, promptHint: "" };
-        })
-        .filter(Boolean) as EnumValue[];
-    }
-
-    const promptGuidance = get("Prompt Guidance");
-
     return {
       name,
       displayName,
@@ -748,15 +670,11 @@ export default function ActivationObjectives() {
       achievedStageId,
       thresholds: DEFAULT_THRESHOLDS(parsedStages),
       observationName,
-      extractedEnumValues,
       stageMappings,
-      knownContextExtractedValues: [],
-    excludedExtractedValues: [],
       interactions: [],
       interactionContextKey: "interaction_key",
       isActive: true,
       displayOrder: 0,
-      promptGuidance,
       observationTopicIds: [],
     };
   }
@@ -835,12 +753,6 @@ export default function ActivationObjectives() {
       if (match) out.achievedStageId = match.id;
     }
 
-    const valuesRaw = get("Extracted Values");
-    if (valuesRaw) {
-      const extractedValues = parseExtractedValuesLine(valuesRaw);
-      if (extractedValues.length > 0) out.extractedEnumValues = extractedValues;
-    }
-
     const mappingsRaw = get("Stage Mappings");
     if (mappingsRaw) {
       // Use parsed stages if AI provided them, else current form stages — match case-insensitively
@@ -857,29 +769,6 @@ export default function ActivationObjectives() {
       }).filter(Boolean) as StageMapping[];
       if (mappings.length > 0) out.stageMappings = mappings;
     }
-
-    // If AI gave mappings but no extracted values, infer values from mapping keys
-    if (!out.extractedEnumValues && out.stageMappings && out.stageMappings.length > 0) {
-      const stageList = out.stages || form.stages;
-      const totalStages = stageList.length || 1;
-      const seen = new Set<string>();
-      out.extractedEnumValues = out.stageMappings
-        .map(sm => {
-          const key = sm.extractedValue.trim().toLowerCase();
-          if (seen.has(key)) return null;
-          seen.add(key);
-          const stageOrder = stageList.find(s => s.id === sm.stageId)?.order ?? 0;
-          let color: EnumColor = "GRAY";
-          if (stageOrder === totalStages) color = "GREEN";
-          else if (stageOrder >= Math.ceil(totalStages / 2)) color = "YELLOW";
-          else if (stageOrder > 0) color = "RED";
-          return { label: sm.extractedValue.trim(), color, promptHint: "" };
-        })
-        .filter(Boolean) as EnumValue[];
-    }
-
-    const promptGuidance = get("Prompt Guidance");
-    if (promptGuidance !== null) out.promptGuidance = promptGuidance;
 
     return out;
   }
@@ -1324,7 +1213,6 @@ export default function ActivationObjectives() {
           updateStage={updateStage}
           removeStage={removeStage}
           moveStage={moveStage}
-          setNonStage={setNonStage}
           toggleThresholdStage={toggleThresholdStage}
           updateThreshold={updateThreshold}
           addDefaultBand={addDefaultBand}
@@ -1332,12 +1220,6 @@ export default function ActivationObjectives() {
           addInteractionConfig={addInteractionConfig}
           updateInteractionConfig={updateInteractionConfig}
           removeInteractionConfig={removeInteractionConfig}
-          addExtractedValue={addExtractedValue}
-          removeExtractedValue={removeExtractedValue}
-          setExtractedValueColor={setExtractedValueColor}
-          setExtractedValueLabel={setExtractedValueLabel}
-          setExtractedValueHint={setExtractedValueHint}
-          moveExtractedValue={moveExtractedValue}
           setMapping={setMapping}
           onCancel={cancelEdit}
           onSave={saveForm}
@@ -1433,13 +1315,13 @@ function ObjectiveCard({
           <div className="mt-4 pt-4 border-t space-y-3">
             <StagesPreview stages={obj.stages || []} achievedStageId={obj.achievedStageId} />
             <ThresholdsPreview thresholds={obj.thresholds || []} stages={obj.stages || []} interactions={interactions} />
-            {(obj.extractedEnumValues || []).length > 0 && (
+            {obj.observationName && (
               <div className="text-sm">
                 <Label className="text-xs text-muted-foreground uppercase tracking-wider">
-                  Observation{obj.observationName ? `: ${obj.observationName}` : ""}
+                  Linked observation: {obj.observationName}
                 </Label>
                 <div className="mt-2 text-xs text-muted-foreground">
-                  {obj.extractedEnumValues.length} value{obj.extractedEnumValues.length !== 1 ? "s" : ""} · {(obj.stageMappings || []).filter(m => m.stageId).length} mapped to stages
+                  {(obj.stageMappings || []).filter(m => m.stageId).length} value{(obj.stageMappings || []).filter(m => m.stageId).length !== 1 ? "s" : ""} mapped to stages
                 </div>
               </div>
             )}
@@ -1573,7 +1455,6 @@ interface EditorProps {
   updateStage: (idx: number, patch: Partial<Stage>) => void;
   removeStage: (idx: number) => void;
   moveStage: (idx: number, dir: -1 | 1) => void;
-  setNonStage: (label: string, kind: "known_context" | "excluded" | null) => void;
   toggleThresholdStage: (idx: number, stageId: string) => void;
   updateThreshold: (idx: number, patch: Partial<Threshold>) => void;
   addDefaultBand: () => void;
@@ -1581,12 +1462,6 @@ interface EditorProps {
   addInteractionConfig: (interactionId: number) => void;
   updateInteractionConfig: (idx: number, patch: Partial<ObjectiveInteractionConfig>) => void;
   removeInteractionConfig: (idx: number) => void;
-  addExtractedValue: (label: string, color?: EnumColor) => void;
-  removeExtractedValue: (label: string) => void;
-  setExtractedValueColor: (label: string, color: EnumColor) => void;
-  setExtractedValueLabel: (oldLabel: string, newLabel: string) => void;
-  setExtractedValueHint: (label: string, hint: string) => void;
-  moveExtractedValue: (label: string, dir: "up" | "down") => void;
   setMapping: (extractedValue: string, stageId: string) => void;
   onCancel: () => void;
   onSave: () => void;
@@ -1676,6 +1551,24 @@ function Section({
 
 function ObjectiveEditor(p: EditorProps) {
   const [sectionsOpen, setSectionsOpen] = useState<Record<SectionId, boolean>>(loadSectionsState);
+
+  // Derive the linked Observation's enum values once. These drive the
+  // stage-mapping chips and the read-only previews. Empty array when no
+  // observation is linked or the picked observation isn't enum-typed.
+  const linkedObservation = useMemo(
+    () => p.observationTopics.find(o => o.name === p.form.observationName) || null,
+    [p.observationTopics, p.form.observationName]
+  );
+  const linkedObservationValues = useMemo<EnumValue[]>(() => {
+    if (!linkedObservation || linkedObservation.valueType !== "enum") return [];
+    if (!Array.isArray(linkedObservation.value)) return [];
+    return (linkedObservation.value as EnumValue[]).map(v => ({
+      label: v.label,
+      color: v.color,
+      promptHint: v.promptHint || "",
+    }));
+  }, [linkedObservation]);
+
   useEffect(() => {
     try { window.localStorage.setItem(SECTION_STORAGE_KEY, JSON.stringify(sectionsOpen)); } catch {}
   }, [sectionsOpen]);
@@ -1818,20 +1711,25 @@ function ObjectiveEditor(p: EditorProps) {
       <Section
         id="observation"
         title={<><ClipboardCheck className="h-4 w-4 text-primary" /> Observation</>}
-        subtitle="One observation per objective. Define the value set the model is allowed to extract, color-code each value by its sentiment, and assign each to a progress stage below."
+        subtitle="Link this objective to a standalone Observation. The Observation owns the value set, sentiment colors, and prompt hints — edit those on the Observations page. Stages below are assigned to each linked value."
         open={sectionsOpen.observation}
         onToggle={() => toggleSection("observation")}
       >
-        <ObservationEditor
+        <ObservationPicker
           observationName={p.form.observationName}
-          extractedEnumValues={p.form.extractedEnumValues}
-          onNameChange={(v) => p.updateForm({ observationName: v })}
-          addExtracted={p.addExtractedValue}
-          removeExtracted={p.removeExtractedValue}
-          setColor={p.setExtractedValueColor}
-          setLabel={p.setExtractedValueLabel}
-          setHint={p.setExtractedValueHint}
-          move={p.moveExtractedValue}
+          observationTopics={p.observationTopics}
+          onNameChange={(v) => {
+            // When the linked observation changes, clear stage mappings that no
+            // longer correspond to a value in the newly-picked observation.
+            const next = p.observationTopics.find(o => o.name === v);
+            const valid = next && next.valueType === "enum" && Array.isArray(next.value)
+              ? new Set((next.value as { label: string }[]).map(x => x.label))
+              : null;
+            const cleaned = valid
+              ? p.form.stageMappings.filter(m => valid.has(m.extractedValue))
+              : p.form.stageMappings;
+            p.updateForm({ observationName: v, stageMappings: cleaned });
+          }}
         />
       </Section>
 
@@ -1883,26 +1781,17 @@ function ObjectiveEditor(p: EditorProps) {
                 <div className="ml-12 text-[11px] text-muted-foreground italic">
                   Patient remains in the denominator but no progress can be assigned. Triggers re-contact or call quality review.
                 </div>
-                {p.form.extractedEnumValues.length > 0 && (
+                {linkedObservationValues.length > 0 && (
                   <div className="ml-12 flex items-center gap-2 flex-wrap">
                     <Label className="text-[10px] uppercase tracking-wider text-muted-foreground shrink-0">Observation values</Label>
-                    {p.form.extractedEnumValues.map(v => {
+                    {linkedObservationValues.map(v => {
                       const mapping = p.form.stageMappings.find(m => m.extractedValue === v.label);
-                      const isExcluded = p.form.excludedExtractedValues.includes(v.label);
-                      const isKnownCtx = p.form.knownContextExtractedValues.includes(v.label);
                       const onThisStage = mapping?.stageId === u.id;
                       const onOtherStage = !!mapping?.stageId && mapping.stageId !== u.id;
                       const otherStageName = onOtherStage
                         ? p.form.stages.find(st => st.id === mapping?.stageId)?.displayName
                         : null;
                       const c = COLOR_MAP[v.color] || COLOR_MAP.GRAY;
-                      if (isExcluded || isKnownCtx) {
-                        return (
-                          <span key={v.label} className="text-[11px] font-mono px-2 py-0.5 rounded-md border border-dashed text-muted-foreground bg-background opacity-60" title={isExcluded ? "Excluded — not assignable to any stage" : "Known Context — captured but not used for staging"}>
-                            {v.label}
-                          </span>
-                        );
-                      }
                       return (
                         <button key={v.label} type="button"
                           onClick={() => p.setMapping(v.label, onThisStage ? "" : u.id)}
@@ -1982,26 +1871,17 @@ function ObjectiveEditor(p: EditorProps) {
                       <Trash2 className="h-3.5 w-3.5 text-destructive" />
                     </Button>
                   </div>
-                  {p.form.extractedEnumValues.length > 0 && (
+                  {linkedObservationValues.length > 0 && (
                     <div className="ml-12 flex items-center gap-2 flex-wrap">
                       <Label className="text-[10px] uppercase tracking-wider text-muted-foreground shrink-0">Observation values</Label>
-                      {p.form.extractedEnumValues.map(v => {
+                      {linkedObservationValues.map(v => {
                         const mapping = p.form.stageMappings.find(m => m.extractedValue === v.label);
-                        const isExcluded = p.form.excludedExtractedValues.includes(v.label);
-                        const isKnownCtx = p.form.knownContextExtractedValues.includes(v.label);
                         const onThisStage = mapping?.stageId === s.id;
                         const onOtherStage = !!mapping?.stageId && mapping.stageId !== s.id;
                         const otherStageName = onOtherStage
                           ? p.form.stages.find(st => st.id === mapping?.stageId)?.displayName
                           : null;
                         const c = COLOR_MAP[v.color] || COLOR_MAP.GRAY;
-                        if (isExcluded || isKnownCtx) {
-                          return (
-                            <span key={v.label} className="text-[11px] font-mono px-2 py-0.5 rounded-md border border-dashed text-muted-foreground bg-background opacity-60" title={isExcluded ? "Excluded — not assignable to any stage" : "Known Context — captured but not used for staging"}>
-                              {v.label}
-                            </span>
-                          );
-                        }
                         return (
                           <button
                             key={v.label}
@@ -2028,68 +1908,6 @@ function ObjectiveEditor(p: EditorProps) {
               );
             })}
           </div>
-
-          {/* Non-stage value bins — Known Context (capture only) and Excluded (drop entirely) */}
-          {(["known_context", "excluded"] as const).map(kind => {
-            const isKnownCtx = kind === "known_context";
-            const title = isKnownCtx ? "Known Context" : "Excluded";
-            const subtitle = isKnownCtx
-              ? "Captured for downstream context but not used for stage progression."
-              : "Not a stage — patient does not enter the denominator at all.";
-            const testIdSuffix = isKnownCtx ? "known-context" : "excluded";
-            return (
-              <div key={kind} className="rounded-md border-2 border-dashed border-muted-foreground/40 bg-muted/20 p-2 flex flex-col gap-2" data-testid={`row-bin-${testIdSuffix}`}>
-                <div className="flex items-center gap-2">
-                  <div className="w-12 shrink-0" />
-                  <Badge variant="outline" className="border-dashed text-muted-foreground">{title}</Badge>
-                  <span className="text-xs text-muted-foreground">{subtitle}</span>
-                </div>
-                {p.form.extractedEnumValues.length > 0 && (
-                  <div className="ml-12 flex items-center gap-2 flex-wrap">
-                    <Label className="text-[10px] uppercase tracking-wider text-muted-foreground shrink-0">Observation values</Label>
-                    {p.form.extractedEnumValues.map(v => {
-                      const inThisBin = isKnownCtx
-                        ? p.form.knownContextExtractedValues.includes(v.label)
-                        : p.form.excludedExtractedValues.includes(v.label);
-                      const inOtherBin = isKnownCtx
-                        ? p.form.excludedExtractedValues.includes(v.label)
-                        : p.form.knownContextExtractedValues.includes(v.label);
-                      const mapping = p.form.stageMappings.find(m => m.extractedValue === v.label);
-                      const onAStage = !!mapping?.stageId;
-                      const stageName = onAStage ? p.form.stages.find(st => st.id === mapping?.stageId)?.displayName : null;
-                      const otherBinName = isKnownCtx ? "Excluded" : "Known Context";
-                      const tooltip = inThisBin
-                        ? `Click to remove from ${title}`
-                        : inOtherBin
-                          ? `Currently in ${otherBinName}. Click to move to ${title}.`
-                          : onAStage
-                            ? `Currently mapped to "${stageName}". Click to mark ${title} (clears stage mapping).`
-                            : `Click to mark ${title}`;
-                      return (
-                        <button
-                          key={v.label}
-                          type="button"
-                          onClick={() => p.setNonStage(v.label, inThisBin ? null : kind)}
-                          title={tooltip}
-                          className={
-                            "text-[11px] font-mono px-2 py-0.5 rounded-md border transition-colors " +
-                            (inThisBin
-                              ? "bg-foreground text-background border-foreground"
-                              : (inOtherBin || onAStage)
-                                ? "bg-background text-muted-foreground border-dashed border-muted-foreground/40 opacity-60 hover:opacity-100"
-                                : "bg-background text-muted-foreground border-muted-foreground/40 hover:bg-muted")
-                          }
-                          data-testid={`chip-${testIdSuffix}-${v.label}`}
-                        >
-                          {v.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
 
           <div className="pt-2 border-t flex items-center gap-2">
             <Label className="text-sm">Objective achieved when stage =</Label>
@@ -2304,22 +2122,15 @@ function ObjectiveEditor(p: EditorProps) {
           })}
       </Section>
 
-      {/* Optional general prompt guidance */}
+      {/* Always-extract observation topics */}
       <Section
         id="guidance"
-        title="Objective-level prompt guidance (optional)"
-        subtitle="Extra context across all interactions, plus always-extract observation topics."
+        title="Always-extract observation topics (objective fallback)"
+        subtitle="Topics extracted on every call for this objective, even when no interaction matches."
         open={sectionsOpen.guidance}
         onToggle={() => toggleSection("guidance")}
       >
           <div className="space-y-2">
-            <Label className="text-sm font-semibold">Objective-level prompt guidance (optional)</Label>
-            <p className="text-xs text-muted-foreground">Extra context that applies across all interactions — e.g. how to interpret ambiguous patient statements about appointment status.</p>
-            <Textarea value={p.form.promptGuidance} onChange={e => p.updateForm({ promptGuidance: e.target.value })}
-              rows={3} placeholder="If the patient mentions 'I have an appointment' without a date, infer 'scheduled' unless they say it already occurred."
-              data-testid="textarea-objective-guidance" />
-          </div>
-          <div className="space-y-2 pt-2 border-t">
             <div className="flex items-center justify-between">
               <Label className="text-sm font-semibold">Always-extract observation topics (objective fallback)</Label>
               {(p.form.observationTopicIds || []).length > 0 && (
@@ -2547,127 +2358,85 @@ function InteractionConfigEditor({
 }
 
 // ============================================================
-// Observation editor (objective-level extracted enum + stage mapping)
+// Observation picker — link the objective to a standalone Observation.
+// The picked Observation owns the enum value set + per-value prompt hints +
+// observation-level prompt guidance. This editor is a read-only preview.
+// To edit the values themselves, the user goes to the Observations page.
 // ============================================================
 
-function ObservationEditor({
-  observationName, extractedEnumValues,
-  onNameChange, addExtracted, removeExtracted, setColor, setLabel, setHint, move,
+function ObservationPicker({
+  observationName, observationTopics, onNameChange,
 }: {
   observationName: string;
-  extractedEnumValues: EnumValue[];
+  observationTopics: ObservationTopic[];
   onNameChange: (v: string) => void;
-  addExtracted: (label: string, color?: EnumColor) => void;
-  removeExtracted: (label: string) => void;
-  setColor: (label: string, color: EnumColor) => void;
-  setLabel: (oldLabel: string, newLabel: string) => void;
-  setHint: (label: string, hint: string) => void;
-  move: (label: string, dir: "up" | "down") => void;
 }) {
-  const [newLabel, setNewLabel] = useState("");
-  const [newColor, setNewColor] = useState<EnumColor>("GRAY");
-
-  const submitNew = () => {
-    if (!newLabel.trim()) return;
-    addExtracted(newLabel, newColor);
-    setNewLabel("");
-    setNewColor("GRAY");
-  };
+  const NONE_VALUE = "__none__";
+  const linked = observationTopics.find(o => o.name === observationName) || null;
+  const enumValues: EnumValue[] = (linked && linked.valueType === "enum" && Array.isArray(linked.value))
+    ? linked.value.map(v => ({ label: v.label, color: v.color, promptHint: v.promptHint || "" }))
+    : [];
+  const guidance = (linked?.promptGuidance || "").trim();
 
   return (
     <div className="space-y-4" data-testid="card-observation">
-        <div>
-          <Label className="text-xs uppercase tracking-wider text-muted-foreground">Observation name (optional)</Label>
-          <Input value={observationName}
-            onChange={e => onNameChange(e.target.value)}
-            placeholder="e.g. PCP follow-up status"
-            className="h-9 text-sm mt-1 max-w-md"
-            data-testid="input-observation-name" />
-        </div>
+      <div>
+        <Label className="text-xs uppercase tracking-wider text-muted-foreground">Linked observation</Label>
+        <Select
+          value={observationName || NONE_VALUE}
+          onValueChange={(v) => onNameChange(v === NONE_VALUE ? "" : v)}
+        >
+          <SelectTrigger className="h-9 text-sm mt-1 max-w-md" data-testid="select-observation-name">
+            <SelectValue placeholder="Pick an observation..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NONE_VALUE}>— None (no linked observation) —</SelectItem>
+            {observationTopics.filter(o => o.isActive).map(o => (
+              <SelectItem key={o.id} value={o.name}>
+                {o.displayName} <span className="text-muted-foreground ml-2">({o.name})</span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {observationName && !linked && (
+          <p className="text-[11px] text-amber-600 mt-1 flex items-center gap-1">
+            <AlertCircle className="h-3 w-3" />
+            Linked to "{observationName}" which is not in this pathway's observations.
+          </p>
+        )}
+        <p className="text-[11px] text-muted-foreground mt-1">
+          Observations are defined on the <Link href="/observations" className="text-primary underline">Observations page</Link>.
+          The values, sentiment colors, and prompt hints below are owned by the observation — to change them, edit the observation itself.
+        </p>
+      </div>
 
-        <div className="space-y-3">
-          <Label className="text-sm font-semibold">Enum Values</Label>
+      {linked && (
+        <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+          <div className="flex items-center gap-2 flex-wrap text-xs">
+            <Badge variant="outline" className="text-[10px]">{linked.valueType || "enum"}</Badge>
+            {linked.domain && <Badge variant="outline" className="text-[10px]">{linked.domain}</Badge>}
+            {linked.description && (
+              <span className="text-muted-foreground">{linked.description}</span>
+            )}
+          </div>
 
-          {extractedEnumValues.length === 0 ? (
-            <div className="text-xs text-muted-foreground italic">No extracted values yet.</div>
+          {enumValues.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic">
+              This observation has no enum values defined yet. Add some on the Observations page so they can be mapped to stages.
+            </p>
           ) : (
-            <div className="space-y-2">
-              {extractedEnumValues.map((v, i) => {
+            <div className="space-y-1.5">
+              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Values & prompt hints (read-only)</Label>
+              {enumValues.map(v => {
                 const c = COLOR_MAP[v.color] || COLOR_MAP.GRAY;
                 return (
-                  <div key={`${v.label}-${i}`} className="space-y-1" data-testid={`row-observation-value-${v.label}`}>
-                    <div className="flex items-center gap-1.5 group">
-                      <div className="flex flex-col">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          type="button"
-                          onClick={() => move(v.label, "up")}
-                          disabled={i === 0}
-                          className="h-5 w-5 p-0 opacity-40 hover:opacity-100 disabled:opacity-10"
-                          data-testid={`button-observation-up-${v.label}`}
-                        >
-                          <ArrowUp className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          type="button"
-                          onClick={() => move(v.label, "down")}
-                          disabled={i === extractedEnumValues.length - 1}
-                          className="h-5 w-5 p-0 opacity-40 hover:opacity-100 disabled:opacity-10"
-                          data-testid={`button-observation-down-${v.label}`}
-                        >
-                          <ArrowDown className="h-3 w-3" />
-                        </Button>
-                      </div>
-                      <span className={`w-3 h-3 rounded-full shrink-0 border ${c.bg} ${c.border}`} />
-                      <Input
-                        defaultValue={v.label}
-                        onBlur={e => {
-                          const next = e.target.value.trim();
-                          if (next && next !== v.label) setLabel(v.label, next);
-                        }}
-                        className="text-sm h-8 flex-grow"
-                        data-testid={`input-observation-label-${v.label}`}
-                      />
-                      <Select value={v.color} onValueChange={col => setColor(v.label, col as EnumColor)}>
-                        <SelectTrigger className="h-8 w-40 text-xs" data-testid={`select-observation-color-${v.label}`}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(COLOR_MAP).map(([key, val]) => (
-                            <SelectItem key={key} value={key}>
-                              <span className="inline-flex items-center gap-2">
-                                <span className={`inline-block w-3 h-3 rounded-full border ${val.bg} ${val.border}`} />
-                                <span className="text-xs">{val.label}</span>
-                              </span>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        type="button"
-                        onClick={() => removeExtracted(v.label)}
-                        className="h-7 w-7 p-0 opacity-50 hover:opacity-100"
-                        data-testid={`button-observation-removevalue-${v.label}`}
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                    <div className="pl-[60px] pr-10">
-                      <Input
-                        defaultValue={v.promptHint || ""}
-                        onBlur={e => {
-                          const next = e.target.value;
-                          if (next !== (v.promptHint || "")) setHint(v.label, next);
-                        }}
-                        placeholder="Optional prompt hint — extra guidance for Gemini when choosing this value"
-                        className="text-xs h-7 bg-muted/30 border-dashed"
-                        data-testid={`input-observation-hint-${v.label}`}
-                      />
+                  <div key={v.label} className="flex items-start gap-2" data-testid={`row-linked-value-${v.label}`}>
+                    <span className={`w-3 h-3 rounded-full shrink-0 border mt-1 ${c.bg} ${c.border}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-mono">{v.label}</div>
+                      {v.promptHint && (
+                        <div className="text-[11px] text-muted-foreground italic">{v.promptHint}</div>
+                      )}
                     </div>
                   </div>
                 );
@@ -2675,41 +2444,14 @@ function ObservationEditor({
             </div>
           )}
 
-          <div className="flex items-end gap-2 pt-2 border-t">
-            <div className="flex-grow space-y-1">
-              <Label className="text-xs text-muted-foreground">Add new value</Label>
-              <Input
-                placeholder="e.g. scheduled, attended, plans_to_schedule"
-                value={newLabel}
-                onChange={e => setNewLabel(e.target.value)}
-                className="text-sm h-9"
-                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); submitNew(); } }}
-                data-testid="input-observation-newvalue"
-              />
+          {guidance && (
+            <div className="pt-2 border-t space-y-1">
+              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Observation prompt guidance (read-only)</Label>
+              <p className="text-xs text-muted-foreground whitespace-pre-wrap">{guidance}</p>
             </div>
-            <div className="w-40 space-y-1">
-              <Label className="text-xs text-muted-foreground">Color</Label>
-              <Select value={newColor} onValueChange={c => setNewColor(c as EnumColor)}>
-                <SelectTrigger className="h-9" data-testid="select-observation-newcolor">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(COLOR_MAP).map(([key, val]) => (
-                    <SelectItem key={key} value={key}>
-                      <span className="inline-flex items-center gap-2">
-                        <span className={`inline-block w-3 h-3 rounded-full border ${val.bg} ${val.border}`} />
-                        <span className="text-xs">{val.label}</span>
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button variant="outline" size="sm" type="button" onClick={submitNew} className="h-9" data-testid="button-observation-addvalue">
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
-          </div>
+          )}
         </div>
+      )}
     </div>
   );
 }

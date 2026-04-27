@@ -33,12 +33,6 @@ function injectSystemStages(obj: ActivationObjective): ActivationObjective {
     else stages.unshift({ ...SYSTEM_STAGE_NOT_DISCUSSED });
   }
 
-  // Ensure exactly one canonical "Not discussed" enum value; drop any
-  // case/whitespace variants so the model sees one entry.
-  const enumValues: ObservationEnumValue[] = (Array.isArray(obj.extractedEnumValues) ? obj.extractedEnumValues : [])
-    .filter((v) => v && !isNotDiscussedLabel(v.label));
-  enumValues.push({ label: SYSTEM_STAGE_NOT_DISCUSSED_VALUE, color: "GRAY", promptHint: "" });
-
   // Ensure stageMappings always routes any "not discussed" variant to the
   // system stage, overriding any stale legacy mapping. Strip ALL variants
   // first, then push canonical — so nothing can shadow it on lookup.
@@ -49,7 +43,7 @@ function injectSystemStages(obj: ActivationObjective): ActivationObjective {
     stageId: SYSTEM_STAGE_NOT_DISCUSSED_ID,
   });
 
-  return { ...obj, stages, extractedEnumValues: enumValues, stageMappings: mappings };
+  return { ...obj, stages, stageMappings: mappings };
 }
 
 // Strip system-managed stage + mapping from write payloads so the canonical
@@ -64,11 +58,6 @@ function stripSystemStages<T extends Partial<InsertActivationObjective>>(data: T
   if (Array.isArray(out.stageMappings)) {
     out.stageMappings = out.stageMappings.filter(
       (m: { extractedValue: string }) => !isNotDiscussedLabel(m.extractedValue),
-    );
-  }
-  if (Array.isArray(out.extractedEnumValues)) {
-    out.extractedEnumValues = out.extractedEnumValues.filter(
-      (v: ObservationEnumValue) => v && !isNotDiscussedLabel(v.label),
     );
   }
   return out as T;
@@ -572,13 +561,11 @@ function rowToActivationObjective(row: any): ActivationObjective {
   let stages: ActivationObjectiveStage[] = [];
   let thresholds: ActivationObjectiveThreshold[] = [];
   let interactionsRaw: any[] = [];
-  let rawExtracted: any[] = [];
   let stageMappings: any[] = [];
   let observationTopicIds: number[] = [];
   try { if (row.stages) stages = JSON.parse(row.stages); } catch {}
   try { if (row.thresholds) thresholds = JSON.parse(row.thresholds); } catch {}
   try { if (row.interactions) interactionsRaw = JSON.parse(row.interactions); } catch {}
-  try { if (row.extracted_enum_values) rawExtracted = JSON.parse(row.extracted_enum_values); } catch {}
   try { if (row.stage_mappings) stageMappings = JSON.parse(row.stage_mappings); } catch {}
   try {
     if (row.observation_topic_ids) {
@@ -587,38 +574,17 @@ function rowToActivationObjective(row: any): ActivationObjective {
     }
   } catch {}
 
-  // Backward-compat: legacy rows stored extractedEnumValues + stageMappings inside each
-  // interaction config. Hoist from the first interaction that has them if the new
-  // objective-level columns are empty.
-  if (rawExtracted.length === 0 || stageMappings.length === 0) {
+  // Backward-compat: legacy rows stored stageMappings inside each interaction
+  // config. Hoist from the first interaction that has them if the new
+  // objective-level column is empty.
+  if (stageMappings.length === 0) {
     for (const cfg of interactionsRaw) {
-      if (rawExtracted.length === 0 && Array.isArray(cfg?.extractedEnumValues) && cfg.extractedEnumValues.length > 0) {
-        rawExtracted = cfg.extractedEnumValues;
-      }
-      if (stageMappings.length === 0 && Array.isArray(cfg?.stageMappings) && cfg.stageMappings.length > 0) {
+      if (Array.isArray(cfg?.stageMappings) && cfg.stageMappings.length > 0) {
         stageMappings = cfg.stageMappings;
+        break;
       }
-      if (rawExtracted.length > 0 && stageMappings.length > 0) break;
     }
   }
-
-  // Normalize: legacy values were plain strings; new shape is {label, color, promptHint}.
-  const VALID_COLORS = new Set(["GREEN", "YELLOW", "RED", "BLUE", "GRAY"]);
-  type EnumColor = "GREEN" | "YELLOW" | "RED" | "BLUE" | "GRAY";
-  const extractedEnumValues: { label: string; color: EnumColor; promptHint: string }[] = rawExtracted
-    .map((v: any) => {
-      if (typeof v === "string") return { label: v, color: "GRAY" as EnumColor, promptHint: "" };
-      if (v && typeof v === "object" && typeof v.label === "string") {
-        const color = typeof v.color === "string" && VALID_COLORS.has(v.color) ? v.color : "GRAY";
-        return {
-          label: v.label,
-          color: color as EnumColor,
-          promptHint: typeof v.promptHint === "string" ? v.promptHint : "",
-        };
-      }
-      return null;
-    })
-    .filter((v): v is { label: string; color: EnumColor; promptHint: string } => v !== null);
 
   // Strip legacy fields from per-interaction configs so the typed shape matches.
   const interactions: ActivationObjectiveInteractionConfig[] = interactionsRaw.map((c: any) => ({
@@ -647,12 +613,10 @@ function rowToActivationObjective(row: any): ActivationObjective {
     achievedStageId: row.achieved_stage_id || "",
     thresholds,
     observationName: row.observation_name || "",
-    extractedEnumValues,
     stageMappings,
     interactions,
     isActive: row.is_active,
     displayOrder: row.display_order,
-    promptGuidance: row.prompt_guidance || "",
     observationTopicIds,
   };
 }
@@ -1573,12 +1537,12 @@ export class BigQueryStorage implements IStorage {
       achieved_stage_id: data.achievedStageId || "",
       thresholds: JSON.stringify(data.thresholds || []),
       observation_name: data.observationName || "",
-      extracted_enum_values: JSON.stringify(data.extractedEnumValues || []),
+      extracted_enum_values: "[]",
       stage_mappings: JSON.stringify(data.stageMappings || []),
       interactions: JSON.stringify(data.interactions || []),
       is_active: data.isActive !== false,
       display_order: data.displayOrder ?? 0,
-      prompt_guidance: data.promptGuidance || "",
+      prompt_guidance: "",
       observation_topic_ids: JSON.stringify(data.observationTopicIds || []),
       client_pathway_id: clientPathwayId,
     };
@@ -1612,12 +1576,10 @@ export class BigQueryStorage implements IStorage {
     if (data.achievedStageId !== undefined) { setClauses.push("achieved_stage_id = @achievedStageId"); params.achievedStageId = data.achievedStageId; }
     if (data.thresholds !== undefined) { setClauses.push("thresholds = @thresholds"); params.thresholds = JSON.stringify(data.thresholds); }
     if (data.observationName !== undefined) { setClauses.push("observation_name = @observationName"); params.observationName = data.observationName; }
-    if (data.extractedEnumValues !== undefined) { setClauses.push("extracted_enum_values = @extractedEnumValues"); params.extractedEnumValues = JSON.stringify(data.extractedEnumValues); }
     if (data.stageMappings !== undefined) { setClauses.push("stage_mappings = @stageMappings"); params.stageMappings = JSON.stringify(data.stageMappings); }
     if (data.interactions !== undefined) { setClauses.push("interactions = @interactions"); params.interactions = JSON.stringify(data.interactions); }
     if (data.isActive !== undefined) { setClauses.push("is_active = @isActive"); params.isActive = data.isActive; }
     if (data.displayOrder !== undefined) { setClauses.push("display_order = @displayOrder"); params.displayOrder = data.displayOrder; }
-    if (data.promptGuidance !== undefined) { setClauses.push("prompt_guidance = @promptGuidance"); params.promptGuidance = data.promptGuidance; }
     if (data.observationTopicIds !== undefined) { setClauses.push("observation_topic_ids = @observationTopicIds"); params.observationTopicIds = JSON.stringify(data.observationTopicIds || []); }
     if (setClauses.length === 0) return existing;
 

@@ -81,13 +81,9 @@ export interface ObjectiveForPdf {
   achievedStageId: string;
   thresholds: Threshold[];
   observationName: string;
-  extractedEnumValues: EnumValue[];
   stageMappings: StageMapping[];
-  knownContextExtractedValues: string[];
-  excludedExtractedValues: string[];
   interactions: ObjectiveInteractionConfig[];
   isActive: boolean;
-  promptGuidance: string;
   observationTopicIds: number[];
 }
 
@@ -254,32 +250,15 @@ export function exportObjectivesPdf(
       y += 14;
     }
 
-    // Non-stage value bins
-    const knownCtx = obj.knownContextExtractedValues ?? [];
-    const excluded = obj.excludedExtractedValues ?? [];
-    if (knownCtx.length || excluded.length) {
-      y = ensureSpace(doc, y, 40);
-      y = sectionHeading(doc, "Non-stage values", y);
-      if (knownCtx.length) {
-        y = chipList(doc, "Known Context  (captured but not used for staging)", knownCtx, y + 4, { dashed: true });
-      }
-      if (excluded.length) {
-        y = chipList(doc, "Excluded  (dropped — not in denominator)", excluded, y + 4, { dashed: true });
-      }
-    }
-
     // Observation
-    if (obj.observationName || obj.extractedEnumValues.length || obj.observationTopicIds.length) {
+    if (obj.observationName || obj.observationTopicIds.length) {
       y = ensureSpace(doc, y, 50);
       y = sectionHeading(doc, "Observation", y);
       const topicNames = obj.observationTopicIds.map(id => topicById.get(id)?.displayName || `#${id}`);
       y = keyValue(doc, [
-        ["Observation name", obj.observationName || "—"],
+        ["Linked observation", obj.observationName || "—"],
         ["Topics", topicNames.length ? topicNames.join(", ") : "—"],
       ], y);
-      if (obj.extractedEnumValues.length) {
-        y = chipList(doc, "All extracted values", obj.extractedEnumValues.map(v => v.label), y);
-      }
     }
 
     // Thresholds
@@ -348,12 +327,6 @@ export function exportObjectivesPdf(
       }
     }
 
-    // Objective-level prompt guidance
-    if (obj.promptGuidance?.trim()) {
-      y = ensureSpace(doc, y, 40);
-      y = sectionHeading(doc, "Prompt guidance", y);
-      y = paragraph(doc, obj.promptGuidance, y);
-    }
   }
 
   drawFooter(doc);

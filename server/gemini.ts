@@ -119,6 +119,7 @@ export interface ActivationObjectivesContext {
 
 interface ResolvedObjectiveTask {
   objective: ActivationObjective;
+  linkedObservation: Observation | null;
   interaction: ActivationInteraction | null;
   config: ActivationObjectiveInteractionConfig | null;
   anchorDate: string | null;
@@ -167,8 +168,11 @@ export function resolveObjectiveTasks(ctx: ActivationObjectivesContext | undefin
   if (!ctx || !ctx.objectives || ctx.objectives.length === 0) return [];
   const tasks: ResolvedObjectiveTask[] = [];
   const obsById = new Map<number, Observation>();
+  const obsByName = new Map<string, Observation>();
   for (const o of ctx.observations || []) {
-    if (o && o.isActive) obsById.set(o.id, o);
+    if (!o || !o.isActive) continue;
+    obsById.set(o.id, o);
+    if (o.name) obsByName.set(o.name, o);
   }
   for (const obj of ctx.objectives) {
     if (!obj.isActive) continue;
@@ -191,14 +195,17 @@ export function resolveObjectiveTasks(ctx: ActivationObjectivesContext | undefin
       .map((id) => obsById.get(id))
       .filter((o): o is Observation => !!o);
 
-    // Skip the objective only when there's literally nothing to extract:
-    // no enum allowed values AND no observation topics.
-    const allowed = (obj.extractedEnumValues || [])
-      .map((v) => v?.label || "")
-      .filter((v) => v && v.trim());
-    if (allowed.length === 0 && observationTopics.length === 0) continue;
+    // Linked observation drives the extracted_value choice. Look it up by name.
+    const linkedObservation = (obj.observationName && obsByName.get(obj.observationName)) || null;
+    const linkedAllowed = linkedObservation && linkedObservation.valueType === "enum" && Array.isArray(linkedObservation.value)
+      ? (linkedObservation.value as EnumValue[]).map((v) => v?.label || "").filter((v) => v && v.trim())
+      : [];
 
-    tasks.push({ objective: obj, interaction, config, anchorDate, callDayOffset, observationTopics });
+    // Skip the objective only when there's literally nothing to extract:
+    // no linked-observation values AND no observation topics.
+    if (linkedAllowed.length === 0 && observationTopics.length === 0) continue;
+
+    tasks.push({ objective: obj, linkedObservation, interaction, config, anchorDate, callDayOffset, observationTopics });
   }
   return tasks;
 }
@@ -206,15 +213,20 @@ export function resolveObjectiveTasks(ctx: ActivationObjectivesContext | undefin
 function buildActivationObjectivesPromptBlock(tasks: ResolvedObjectiveTask[]): string {
   if (tasks.length === 0) return "";
   const lines = tasks.map((t) => {
-    const valuesWithHints = (t.objective.extractedEnumValues || []).filter(v => v?.label && v.label.trim());
-    const allowed = valuesWithHints.map(v => `"${v.label}"`).join(", ");
-    const hintLines = valuesWithHints
+    // Pull enum values + per-value hints + top-level guidance from the LINKED
+    // observation (single source of truth). Per-interaction promptGuidance
+    // (override) still wins if set on the matched interaction config.
+    const linkedValues = (t.linkedObservation && t.linkedObservation.valueType === "enum" && Array.isArray(t.linkedObservation.value))
+      ? (t.linkedObservation.value as EnumValue[]).filter(v => v?.label && v.label.trim())
+      : [];
+    const allowed = linkedValues.map(v => `"${v.label}"`).join(", ");
+    const hintLines = linkedValues
       .filter(v => (v.promptHint || "").trim())
       .map(v => `      - "${v.label}": ${v.promptHint!.trim()}`);
     const hintsBlock = hintLines.length > 0
       ? `\n    Value hints:\n${hintLines.join("\n")}`
       : "";
-    const guidance = ((t.config?.promptGuidance) || t.objective.promptGuidance || "").trim();
+    const guidance = ((t.config?.promptGuidance) || (t.linkedObservation?.promptGuidance) || "").trim();
     const guidanceLine = guidance ? ` | Guidance: ${guidance}` : "";
     const dayPart = t.anchorDate && t.callDayOffset !== null
       ? `Patient is on day ${t.callDayOffset} of a ${t.objective.windowDays}-day window from ${t.objective.anchorContextKey}=${t.anchorDate}.`
@@ -1021,11 +1033,9 @@ export async function aiActivationObjectiveAssistant(
     stages: (o.stages || []).map(s => ({ name: s.name, displayName: s.displayName, description: s.description, order: s.order })),
     achievedStageId: o.achievedStageId,
     observationName: o.observationName,
-    extractedEnumValues: o.extractedEnumValues,
     stageMappings: o.stageMappings,
     observationTopicIds: o.observationTopicIds,
     isActive: o.isActive,
-    promptGuidance: o.promptGuidance,
   }));
 
   const observationsSnapshot = context.observations.map(o => ({
@@ -1034,6 +1044,7 @@ export async function aiActivationObjectiveAssistant(
     displayName: o.displayName,
     valueType: o.valueType,
     value: o.value,
+    promptGuidance: o.promptGuidance,
     isActive: o.isActive,
   }));
 
@@ -1060,17 +1071,15 @@ Activation objectives are program-level goals tied to a patient anchor event (e.
 - anchorEventType (discharge | enrollment | procedure | custom) and anchorContextKey (the date field used to anchor the timeline)
 - windowDays (target completion window from the anchor)
 - stages (ordered progress stages: name, displayName, description, order) and achievedStageId
-- observationName (the patient-facing observation that drives the objective, e.g. "Follow-up status")
-- extractedEnumValues: array of {label, color, promptHint} where color is GREEN/YELLOW/RED/BLUE/GRAY
-- stageMappings: array of {extractedValue, stageId} that maps an extracted value to a stage
-- observationTopicIds: ids of observations from the observations catalogue this objective relies on
-- promptGuidance (extra instructions for Gemini)
+- observationName: the LINKED observation in the catalogue. Its enum values, per-value promptHints, and promptGuidance ARE the objective's value set — the objective does NOT have its own copy.
+- stageMappings: array of {extractedValue, stageId} that maps a linked-observation enum label to a stage
+- observationTopicIds: ids of OTHER observations from the catalogue this objective also extracts on every call
 - isActive
 
 Current activation objectives configured:
 ${JSON.stringify(objectivesSnapshot, null, 2)}
 
-Available observation topics in the catalogue (use these ids if you reference observationTopicIds):
+Available observations in the catalogue (each has its own enum values + per-value promptHints + promptGuidance — point objectives at one of these by name):
 ${JSON.stringify(observationsSnapshot, null, 2)}
 
 Available activation interactions (touchpoints):
@@ -1089,10 +1098,10 @@ ${JSON.stringify(context.currentDraft, null, 2)}` : ""}
 
 Your role:
 1. Suggest new activation objectives relevant to post-discharge/care-transition programs
-2. Improve descriptions, prompt guidance, stage names, and stage mappings on existing objectives
+2. Improve descriptions, stage names, and stage mappings on existing objectives
 3. Recommend better anchor events / window days based on clinical best practice
-4. Suggest extracted enum values + colors for the underlying observation
-5. Flag missing or weak mappings between extracted values and stages
+4. Recommend WHICH observation in the catalogue should drive the objective (set Observation Name to one of the available observations)
+5. Flag missing or weak mappings between the linked observation's enum values and stages
 
 When proposing a new objective OR an enhancement to the current draft, ALWAYS format it as the structured block below — never as JSON, YAML, or a code block. The user has an automated parser that only understands this exact format. Output one block per proposal, English values only:
 **Name:** snake_case_name
@@ -1101,18 +1110,20 @@ When proposing a new objective OR an enhancement to the current draft, ALWAYS fo
 **Anchor Event:** discharge | enrollment | procedure | custom
 **Anchor Context Key:** name_of_date_field
 **Window Days:** 7
-**Observation Name:** Human-readable observation
+**Observation Name:** name_of_observation_from_catalogue
 **Stages:** stage_one | Display One; stage_two | Display Two; stage_three | Display Three
 **Achieved Stage:** stage_three
-**Extracted Values:** Value A (GREEN) | optional per-value hint; Value B (YELLOW); Value C (RED) | another hint
 **Stage Mappings:** Value A -> stage_three; Value B -> stage_two; Value C -> stage_one
-**Prompt Guidance:** Specific guidance for the AI extracting the observation...
 
-Notes on **Extracted Values** format:
-- Separate values with semicolons ";" (NOT commas — labels and hints may contain commas, quotes, or parentheses)
-- Each value is "Label (COLOR)" optionally followed by " | hint text" describing exactly when to choose that value
-- When the user describes WHEN to use a value (e.g. "use Unknown when the patient is vague"), encode that as the per-value hint, not just as global Prompt Guidance
-- ALWAYS include hints when the user has provided per-value descriptions
+Notes on **Observation Name**:
+- Pick a name from the "Available observations in the catalogue" list above. The objective inherits that observation's enum values, per-value promptHints, and promptGuidance.
+- If no existing observation fits, tell the user to create one first in the Observations page — do NOT invent a new name here.
+
+Notes on **Stage Mappings**:
+- The values on the LEFT must match enum value labels from the linked observation exactly (case + spacing)
+- The values on the RIGHT must be one of the stage names defined in **Stages**
+- Separate mappings with semicolons ";"
+- Do NOT propose **Extracted Values** or **Prompt Guidance** for the objective — those live on the linked observation now.
 
 Be concise, practical, and grounded in the user's existing setup. Keep responses short and actionable.`;
 
