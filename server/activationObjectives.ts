@@ -172,7 +172,9 @@ export function computeActivationObjectiveResults(args: {
 
     let currentStage: ActivationObjectiveStage | null = null;
     if (extractedValue) {
-      const mapping = (obj.stageMappings || []).find((m) => m.extractedValue === extractedValue);
+      const norm = (s: string | null | undefined) => (s || "").trim().toLowerCase();
+      const target = norm(extractedValue);
+      const mapping = (obj.stageMappings || []).find((m) => norm(m.extractedValue) === target);
       if (mapping) {
         currentStage = (obj.stages || []).find((s) => s.id === mapping.stageId) || null;
       }

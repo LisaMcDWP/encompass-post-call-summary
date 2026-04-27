@@ -275,7 +275,7 @@ function buildActivationObjectivesGuideline(tasks: ResolvedObjectiveTask[]): str
   const obsLine = obsCount > 0
     ? ` For each task that lists observation topics, also output one entry per topic in that task's observations array — copy topic_name exactly and pick value from that topic's allowed values, or null if not discussed. For each topic also write a 1-2 sentence detail summarizing what was observed (do NOT copy the topic hint), or null if the topic was not discussed.`
     : "";
-  return `\n- activation_objectives: Output EXACTLY ${tasks.length} object(s), one per task in the ACTIVATION OBJECTIVES section. Use the exact objective_name and interaction_key from the task line. extracted_value MUST be one of the allowed values listed for that task, or null. Never substitute or invent values.${obsLine}`;
+  return `\n- activation_objectives: Output EXACTLY ${tasks.length} object(s), one per task in the ACTIVATION OBJECTIVES section. Use the exact objective_name and interaction_key from the task line. extracted_value MUST be one of the allowed values listed for that task, or null. Copy the value verbatim from the allowed list — match the casing, spelling, and spacing exactly. Never substitute or invent values.${obsLine}`;
 }
 
 const COLOR_STYLES: Record<string, string> = {
