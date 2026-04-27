@@ -816,7 +816,15 @@ export async function getCallActivationObjectives(callId: string, targetProjectI
       initializedTables.add(key);
     }
     const client = getOutputBigQueryClient(targetProjectId);
-    const query = `SELECT * FROM \`${client.projectId}.${DATASET_ID}.${CALL_ACTIVATION_OBJECTIVES_TABLE_ID}\` WHERE call_id = @callId ORDER BY objective_id ASC`;
+    const query = `
+      SELECT * EXCEPT(__rn) FROM (
+        SELECT *, ROW_NUMBER() OVER (PARTITION BY objective_id ORDER BY processed_at DESC) AS __rn
+        FROM \`${client.projectId}.${DATASET_ID}.${CALL_ACTIVATION_OBJECTIVES_TABLE_ID}\`
+        WHERE call_id = @callId
+      )
+      WHERE __rn = 1
+      ORDER BY objective_id ASC
+    `;
     const [rows] = await client.query({ query, params: { callId } });
     return (rows || []).map((row: any) => {
       let observations: any[] = [];
