@@ -9,7 +9,8 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, GripVertical, X, Save, Loader2, Info, GripVertical as Grip, ArrowUp, ArrowDown, Sparkles, Send, MessageCircle } from "lucide-react";
+import { Plus, Pencil, Trash2, GripVertical, X, Save, Loader2, Info, GripVertical as Grip, ArrowUp, ArrowDown, Sparkles, Send, MessageCircle, FileDown } from "lucide-react";
+import { exportObservationsPdf } from "@/lib/exportObservationsPdf";
 import { useClientPathway } from "@/contexts/ClientPathwayContext";
 
 interface EnumValue {
@@ -102,7 +103,7 @@ function parseObservationProposal(text: string): typeof emptyForm | null {
 }
 
 export default function Observations() {
-  const { selectedCPId } = useClientPathway();
+  const { selectedCPId, selectedCP } = useClientPathway();
   const [observations, setObservations] = useState<Observation[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -371,6 +372,23 @@ export default function Observations() {
             </p>
           </div>
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (observations.length === 0) {
+                  toast({ title: "Nothing to export", description: "Create at least one observation first.", variant: "destructive" });
+                  return;
+                }
+                const pathwayLabel = selectedCP
+                  ? `${selectedCP.client} — ${selectedCP.pathway}`
+                  : "Pathway";
+                exportObservationsPdf(pathwayLabel, observations as any, generalGuidance);
+              }}
+              data-testid="button-export-pdf"
+              title="Download a PDF of every observation in this pathway"
+            >
+              <FileDown className="h-4 w-4 mr-2" /> Export PDF
+            </Button>
             <Button
               variant="outline"
               onClick={() => setAiOpen(!aiOpen)}
