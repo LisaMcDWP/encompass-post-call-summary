@@ -1961,87 +1961,94 @@ function ObjectiveEditor(p: EditorProps) {
       >
           {(() => {
             const progress = p.form.stages.filter(s => s.order > 0).sort((a, b) => a.order - b.order);
+            if (progress.length === 0) {
+              return <p className="text-xs text-muted-foreground italic">Add at least one progress stage above to configure outcome cells.</p>;
+            }
             return (
-              <div className="border rounded-md overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/40">
-                    <tr className="text-left text-xs text-muted-foreground uppercase tracking-wider">
-                      <th className="px-3 py-2 font-medium">Band</th>
-                      <th className="px-3 py-2 font-medium">Days remaining (min / max)</th>
-                      {progress.map(s => (
-                        <th key={s.id} className="px-3 py-2 font-medium">{s.displayName}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {p.form.thresholds.map((t, i) => {
-                      const timing = bandTimingLabel(t.bandLabel);
-                      const isDefault = t.bandLabel === "default";
-                      const isPostWindow = t.bandLabel === "post_window";
-                      const expectedId = t.expectedInteractionId ?? null;
-                      return (
-                        <tr key={t.bandLabel} className={`border-t ${isDefault ? "bg-primary/5" : ""}`} data-testid={`row-threshold-${t.bandLabel}`}>
-                          <td className="px-3 py-2 align-top">
-                            <div className="flex items-center gap-2">
-                              <div className="font-medium">{t.bandDisplayName || timing.label}</div>
-                              {isDefault && (
-                                <Button size="icon" variant="ghost" className="h-5 w-5"
-                                  onClick={() => p.removeBand(i)}
-                                  data-testid={`button-remove-band-${t.bandLabel}`}>
-                                  <X className="h-3 w-3 text-destructive" />
-                                </Button>
-                              )}
+              <div className="space-y-3">
+                {p.form.thresholds.map((t, i) => {
+                  const timing = bandTimingLabel(t.bandLabel);
+                  const isDefault = t.bandLabel === "default";
+                  const isPostWindow = t.bandLabel === "post_window";
+                  const expectedId = t.expectedInteractionId ?? null;
+                  return (
+                    <div
+                      key={t.bandLabel}
+                      className={`border rounded-md p-3 ${isDefault ? "bg-primary/5" : "bg-card"}`}
+                      data-testid={`row-threshold-${t.bandLabel}`}
+                    >
+                      {/* Band header — name, days range, typically hint */}
+                      <div className="flex items-start justify-between gap-4 flex-wrap">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <div className="font-semibold text-sm">{t.bandDisplayName || timing.label}</div>
+                            <span className="text-xs text-muted-foreground">· {timing.example}</span>
+                            {isDefault && (
+                              <Button size="icon" variant="ghost" className="h-5 w-5"
+                                onClick={() => p.removeBand(i)}
+                                data-testid={`button-remove-band-${t.bandLabel}`}>
+                                <X className="h-3 w-3 text-destructive" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 flex-wrap">
+                          {!isDefault && (
+                            <div className="flex items-center gap-1.5">
+                              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Days remaining</Label>
+                              <Input type="number" placeholder="min" value={t.daysRemainingMin ?? ""}
+                                onChange={e => p.updateThreshold(i, { daysRemainingMin: e.target.value === "" ? null : parseInt(e.target.value) })}
+                                className="w-16 h-7 text-xs" data-testid={`input-threshold-min-${t.bandLabel}`} />
+                              <span className="text-muted-foreground">/</span>
+                              <Input type="number" placeholder="max" value={t.daysRemainingMax ?? ""}
+                                onChange={e => p.updateThreshold(i, { daysRemainingMax: e.target.value === "" ? null : parseInt(e.target.value) })}
+                                className="w-16 h-7 text-xs" data-testid={`input-threshold-max-${t.bandLabel}`} />
+                              <Badge variant="outline" className="text-[10px]">{bandRangeLabel(t)}</Badge>
                             </div>
-                            <div className="text-xs text-muted-foreground">{timing.example}</div>
-                            {!isPostWindow && (
-                              <div className="mt-2">
-                                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Typically</Label>
-                                <Select
-                                  value={expectedId === null ? "__none__" : String(expectedId)}
-                                  onValueChange={(v) => p.updateThreshold(i, { expectedInteractionId: v === "__none__" ? null : parseInt(v) })}
-                                >
-                                  <SelectTrigger className="h-7 text-xs mt-0.5" data-testid={`select-band-expected-interaction-${t.bandLabel}`}>
-                                    <SelectValue placeholder="No hint" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="__none__"><span className="text-muted-foreground italic">No hint</span></SelectItem>
-                                    {p.interactions.filter(x => x.isActive && x.interactionType !== "continuous").map(x => (
-                                      <SelectItem key={x.id} value={String(x.id)}>{x.name}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                                <p className="text-[10px] text-muted-foreground mt-0.5 italic">Display only — does not affect routing.</p>
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 align-top">
-                            {isDefault ? (
-                              <Badge variant="outline" className="text-[11px]">Any days · fallback</Badge>
-                            ) : (
-                              <>
-                                <div className="flex items-center gap-1.5">
-                                  <Input type="number" placeholder="min" value={t.daysRemainingMin ?? ""}
-                                    onChange={e => p.updateThreshold(i, { daysRemainingMin: e.target.value === "" ? null : parseInt(e.target.value) })}
-                                    className="w-16 h-7 text-xs" data-testid={`input-threshold-min-${t.bandLabel}`} />
-                                  <span className="text-muted-foreground">/</span>
-                                  <Input type="number" placeholder="max" value={t.daysRemainingMax ?? ""}
-                                    onChange={e => p.updateThreshold(i, { daysRemainingMax: e.target.value === "" ? null : parseInt(e.target.value) })}
-                                    className="w-16 h-7 text-xs" data-testid={`input-threshold-max-${t.bandLabel}`} />
-                                </div>
-                                <div className="text-[10px] text-muted-foreground mt-1">{bandRangeLabel(t)}</div>
-                              </>
-                            )}
-                          </td>
+                          )}
+                          {isDefault && (
+                            <Badge variant="outline" className="text-[11px]">Any days · fallback</Badge>
+                          )}
+                          {!isPostWindow && (
+                            <div className="flex items-center gap-1.5">
+                              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Typically</Label>
+                              <Select
+                                value={expectedId === null ? "__none__" : String(expectedId)}
+                                onValueChange={(v) => p.updateThreshold(i, { expectedInteractionId: v === "__none__" ? null : parseInt(v) })}
+                              >
+                                <SelectTrigger className="h-7 text-xs w-44" data-testid={`select-band-expected-interaction-${t.bandLabel}`}>
+                                  <SelectValue placeholder="No hint" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none__"><span className="text-muted-foreground italic">No hint</span></SelectItem>
+                                  {p.interactions.filter(x => x.isActive && x.interactionType !== "continuous").map(x => (
+                                    <SelectItem key={x.id} value={String(x.id)}>{x.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Per-stage outcome list — dynamic, one row per stage */}
+                      <div className="mt-3 pt-3 border-t">
+                        <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">If patient is at this stage when called →</Label>
+                        <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
                           {progress.map(s => {
                             const current = getCellOutcome(t, s.id);
                             return (
-                              <td key={s.id} className="px-2 py-2 align-top">
+                              <div key={s.id} className="flex items-center gap-2 text-sm">
+                                <span className="flex-1 min-w-0 truncate text-foreground" title={s.displayName}>
+                                  {s.displayName}
+                                </span>
+                                <span className="text-muted-foreground text-xs shrink-0">→</span>
                                 <Select
                                   value={current}
                                   onValueChange={(v) => p.setThresholdCellOutcome(i, s.id, v as Outcome)}
                                 >
                                   <SelectTrigger
-                                    className={`h-8 text-xs px-2 ${OUTCOME_CHIP[current]} border`}
+                                    className={`h-8 text-xs px-2 w-44 shrink-0 ${OUTCOME_CHIP[current]} border`}
                                     data-testid={`select-threshold-outcome-${t.bandLabel}-${s.id}`}
                                   >
                                     <SelectValue />
@@ -2055,20 +2062,17 @@ function ObjectiveEditor(p: EditorProps) {
                                     ))}
                                   </SelectContent>
                                 </Select>
-                              </td>
+                              </div>
                             );
                           })}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             );
           })()}
-          {p.form.stages.filter(s => s.order > 0).length === 0 && (
-            <p className="text-xs text-muted-foreground italic">Add at least one progress stage above to configure outcome cells.</p>
-          )}
           {!p.form.thresholds.some(t => t.bandLabel === "default") && (
             <div className="flex items-center gap-2 pt-1">
               <Button size="sm" variant="outline" onClick={p.addDefaultBand} data-testid="button-add-default-band">
