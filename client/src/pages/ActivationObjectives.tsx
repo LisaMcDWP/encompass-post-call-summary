@@ -1810,24 +1810,59 @@ function ObjectiveEditor(p: EditorProps) {
           })()}
 
           {/* System stage: "Not discussed" — auto-injected by the server on
-              every objective. Shown read-only here so users know it exists;
-              cannot be renamed, removed, or remapped. */}
+              every objective. The stage itself can't be renamed or removed,
+              but observation values from the linked Observation CAN be mapped
+              to it (e.g. a "Patient declined" enum value that the user wants
+              to treat as not-discussed for reporting). */}
           {(() => {
             const sys = p.form.stages.find(s => s.id === "stage_not_discussed");
             if (!sys) return null;
             return (
-              <div className="rounded-md border-2 border-dashed border-muted-foreground/30 bg-muted/20 p-2 flex items-center gap-2" data-testid="row-stage-not-discussed">
-                <div className="w-12 shrink-0" />
-                <div className="w-7 h-7 rounded-full border-2 border-dashed border-muted-foreground/40 flex items-center justify-center text-xs font-semibold text-muted-foreground bg-background">0</div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">{sys.displayName}</span>
-                    <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted text-muted-foreground border">System</span>
-                  </div>
-                  <div className="text-[11px] text-muted-foreground italic mt-0.5">
-                    Built-in baseline stage on every objective. Captures calls where the topic was never raised — distinct from "Unresolved" (raised but unclear). The model will return "Not discussed" when the topic isn't mentioned, and it auto-routes here.
+              <div className="rounded-md border-2 border-dashed border-muted-foreground/30 bg-muted/20 p-2 flex flex-col gap-2" data-testid="row-stage-not-discussed">
+                <div className="flex items-center gap-2">
+                  <div className="w-12 shrink-0" />
+                  <div className="w-7 h-7 rounded-full border-2 border-dashed border-muted-foreground/40 flex items-center justify-center text-xs font-semibold text-muted-foreground bg-background">0</div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">{sys.displayName}</span>
+                      <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted text-muted-foreground border">System</span>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground italic mt-0.5">
+                      Built-in baseline stage on every objective. Captures calls where the topic was never raised — distinct from "Unresolved" (raised but unclear). The model returns "Not discussed" automatically when the topic isn't mentioned; you can also map other observation values here (e.g. "Patient declined").
+                    </div>
                   </div>
                 </div>
+                {linkedObservationValues.length > 0 && (
+                  <div className="ml-12 flex items-center gap-2 flex-wrap">
+                    <Label className="text-[10px] uppercase tracking-wider text-muted-foreground shrink-0">Observation values</Label>
+                    {linkedObservationValues.map(v => {
+                      const mapping = p.form.stageMappings.find(m => m.extractedValue === v.label);
+                      const onThisStage = mapping?.stageId === sys.id;
+                      const onOtherStage = !!mapping?.stageId && mapping.stageId !== sys.id;
+                      const otherStageName = onOtherStage
+                        ? p.form.stages.find(st => st.id === mapping?.stageId)?.displayName
+                        : null;
+                      const c = COLOR_MAP[v.color] || COLOR_MAP.GRAY;
+                      return (
+                        <button key={v.label} type="button"
+                          onClick={() => p.setMapping(v.label, onThisStage ? "" : sys.id)}
+                          title={onOtherStage ? `Currently mapped to "${otherStageName}". Click to move here.` : undefined}
+                          className={
+                            "text-[11px] font-mono px-2 py-0.5 rounded-md border transition-colors " +
+                            (onThisStage
+                              ? c.chipActive
+                              : onOtherStage
+                                ? `${c.bg} ${c.text} border-dashed ${c.border} opacity-60 hover:opacity-100`
+                                : `${c.bg} ${c.text} ${c.border} hover:opacity-80`)
+                          }
+                          data-testid={`chip-stage-value-not-discussed-${v.label}`}
+                        >
+                          {v.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })()}
