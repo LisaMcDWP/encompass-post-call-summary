@@ -459,6 +459,35 @@ function rowToDispositionDetail(row: any): DispositionDetail {
 }
 
 function rowToObservation(row: any): Observation {
+  // Legacy rows stored enum values as { label, color }. Newer rows include a
+  // per-value promptHint that flows into linked-objective prompts. Backfill it
+  // here so callers always see the canonical {label, color, promptHint} shape.
+  // Wrap the JSON parse to guard against historically malformed `value` columns
+  // — a single bad row should not 500 the entire observations endpoint.
+  const VALID_COLORS = new Set(["GREEN", "YELLOW", "RED", "BLUE", "GRAY"]);
+  let rawValues: unknown = [];
+  if (row.value) {
+    try {
+      rawValues = JSON.parse(row.value);
+    } catch {
+      console.warn(`[observations] malformed JSON in value column for id=${row.id}; defaulting to []`);
+      rawValues = [];
+    }
+  }
+  const value = Array.isArray(rawValues)
+    ? rawValues.map((v: any) => {
+        if (typeof v === "string") {
+          return { label: v, color: "GRAY" as const, promptHint: "" };
+        }
+        const color = v?.color;
+        return {
+          label: typeof v?.label === "string" ? v.label : "",
+          color: (typeof color === "string" && VALID_COLORS.has(color) ? color : "GRAY") as
+            "GREEN" | "YELLOW" | "RED" | "BLUE" | "GRAY",
+          promptHint: typeof v?.promptHint === "string" ? v.promptHint : "",
+        };
+      })
+    : [];
   return {
     id: row.id,
     name: row.name,
@@ -467,7 +496,7 @@ function rowToObservation(row: any): Observation {
     domain: row.domain,
     displayOrder: row.display_order,
     valueType: row.value_type,
-    value: row.value ? JSON.parse(row.value) : [],
+    value,
     isActive: row.is_active,
     promptGuidance: row.prompt_guidance || "",
   };

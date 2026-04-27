@@ -1,5 +1,5 @@
 import { storage } from "./storage";
-import type { EnumValue, InsertDispositionCategory, InsertDispositionDetail } from "@shared/schema";
+import type { ObservationEnumValueRich, InsertDispositionCategory, InsertDispositionDetail } from "@shared/schema";
 
 const DEFAULT_OBSERVATIONS: {
   name: string;
@@ -7,7 +7,7 @@ const DEFAULT_OBSERVATIONS: {
   domain: string;
   displayOrder: number;
   valueType: string;
-  value: EnumValue[];
+  value: ObservationEnumValueRich[];
 }[] = [
   {
     name: "overall_feeling",
@@ -16,10 +16,10 @@ const DEFAULT_OBSERVATIONS: {
     displayOrder: 0,
     valueType: "enum",
     value: [
-      { label: "Good", color: "GREEN" },
-      { label: "Fair", color: "YELLOW" },
-      { label: "Poor", color: "RED" },
-      { label: "Not Discussed", color: "GRAY" },
+      { label: "Good", color: "GREEN", promptHint: "" },
+      { label: "Fair", color: "YELLOW", promptHint: "" },
+      { label: "Poor", color: "RED", promptHint: "" },
+      { label: "Not Discussed", color: "GRAY", promptHint: "" },
     ],
   },
   {
@@ -29,9 +29,9 @@ const DEFAULT_OBSERVATIONS: {
     displayOrder: 1,
     valueType: "enum",
     value: [
-      { label: "No Readmission", color: "GREEN" },
-      { label: "Readmitted", color: "RED" },
-      { label: "Not Discussed", color: "GRAY" },
+      { label: "No Readmission", color: "GREEN", promptHint: "" },
+      { label: "Readmitted", color: "RED", promptHint: "" },
+      { label: "Not Discussed", color: "GRAY", promptHint: "" },
     ],
   },
   {
@@ -41,11 +41,11 @@ const DEFAULT_OBSERVATIONS: {
     displayOrder: 2,
     valueType: "enum",
     value: [
-      { label: "Picked Up", color: "GREEN" },
-      { label: "Partially Picked Up", color: "YELLOW" },
-      { label: "Not Picked Up", color: "RED" },
-      { label: "Not Asked", color: "GRAY" },
-      { label: "Unknown", color: "GRAY" },
+      { label: "Picked Up", color: "GREEN", promptHint: "" },
+      { label: "Partially Picked Up", color: "YELLOW", promptHint: "" },
+      { label: "Not Picked Up", color: "RED", promptHint: "" },
+      { label: "Not Asked", color: "GRAY", promptHint: "" },
+      { label: "Unknown", color: "GRAY", promptHint: "" },
     ],
   },
   {
@@ -55,9 +55,9 @@ const DEFAULT_OBSERVATIONS: {
     displayOrder: 3,
     valueType: "enum",
     value: [
-      { label: "No Issues", color: "GREEN" },
-      { label: "Has Barriers", color: "RED" },
-      { label: "Not Discussed", color: "GRAY" },
+      { label: "No Issues", color: "GREEN", promptHint: "" },
+      { label: "Has Barriers", color: "RED", promptHint: "" },
+      { label: "Not Discussed", color: "GRAY", promptHint: "" },
     ],
   },
   {
@@ -67,11 +67,11 @@ const DEFAULT_OBSERVATIONS: {
     displayOrder: 4,
     valueType: "enum",
     value: [
-      { label: "Scheduled", color: "GREEN" },
-      { label: "Completed", color: "GREEN" },
-      { label: "Not Scheduled", color: "RED" },
-      { label: "Cancelled", color: "RED" },
-      { label: "Not Discussed", color: "GRAY" },
+      { label: "Scheduled", color: "GREEN", promptHint: "" },
+      { label: "Completed", color: "GREEN", promptHint: "" },
+      { label: "Not Scheduled", color: "RED", promptHint: "" },
+      { label: "Cancelled", color: "RED", promptHint: "" },
+      { label: "Not Discussed", color: "GRAY", promptHint: "" },
     ],
   },
   {
@@ -81,13 +81,13 @@ const DEFAULT_OBSERVATIONS: {
     displayOrder: 5,
     valueType: "enum",
     value: [
-      { label: "Delivered", color: "GREEN" },
-      { label: "Partially Delivered", color: "YELLOW" },
-      { label: "Not Delivered", color: "RED" },
-      { label: "Ordered Not Received", color: "YELLOW" },
-      { label: "Not Ordered", color: "GRAY" },
-      { label: "Not Discussed", color: "GRAY" },
-      { label: "Unknown", color: "GRAY" },
+      { label: "Delivered", color: "GREEN", promptHint: "" },
+      { label: "Partially Delivered", color: "YELLOW", promptHint: "" },
+      { label: "Not Delivered", color: "RED", promptHint: "" },
+      { label: "Ordered Not Received", color: "YELLOW", promptHint: "" },
+      { label: "Not Ordered", color: "GRAY", promptHint: "" },
+      { label: "Not Discussed", color: "GRAY", promptHint: "" },
+      { label: "Unknown", color: "GRAY", promptHint: "" },
     ],
   },
   {
@@ -97,11 +97,11 @@ const DEFAULT_OBSERVATIONS: {
     displayOrder: 6,
     valueType: "enum",
     value: [
-      { label: "Completed", color: "GREEN" },
-      { label: "Scheduled", color: "GREEN" },
-      { label: "Missed", color: "RED" },
-      { label: "Pending", color: "YELLOW" },
-      { label: "Not Discussed", color: "GRAY" },
+      { label: "Completed", color: "GREEN", promptHint: "" },
+      { label: "Scheduled", color: "GREEN", promptHint: "" },
+      { label: "Missed", color: "RED", promptHint: "" },
+      { label: "Pending", color: "YELLOW", promptHint: "" },
+      { label: "Not Discussed", color: "GRAY", promptHint: "" },
     ],
   },
   {
@@ -111,9 +111,9 @@ const DEFAULT_OBSERVATIONS: {
     displayOrder: 7,
     valueType: "enum",
     value: [
-      { label: "No Questions", color: "GREEN" },
-      { label: "Has Questions", color: "BLUE" },
-      { label: "Not Discussed", color: "GRAY" },
+      { label: "No Questions", color: "GREEN", promptHint: "" },
+      { label: "Has Questions", color: "BLUE", promptHint: "" },
+      { label: "Not Discussed", color: "GRAY", promptHint: "" },
     ],
   },
   {
@@ -123,10 +123,10 @@ const DEFAULT_OBSERVATIONS: {
     displayOrder: 8,
     valueType: "enum",
     value: [
-      { label: "Positive", color: "GREEN" },
-      { label: "Mixed", color: "YELLOW" },
-      { label: "Negative", color: "RED" },
-      { label: "Not Discussed", color: "GRAY" },
+      { label: "Positive", color: "GREEN", promptHint: "" },
+      { label: "Mixed", color: "YELLOW", promptHint: "" },
+      { label: "Negative", color: "RED", promptHint: "" },
+      { label: "Not Discussed", color: "GRAY", promptHint: "" },
     ],
   },
   {
@@ -136,10 +136,10 @@ const DEFAULT_OBSERVATIONS: {
     displayOrder: 9,
     valueType: "enum",
     value: [
-      { label: "Positive", color: "GREEN" },
-      { label: "Mixed", color: "YELLOW" },
-      { label: "Negative", color: "RED" },
-      { label: "Not Discussed", color: "GRAY" },
+      { label: "Positive", color: "GREEN", promptHint: "" },
+      { label: "Mixed", color: "YELLOW", promptHint: "" },
+      { label: "Negative", color: "RED", promptHint: "" },
+      { label: "Not Discussed", color: "GRAY", promptHint: "" },
     ],
   },
   {

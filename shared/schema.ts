@@ -65,12 +65,48 @@ export interface ClientPathway {
   secret_key: string;
 }
 
+// Legacy two-field shape (label + color). Retained as an alias so existing
+// references continue to compile while observation enum values converge on the
+// richer ObservationEnumValue (label + color + per-value promptHint) defined
+// further down in this file.
 export const enumValueSchema = z.object({
   label: z.string(),
   color: z.enum(["GREEN", "YELLOW", "RED", "BLUE", "GRAY"]),
+  promptHint: z.string().default(""),
 });
 
-export type EnumValue = z.infer<typeof enumValueSchema>;
+// Use the schema's *input* type (not output) so `{ label, color }` literals
+// without an explicit `promptHint` continue to type-check. The output type
+// (after parsing) always carries `promptHint: string` thanks to `.default("")`.
+export type EnumValue = z.input<typeof enumValueSchema>;
+
+// Coerces inputs into the rich enum value shape:
+//   - bare string         → { label, color: "GRAY", promptHint: "" }
+//   - {label, color}      → adds promptHint: ""
+//   - {label,color,hint}  → preserved
+const coerceObservationEnumValues = z.preprocess(
+  (val) => {
+    if (!Array.isArray(val)) return val;
+    return val.map((v) => {
+      if (typeof v === "string") return { label: v, color: "GRAY", promptHint: "" };
+      if (v && typeof v === "object") {
+        return {
+          label: (v as any).label ?? "",
+          color: (v as any).color ?? "GRAY",
+          promptHint: (v as any).promptHint ?? "",
+        };
+      }
+      return v;
+    });
+  },
+  z.array(
+    z.object({
+      label: z.string().min(1),
+      color: z.enum(["GREEN", "YELLOW", "RED", "BLUE", "GRAY"]).default("GRAY"),
+      promptHint: z.string().default(""),
+    })
+  ).default([])
+);
 
 export const insertObservationSchema = z.object({
   name: z.string(),
@@ -79,7 +115,7 @@ export const insertObservationSchema = z.object({
   domain: z.string().default("general"),
   displayOrder: z.number().int().default(0),
   valueType: z.string().default("enum"),
-  value: z.array(enumValueSchema).default([]),
+  value: coerceObservationEnumValues,
   isActive: z.boolean().default(true),
   promptGuidance: z.string().default(""),
 });
@@ -94,10 +130,21 @@ export interface Observation {
   domain: string;
   displayOrder: number;
   valueType: string;
-  value: EnumValue[];
+  // Single source of truth for enum values. Each value carries an optional
+  // promptHint that flows into the AI prompt for any objective linked to this
+  // observation.
+  value: ObservationEnumValueRich[];
   isActive: boolean;
   promptGuidance: string;
 }
+
+// Convenience alias so the Observation interface above can reference the rich
+// enum-value shape without depending on the schema declaration order.
+export type ObservationEnumValueRich = {
+  label: string;
+  color: "GREEN" | "YELLOW" | "RED" | "BLUE" | "GRAY";
+  promptHint: string;
+};
 
 export const insertCallQAPromptSchema = z.object({
   name: z.string(),

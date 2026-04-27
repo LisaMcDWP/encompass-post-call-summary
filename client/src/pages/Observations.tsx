@@ -15,6 +15,7 @@ import { useClientPathway } from "@/contexts/ClientPathwayContext";
 interface EnumValue {
   label: string;
   color: "GREEN" | "YELLOW" | "RED" | "BLUE" | "GRAY";
+  promptHint: string;
 }
 
 interface Observation {
@@ -82,9 +83,9 @@ function parseObservationProposal(text: string): typeof emptyForm | null {
           if (m) {
             const label = m[1].trim();
             const color = m[2].trim().toUpperCase();
-            return { label, color: (VALID_COLORS.has(color) ? color : "GRAY") as EnumValue["color"] };
+            return { label, color: (VALID_COLORS.has(color) ? color : "GRAY") as EnumValue["color"], promptHint: "" };
           }
-          return { label: part, color: "GRAY" as const };
+          return { label: part, color: "GRAY" as const, promptHint: "" };
         });
     }
   }
@@ -293,7 +294,7 @@ export default function Observations() {
     }
     setForm({
       ...form,
-      value: [...form.value, { label: newEnumLabel.trim(), color: newEnumColor as EnumValue["color"] }],
+      value: [...form.value, { label: newEnumLabel.trim(), color: newEnumColor as EnumValue["color"], promptHint: "" }],
     });
     setNewEnumLabel("");
   };
@@ -735,70 +736,91 @@ export default function Observations() {
 
             {form.valueType === "enum" && (
               <div className="space-y-3">
-                <Label className="text-sm font-semibold">Enum Values</Label>
-                <div className="space-y-1.5">
+                <div className="space-y-1">
+                  <Label className="text-sm font-semibold">Enum Values</Label>
+                  <p className="text-[11px] text-muted-foreground">
+                    Each value carries an optional prompt hint. The hint flows into the AI prompt for any objective that links to this observation, telling Gemini exactly when to choose this value.
+                  </p>
+                </div>
+                <div className="space-y-2.5">
                   {form.value.map((v, i) => {
                     const c = COLOR_MAP[v.color] || COLOR_MAP.GRAY;
                     return (
-                      <div key={i} className="flex items-center gap-1.5 group">
-                        <div className="flex flex-col">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => moveEnumValue(i, "up")}
-                            disabled={i === 0}
-                            className="h-5 w-5 p-0 opacity-40 hover:opacity-100 disabled:opacity-10"
-                            data-testid={`button-enum-up-${i}`}
+                      <div key={i} className="rounded-md border border-border/60 bg-muted/20 p-2 space-y-1.5">
+                        <div className="flex items-center gap-1.5 group">
+                          <div className="flex flex-col">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => moveEnumValue(i, "up")}
+                              disabled={i === 0}
+                              className="h-5 w-5 p-0 opacity-40 hover:opacity-100 disabled:opacity-10"
+                              data-testid={`button-enum-up-${i}`}
+                            >
+                              <ArrowUp className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => moveEnumValue(i, "down")}
+                              disabled={i === form.value.length - 1}
+                              className="h-5 w-5 p-0 opacity-40 hover:opacity-100 disabled:opacity-10"
+                              data-testid={`button-enum-down-${i}`}
+                            >
+                              <ArrowDown className="h-3 w-3" />
+                            </Button>
+                          </div>
+                          <span className={`w-3 h-3 rounded-full shrink-0 ${c.bg} border ${c.border}`} />
+                          <Input
+                            value={v.label}
+                            onChange={(e) => {
+                              const updated = [...form.value];
+                              updated[i] = { ...updated[i], label: e.target.value };
+                              setForm({ ...form, value: updated });
+                            }}
+                            className="text-sm h-8 flex-grow"
+                            data-testid={`input-enum-label-${i}`}
+                          />
+                          <Select
+                            value={v.color}
+                            onValueChange={(c) => {
+                              const updated = [...form.value];
+                              updated[i] = { ...updated[i], color: c as EnumValue["color"] };
+                              setForm({ ...form, value: updated });
+                            }}
                           >
-                            <ArrowUp className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => moveEnumValue(i, "down")}
-                            disabled={i === form.value.length - 1}
-                            className="h-5 w-5 p-0 opacity-40 hover:opacity-100 disabled:opacity-10"
-                            data-testid={`button-enum-down-${i}`}
-                          >
-                            <ArrowDown className="h-3 w-3" />
+                            <SelectTrigger className="h-8 w-36 text-xs" data-testid={`select-enum-color-${i}`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Object.entries(COLOR_MAP).map(([key, val]) => (
+                                <SelectItem key={key} value={key}>
+                                  <span className="flex items-center gap-2">
+                                    <span className={`w-3 h-3 rounded-full ${val.bg} border ${val.border}`} />
+                                    {val.label}
+                                  </span>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button variant="ghost" size="sm" onClick={() => removeEnumValue(i)} className="h-7 w-7 p-0 opacity-50 hover:opacity-100" data-testid={`button-remove-enum-${i}`}>
+                            <X className="h-3.5 w-3.5" />
                           </Button>
                         </div>
-                        <span className={`w-3 h-3 rounded-full shrink-0 ${c.bg} border ${c.border}`} />
-                        <Input
-                          value={v.label}
-                          onChange={(e) => {
-                            const updated = [...form.value];
-                            updated[i] = { ...updated[i], label: e.target.value };
-                            setForm({ ...form, value: updated });
-                          }}
-                          className="text-sm h-8 flex-grow"
-                          data-testid={`input-enum-label-${i}`}
-                        />
-                        <Select
-                          value={v.color}
-                          onValueChange={(c) => {
-                            const updated = [...form.value];
-                            updated[i] = { ...updated[i], color: c as EnumValue["color"] };
-                            setForm({ ...form, value: updated });
-                          }}
-                        >
-                          <SelectTrigger className="h-8 w-36 text-xs" data-testid={`select-enum-color-${i}`}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {Object.entries(COLOR_MAP).map(([key, val]) => (
-                              <SelectItem key={key} value={key}>
-                                <span className="flex items-center gap-2">
-                                  <span className={`w-3 h-3 rounded-full ${val.bg} border ${val.border}`} />
-                                  {val.label}
-                                </span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Button variant="ghost" size="sm" onClick={() => removeEnumValue(i)} className="h-7 w-7 p-0 opacity-50 hover:opacity-100" data-testid={`button-remove-enum-${i}`}>
-                          <X className="h-3.5 w-3.5" />
-                        </Button>
+                        <div className="pl-9">
+                          <Textarea
+                            value={v.promptHint || ""}
+                            onChange={(e) => {
+                              const updated = [...form.value];
+                              updated[i] = { ...updated[i], promptHint: e.target.value };
+                              setForm({ ...form, value: updated });
+                            }}
+                            placeholder={`Optional prompt hint — when should Gemini pick "${v.label || "this value"}"? e.g. "Patient confirmed they picked up the medication, even if late."`}
+                            rows={2}
+                            className="text-xs resize-none bg-background"
+                            data-testid={`textarea-enum-hint-${i}`}
+                          />
+                        </div>
                       </div>
                     );
                   })}
