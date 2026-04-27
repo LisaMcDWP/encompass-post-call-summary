@@ -1031,7 +1031,6 @@ export async function aiActivationObjectiveAssistant(
     anchorContextKey: o.anchorContextKey,
     windowDays: o.windowDays,
     stages: (o.stages || []).map(s => ({ name: s.name, displayName: s.displayName, description: s.description, order: s.order })),
-    achievedStageId: o.achievedStageId,
     observationName: o.observationName,
     stageMappings: o.stageMappings,
     observationTopicIds: o.observationTopicIds,
@@ -1070,7 +1069,7 @@ Activation objectives are program-level goals tied to a patient anchor event (e.
 - description
 - anchorEventType (discharge | enrollment | procedure | custom) and anchorContextKey (the date field used to anchor the timeline)
 - windowDays (target completion window from the anchor)
-- stages (ordered progress stages: name, displayName, description, order) and achievedStageId
+- stages (ordered progress stages: name, displayName, description, order). Outcomes are assigned per (band × stage) cell elsewhere — there is no single "achieved" stage
 - observationName: the LINKED observation in the catalogue. Its enum values, per-value promptHints, and promptGuidance ARE the objective's value set — the objective does NOT have its own copy.
 - stageMappings: array of {extractedValue, stageId} that maps a linked-observation enum label to a stage
 - observationTopicIds: ids of OTHER observations from the catalogue this objective also extracts on every call
@@ -1112,7 +1111,6 @@ When proposing a new objective OR an enhancement to the current draft, ALWAYS fo
 **Window Days:** 7
 **Observation Name:** name_of_observation_from_catalogue
 **Stages:** stage_one | Display One; stage_two | Display Two; stage_three | Display Three
-**Achieved Stage:** stage_three
 **Stage Mappings:** Value A -> stage_three; Value B -> stage_two; Value C -> stage_one
 
 Notes on **Observation Name**:

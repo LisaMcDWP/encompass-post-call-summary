@@ -291,14 +291,31 @@ export const SYSTEM_STAGE_EXCLUDED: ActivationObjectiveStage = {
   order: 0,
 };
 
+// Outcomes a (band, stage) cell can map to. Drives both the persisted
+// onTrackStatus on the per-call result and the UI badge color.
+export const activationOutcomeSchema = z.enum([
+  "achieved",
+  "on_track",
+  "not_achieved",
+  "na",
+  "not_discussed",
+]);
+export type ActivationOutcome = z.infer<typeof activationOutcomeSchema>;
+
+export const activationStageOutcomeSchema = z.object({
+  stageId: z.string().min(1),
+  outcome: activationOutcomeSchema,
+});
+export type ActivationStageOutcome = z.infer<typeof activationStageOutcomeSchema>;
+
 export const activationObjectiveThresholdSchema = z.object({
   bandLabel: z.enum(["early", "near_window", "at_window", "post_window", "default"]),
   bandDisplayName: z.string().default(""),
   daysRemainingMin: z.number().int().nullable(),
   daysRemainingMax: z.number().int().nullable(),
-  onTrackStageIds: z.array(z.string()).default([]),
-  satisfiedLabel: z.string().default("On track"),
-  unsatisfiedLabel: z.string().default("At risk"),
+  // Per-stage outcome map for this band. If a stage has no entry, the engine
+  // defaults that cell to "na" (treated as unrated).
+  stageOutcomes: z.array(activationStageOutcomeSchema).default([]),
   // Display-only hint: which configured interaction is typically expected to land in this band.
   // Has no runtime effect on extraction or scoring — purely a label for editor readability.
   expectedInteractionId: z.number().int().nullable().default(null),
@@ -414,7 +431,6 @@ export const insertActivationObjectiveSchema = z.object({
   interactionContextKey: z.string().min(1).default("interaction_key"),
   windowDays: z.number().int().min(1),
   stages: z.array(activationObjectiveStageSchema).default([]),
-  achievedStageId: z.string().default(""),
   thresholds: z.array(activationObjectiveThresholdSchema).default([]),
   observationName: z.string().default(""),
   stageMappings: z.array(activationObjectiveStageMappingSchema).default([]),
@@ -435,7 +451,6 @@ export interface ActivationObjective {
   interactionContextKey: string;
   windowDays: number;
   stages: ActivationObjectiveStage[];
-  achievedStageId: string;
   thresholds: ActivationObjectiveThreshold[];
   observationName: string;
   stageMappings: ActivationObjectiveStageMapping[];

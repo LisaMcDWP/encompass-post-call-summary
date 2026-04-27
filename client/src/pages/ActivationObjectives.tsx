@@ -43,15 +43,46 @@ interface Stage {
   order: number;
 }
 
+type Outcome = "achieved" | "on_track" | "not_achieved" | "na" | "not_discussed";
+
+interface StageOutcome {
+  stageId: string;
+  outcome: Outcome;
+}
+
 interface Threshold {
   bandLabel: BandLabel;
   bandDisplayName: string;
   daysRemainingMin: number | null;
   daysRemainingMax: number | null;
-  onTrackStageIds: string[];
-  satisfiedLabel: string;
-  unsatisfiedLabel: string;
+  stageOutcomes: StageOutcome[];
   expectedInteractionId?: number | null;
+}
+
+const OUTCOME_OPTIONS: { value: Outcome; label: string; chip: string }[] = [
+  { value: "achieved", label: "Achieved", chip: "bg-green-100 text-green-800 border-green-300" },
+  { value: "on_track", label: "On track", chip: "bg-blue-100 text-blue-800 border-blue-300" },
+  { value: "not_achieved", label: "Not achieved", chip: "bg-red-100 text-red-800 border-red-300" },
+  { value: "na", label: "N/A", chip: "bg-gray-100 text-gray-700 border-gray-300" },
+  { value: "not_discussed", label: "Not discussed", chip: "bg-amber-100 text-amber-800 border-amber-300" },
+];
+
+const OUTCOME_LABEL: Record<Outcome, string> = OUTCOME_OPTIONS.reduce(
+  (acc, o) => ({ ...acc, [o.value]: o.label }),
+  {} as Record<Outcome, string>,
+);
+const OUTCOME_CHIP: Record<Outcome, string> = OUTCOME_OPTIONS.reduce(
+  (acc, o) => ({ ...acc, [o.value]: o.chip }),
+  {} as Record<Outcome, string>,
+);
+
+function getCellOutcome(t: Threshold, stageId: string): Outcome {
+  return (t.stageOutcomes || []).find(m => m.stageId === stageId)?.outcome || "na";
+}
+
+function setCellOutcome(t: Threshold, stageId: string, outcome: Outcome): Threshold {
+  const others = (t.stageOutcomes || []).filter(m => m.stageId !== stageId);
+  return { ...t, stageOutcomes: [...others, { stageId, outcome }] };
 }
 
 interface StageMapping {
@@ -110,7 +141,6 @@ interface ActivationObjective {
   anchorContextKey: string;
   windowDays: number;
   stages: Stage[];
-  achievedStageId: string;
   thresholds: Threshold[];
   observationName: string;
   stageMappings: StageMapping[];
@@ -144,12 +174,22 @@ const unresolvedStage = (stages: Stage[]) => stages.find(isUnresolvedStage) || n
 const DEFAULT_THRESHOLDS = (stages: Stage[]): Threshold[] => {
   const progress = progressStages(stages);
   const last = progress[progress.length - 1]?.id || "";
-  const middleAndLast = progress.slice(1).map(s => s.id);
+  // Sensible seeds — every progress stage on track in the early band; only the
+  // final stage on track once you reach window; final stage = achieved post-window.
+  const allOnTrack: StageOutcome[] = progress.map(s => ({ stageId: s.id, outcome: "on_track" as Outcome }));
+  const onlyLastOnTrack: StageOutcome[] = progress.map(s => ({
+    stageId: s.id,
+    outcome: (s.id === last ? "on_track" : "not_achieved") as Outcome,
+  }));
+  const onlyLastAchieved: StageOutcome[] = progress.map(s => ({
+    stageId: s.id,
+    outcome: (s.id === last ? "achieved" : "not_achieved") as Outcome,
+  }));
   return [
-    { bandLabel: "early", bandDisplayName: "Early", daysRemainingMin: 3, daysRemainingMax: null, onTrackStageIds: middleAndLast, satisfiedLabel: "On track", unsatisfiedLabel: "At risk", expectedInteractionId: null },
-    { bandLabel: "near_window", bandDisplayName: "Near window", daysRemainingMin: 1, daysRemainingMax: 2, onTrackStageIds: last ? [last] : [], satisfiedLabel: "On track", unsatisfiedLabel: "At risk", expectedInteractionId: null },
-    { bandLabel: "at_window", bandDisplayName: "At window", daysRemainingMin: 0, daysRemainingMax: 0, onTrackStageIds: last ? [last] : [], satisfiedLabel: "On track", unsatisfiedLabel: "At risk", expectedInteractionId: null },
-    { bandLabel: "post_window", bandDisplayName: "Post window", daysRemainingMin: null, daysRemainingMax: -1, onTrackStageIds: last ? [last] : [], satisfiedLabel: "Achieved", unsatisfiedLabel: "Not achieved", expectedInteractionId: null },
+    { bandLabel: "early", bandDisplayName: "Early", daysRemainingMin: 3, daysRemainingMax: null, stageOutcomes: allOnTrack, expectedInteractionId: null },
+    { bandLabel: "near_window", bandDisplayName: "Near window", daysRemainingMin: 1, daysRemainingMax: 2, stageOutcomes: onlyLastOnTrack, expectedInteractionId: null },
+    { bandLabel: "at_window", bandDisplayName: "At window", daysRemainingMin: 0, daysRemainingMax: 0, stageOutcomes: onlyLastOnTrack, expectedInteractionId: null },
+    { bandLabel: "post_window", bandDisplayName: "Post window", daysRemainingMin: null, daysRemainingMax: -1, stageOutcomes: onlyLastAchieved, expectedInteractionId: null },
   ];
 };
 
@@ -169,7 +209,6 @@ function emptyForm(): Omit<ActivationObjective, "id"> {
     anchorContextKey: "",
     windowDays: 7,
     stages,
-    achievedStageId: "stage_completed",
     thresholds: DEFAULT_THRESHOLDS(stages),
     observationName: "",
     stageMappings: [],
@@ -353,18 +392,12 @@ export default function ActivationObjectives() {
       }
       seenIds.add(cfg.interactionId);
     }
-    // Auto-heal: post_window only counts the achieved stage as on-track
-    const healedThresholds = form.thresholds.map(t =>
-      t.bandLabel === "post_window"
-        ? { ...t, onTrackStageIds: [form.achievedStageId] }
-        : t
-    );
     setSaving(true);
     try {
       const isNew = editingId === "new";
       const url = isNew ? "/api/activation-objectives" : `/api/activation-objectives/${editingId}`;
       const method = isNew ? "POST" : "PUT";
-      const body = JSON.stringify({ ...form, thresholds: healedThresholds, clientPathwayId: selectedCPId });
+      const body = JSON.stringify({ ...form, clientPathwayId: selectedCPId });
       const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -440,15 +473,12 @@ export default function ActivationObjectives() {
     const next = form.stages
       .filter((_, i) => i !== idx)
       .map(s => isUnresolvedStage(s) ? s : { ...s, order: pOrder++ });
-    const newAchieved = form.achievedStageId === removed.id
-      ? (progressStages(next)[progressStages(next).length - 1]?.id || "")
-      : form.achievedStageId;
     const newThresholds = form.thresholds.map(t => ({
       ...t,
-      onTrackStageIds: t.onTrackStageIds.filter(id => id !== removed.id),
+      stageOutcomes: (t.stageOutcomes || []).filter(m => m.stageId !== removed.id),
     }));
     const newStageMappings = form.stageMappings.filter(m => m.stageId !== removed.id);
-    updateForm({ stages: next, achievedStageId: newAchieved, thresholds: newThresholds, stageMappings: newStageMappings });
+    updateForm({ stages: next, thresholds: newThresholds, stageMappings: newStageMappings });
   }
 
   function moveStage(idx: number, dir: -1 | 1) {
@@ -468,12 +498,9 @@ export default function ActivationObjectives() {
     updateForm({ stages: next });
   }
 
-  function toggleThresholdStage(thresholdIdx: number, stageId: string) {
-    const t = form.thresholds[thresholdIdx];
-    const has = t.onTrackStageIds.includes(stageId);
-    const newIds = has ? t.onTrackStageIds.filter(id => id !== stageId) : [...t.onTrackStageIds, stageId];
-    const newThresholds = form.thresholds.map((th, i) => i === thresholdIdx ? { ...th, onTrackStageIds: newIds } : th);
-    updateForm({ thresholds: newThresholds });
+  function setThresholdCellOutcome(thresholdIdx: number, stageId: string, outcome: Outcome) {
+    const next = form.thresholds.map((t, i) => i === thresholdIdx ? setCellOutcome(t, stageId, outcome) : t);
+    updateForm({ thresholds: next });
   }
 
   function updateThreshold(idx: number, patch: Partial<Threshold>) {
@@ -488,9 +515,7 @@ export default function ActivationObjectives() {
       bandDisplayName: "Default",
       daysRemainingMin: null,
       daysRemainingMax: null,
-      onTrackStageIds: [],
-      satisfiedLabel: "On track",
-      unsatisfiedLabel: "At risk",
+      stageOutcomes: [],
       expectedInteractionId: null,
     };
     updateForm({ thresholds: [...form.thresholds, defaultBand] });
@@ -633,12 +658,6 @@ export default function ActivationObjectives() {
       parsedStages = emptyForm().stages;
     }
 
-    const achievedRaw = get("Achieved Stage");
-    const achievedStageId =
-      parsedStages.find(s => s.name === achievedRaw.toLowerCase().replace(/[^a-z0-9_]+/g, "_"))?.id
-      || parsedStages[parsedStages.length - 1]?.id
-      || "";
-
     const mappingsRaw = get("Stage Mappings");
     let stageMappings: StageMapping[] = [];
     if (mappingsRaw) {
@@ -660,7 +679,6 @@ export default function ActivationObjectives() {
       anchorContextKey,
       windowDays,
       stages: parsedStages,
-      achievedStageId,
       thresholds: DEFAULT_THRESHOLDS(parsedStages),
       observationName,
       stageMappings,
@@ -737,15 +755,6 @@ export default function ActivationObjectives() {
         out.stages = parsedStages;
       }
     }
-    // Only set achievedStageId if AI explicitly emitted **Achieved Stage:**
-    const achievedRaw = get("Achieved Stage");
-    if (achievedRaw && (parsedStages || form.stages).length > 0) {
-      const stageList = parsedStages || form.stages;
-      const target = achievedRaw.toLowerCase().replace(/[^a-z0-9_]+/g, "_");
-      const match = stageList.find(s => s.name === target);
-      if (match) out.achievedStageId = match.id;
-    }
-
     const mappingsRaw = get("Stage Mappings");
     if (mappingsRaw) {
       // Use parsed stages if AI provided them, else current form stages — match case-insensitively
@@ -803,9 +812,9 @@ export default function ActivationObjectives() {
       return;
     }
     // When stages are replaced, ids change — reconcile any field that
-    // references stage ids (mappings, thresholds, achievedStageId) by matching
-    // the user's existing values to the new stages by name/displayName, so the
-    // user's customizations are preserved instead of being silently reset.
+    // references stage ids (mappings, thresholds) by matching the user's
+    // existing values to the new stages by name/displayName, so user
+    // customizations are preserved instead of being silently reset.
     const finalPatch: Partial<Omit<ActivationObjective, "id">> = { ...patch };
     if (patch.stages) {
       const newStages = patch.stages;
@@ -816,7 +825,6 @@ export default function ActivationObjectives() {
           || newStages.find(s => s.displayName.toLowerCase() === oldStage.displayName.toLowerCase())
           || null;
       };
-      // Rebuild mappings (only if AI didn't supply its own)
       if (!patch.stageMappings && form.stageMappings.length > 0) {
         finalPatch.stageMappings = form.stageMappings
           .map(sm => {
@@ -825,21 +833,22 @@ export default function ActivationObjectives() {
           })
           .filter(Boolean) as StageMapping[];
       }
-      // Rebuild thresholds — remap onTrackStageIds to new stage ids by name
+      // Remap each band's stageOutcomes by stage name. Stages without a match
+      // are dropped (engine will default the missing cell to "na").
       if (!patch.thresholds) {
         if (form.thresholds && form.thresholds.length > 0) {
           finalPatch.thresholds = form.thresholds.map(t => ({
             ...t,
-            onTrackStageIds: (t.onTrackStageIds || []).map(sid => findNew(sid)?.id).filter(Boolean) as string[],
+            stageOutcomes: (t.stageOutcomes || [])
+              .map(m => {
+                const match = findNew(m.stageId);
+                return match ? { stageId: match.id, outcome: m.outcome } : null;
+              })
+              .filter(Boolean) as StageOutcome[],
           }));
         } else {
           finalPatch.thresholds = DEFAULT_THRESHOLDS(newStages);
         }
-      }
-      // Rebuild achievedStageId (only if AI didn't supply one)
-      if (!patch.achievedStageId) {
-        const reMapped = findNew(form.achievedStageId);
-        finalPatch.achievedStageId = reMapped?.id || newStages[newStages.length - 1].id;
       }
     }
     setForm({ ...form, ...finalPatch });
@@ -1206,7 +1215,7 @@ export default function ActivationObjectives() {
           updateStage={updateStage}
           removeStage={removeStage}
           moveStage={moveStage}
-          toggleThresholdStage={toggleThresholdStage}
+          setThresholdCellOutcome={setThresholdCellOutcome}
           updateThreshold={updateThreshold}
           addDefaultBand={addDefaultBand}
           removeBand={removeBand}
@@ -1306,7 +1315,7 @@ function ObjectiveCard({
 
         {expanded && (
           <div className="mt-4 pt-4 border-t space-y-3">
-            <StagesPreview stages={obj.stages || []} achievedStageId={obj.achievedStageId} />
+            <StagesPreview stages={obj.stages || []} />
             <ThresholdsPreview thresholds={obj.thresholds || []} stages={obj.stages || []} interactions={interactions} />
             {obj.observationName && (
               <div className="text-sm">
@@ -1339,8 +1348,11 @@ function ObjectiveCard({
   );
 }
 
-function StagesPreview({ stages, achievedStageId }: { stages: Stage[]; achievedStageId: string }) {
+function StagesPreview({ stages }: { stages: Stage[] }) {
   if (stages.length === 0) return null;
+  // Visual cue: stage 0 (Unresolved) red; final progress stage green; rest amber.
+  const progress = stages.filter(s => s.order > 0).sort((a, b) => a.order - b.order);
+  const lastProgressId = progress[progress.length - 1]?.id || "";
   return (
     <div>
       <Label className="text-xs text-muted-foreground uppercase tracking-wider">Progress stages — in order</Label>
@@ -1348,7 +1360,7 @@ function StagesPreview({ stages, achievedStageId }: { stages: Stage[]; achievedS
         {stages.map((s, i) => (
           <div key={s.id} className="flex items-center gap-2">
             <div className="flex flex-col items-center">
-              <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-semibold ${s.id === achievedStageId ? "border-green-500 bg-green-50 text-green-700" : i === 0 ? "border-red-300 bg-red-50 text-red-700" : "border-amber-300 bg-amber-50 text-amber-700"}`}>{i + 1}</div>
+              <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-semibold ${s.id === lastProgressId ? "border-green-500 bg-green-50 text-green-700" : i === 0 ? "border-red-300 bg-red-50 text-red-700" : "border-amber-300 bg-amber-50 text-amber-700"}`}>{i + 1}</div>
               <div className="text-center mt-1">
                 <div className="text-xs font-medium">{s.displayName}</div>
                 <div className="text-[10px] text-muted-foreground">{s.description}</div>
@@ -1363,29 +1375,30 @@ function StagesPreview({ stages, achievedStageId }: { stages: Stage[]; achievedS
 }
 
 function ThresholdsPreview({ thresholds, stages, interactions }: { thresholds: Threshold[]; stages: Stage[]; interactions: ActivationInteraction[] }) {
-  const stageById = new Map(stages.map(s => [s.id, s.displayName]));
   const interactionById = new Map(interactions.map(x => [x.id, x.name]));
-  if (thresholds.length === 0) {
+  const progress = stages.filter(s => s.order > 0).sort((a, b) => a.order - b.order);
+  if (thresholds.length === 0 || progress.length === 0) {
     return (
       <div>
-        <Label className="text-xs text-muted-foreground uppercase tracking-wider">On-track threshold rules</Label>
+        <Label className="text-xs text-muted-foreground uppercase tracking-wider">Outcome mapping</Label>
         <div className="mt-2 text-xs text-muted-foreground italic border border-dashed rounded-md px-3 py-2">
-          No threshold bands configured. Edit this objective to set up on-track / at-risk rules by days remaining.
+          No threshold bands configured. Edit this objective to set per-stage outcomes by days remaining.
         </div>
       </div>
     );
   }
   return (
     <div>
-      <Label className="text-xs text-muted-foreground uppercase tracking-wider">On-track threshold rules</Label>
-      <div className="mt-2 border rounded-md overflow-hidden">
+      <Label className="text-xs text-muted-foreground uppercase tracking-wider">Outcome mapping — band × stage</Label>
+      <div className="mt-2 border rounded-md overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-muted/40">
             <tr className="text-left text-xs text-muted-foreground uppercase tracking-wider">
-              <th className="px-3 py-2 font-medium">Call timing</th>
+              <th className="px-3 py-2 font-medium">Band</th>
               <th className="px-3 py-2 font-medium">Days to target</th>
-              <th className="px-3 py-2 font-medium">On-track stages</th>
-              <th className="px-3 py-2 font-medium">Status labels</th>
+              {progress.map(s => (
+                <th key={s.id} className="px-3 py-2 font-medium">{s.displayName}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -1408,20 +1421,14 @@ function ThresholdsPreview({ thresholds, stages, interactions }: { thresholds: T
                   <td className="px-3 py-2">
                     <Badge variant="outline" className="font-mono text-xs">{bandRangeLabel(t)}</Badge>
                   </td>
-                  <td className="px-3 py-2">
-                    <div className="flex flex-wrap gap-1">
-                      {t.onTrackStageIds.length === 0
-                        ? <span className="text-xs text-muted-foreground italic">none</span>
-                        : t.onTrackStageIds.map(sid => (
-                            <Badge key={sid} variant="secondary" className="text-xs">{stageById.get(sid) || sid}</Badge>
-                          ))
-                      }
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 text-xs">
-                    <Badge className="bg-green-100 text-green-800 border-green-300 mr-1">{t.satisfiedLabel}</Badge>
-                    <Badge className="bg-amber-100 text-amber-800 border-amber-300">{t.unsatisfiedLabel}</Badge>
-                  </td>
+                  {progress.map(s => {
+                    const outcome = getCellOutcome(t, s.id);
+                    return (
+                      <td key={s.id} className="px-3 py-2">
+                        <Badge className={`${OUTCOME_CHIP[outcome]} text-xs`}>{OUTCOME_LABEL[outcome]}</Badge>
+                      </td>
+                    );
+                  })}
                 </tr>
               );
             })}
@@ -1448,7 +1455,7 @@ interface EditorProps {
   updateStage: (idx: number, patch: Partial<Stage>) => void;
   removeStage: (idx: number) => void;
   moveStage: (idx: number, dir: -1 | 1) => void;
-  toggleThresholdStage: (idx: number, stageId: string) => void;
+  setThresholdCellOutcome: (idx: number, stageId: string, outcome: Outcome) => void;
   updateThreshold: (idx: number, patch: Partial<Threshold>) => void;
   addDefaultBand: () => void;
   removeBand: (idx: number) => void;
@@ -1941,136 +1948,127 @@ function ObjectiveEditor(p: EditorProps) {
             })}
           </div>
 
-          <div className="pt-2 border-t flex items-center gap-2">
-            <Label className="text-sm">Objective achieved when stage =</Label>
-            <Select value={p.form.achievedStageId} onValueChange={v => p.updateForm({ achievedStageId: v })}>
-              <SelectTrigger className="w-64 h-8" data-testid="select-achieved-stage"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {p.form.stages.filter(s => s.order > 0).sort((a, b) => a.order - b.order).map(s => (
-                  <SelectItem key={s.id} value={s.id}>{s.displayName}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
       </Section>
 
       {/* Thresholds */}
       <Section
         id="thresholds"
-        title="On-track threshold rules — by days remaining to target date"
-        subtitle="Days remaining = target date − call date. Rules apply to every touchpoint for this objective."
+        title="Outcome mapping — band × stage"
+        subtitle="Each cell is the outcome assigned when a call lands in that band with the patient at that stage. Missing cells default to N/A."
         open={sectionsOpen.thresholds}
         onToggle={() => toggleSection("thresholds")}
         contentClassName="space-y-3"
       >
-          <div className="border rounded-md overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/40">
-                <tr className="text-left text-xs text-muted-foreground uppercase tracking-wider">
-                  <th className="px-3 py-2 font-medium">Band</th>
-                  <th className="px-3 py-2 font-medium">Days remaining (min / max)</th>
-                  <th className="px-3 py-2 font-medium">Stages that count as on track</th>
-                  <th className="px-3 py-2 font-medium">Satisfied label</th>
-                  <th className="px-3 py-2 font-medium">Unsatisfied label</th>
-                </tr>
-              </thead>
-              <tbody>
-                {p.form.thresholds.map((t, i) => {
-                  const timing = bandTimingLabel(t.bandLabel);
-                  const isDefault = t.bandLabel === "default";
-                  const isPostWindow = t.bandLabel === "post_window";
-                  const expectedId = t.expectedInteractionId ?? null;
-                  return (
-                    <tr key={t.bandLabel} className={`border-t ${isDefault ? "bg-primary/5" : ""}`} data-testid={`row-threshold-${t.bandLabel}`}>
-                      <td className="px-3 py-2 align-top">
-                        <div className="flex items-center gap-2">
-                          <div className="font-medium">{t.bandDisplayName || timing.label}</div>
-                          {isDefault && (
-                            <Button size="icon" variant="ghost" className="h-5 w-5"
-                              onClick={() => p.removeBand(i)}
-                              data-testid={`button-remove-band-${t.bandLabel}`}>
-                              <X className="h-3 w-3 text-destructive" />
-                            </Button>
-                          )}
-                        </div>
-                        <div className="text-xs text-muted-foreground">{timing.example}</div>
-                        {!isPostWindow && (
-                          <div className="mt-2">
-                            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Typically</Label>
-                            <Select
-                              value={expectedId === null ? "__none__" : String(expectedId)}
-                              onValueChange={(v) => p.updateThreshold(i, { expectedInteractionId: v === "__none__" ? null : parseInt(v) })}
-                            >
-                              <SelectTrigger className="h-7 text-xs mt-0.5" data-testid={`select-band-expected-interaction-${t.bandLabel}`}>
-                                <SelectValue placeholder="No hint" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__none__"><span className="text-muted-foreground italic">No hint</span></SelectItem>
-                                {p.interactions.filter(x => x.isActive && x.interactionType !== "continuous").map(x => (
-                                  <SelectItem key={x.id} value={String(x.id)}>{x.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <p className="text-[10px] text-muted-foreground mt-0.5 italic">Display only — does not affect routing.</p>
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 align-top">
-                        {isDefault ? (
-                          <Badge variant="outline" className="text-[11px]">Any days · fallback</Badge>
-                        ) : (
-                          <>
-                            <div className="flex items-center gap-1.5">
-                              <Input type="number" placeholder="min" value={t.daysRemainingMin ?? ""}
-                                onChange={e => p.updateThreshold(i, { daysRemainingMin: e.target.value === "" ? null : parseInt(e.target.value) })}
-                                className="w-16 h-7 text-xs" data-testid={`input-threshold-min-${t.bandLabel}`} />
-                              <span className="text-muted-foreground">/</span>
-                              <Input type="number" placeholder="max" value={t.daysRemainingMax ?? ""}
-                                onChange={e => p.updateThreshold(i, { daysRemainingMax: e.target.value === "" ? null : parseInt(e.target.value) })}
-                                className="w-16 h-7 text-xs" data-testid={`input-threshold-max-${t.bandLabel}`} />
-                            </div>
-                            <div className="text-[10px] text-muted-foreground mt-1">{bandRangeLabel(t)}</div>
-                          </>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 align-top">
-                        {t.bandLabel === "post_window" ? (
-                          <div className="space-y-1">
-                            <Badge className="bg-green-100 text-green-800 border-green-300 text-xs">
-                              {p.form.stages.find(s => s.id === p.form.achievedStageId)?.displayName || "achieved stage"}
-                            </Badge>
-                            <p className="text-[10px] text-muted-foreground italic">Auto-locked to the achieved stage. Past target date, only the objective being achieved counts as on-track.</p>
-                          </div>
-                        ) : (
-                          <div className="flex flex-wrap gap-1.5">
-                            {p.form.stages.filter(s => s.order > 0).sort((a, b) => a.order - b.order).map(s => {
-                              const active = t.onTrackStageIds.includes(s.id);
-                              return (
-                                <button key={s.id} type="button"
-                                  onClick={() => p.toggleThresholdStage(i, s.id)}
-                                  className={`text-xs px-2 py-1 rounded-md border transition-colors ${active ? "bg-primary text-primary-foreground border-primary" : "bg-background text-muted-foreground border-border hover:bg-muted"}`}
-                                  data-testid={`button-threshold-stage-${t.bandLabel}-${s.id}`}>
-                                  {s.displayName}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 align-top">
-                        <Input value={t.satisfiedLabel} onChange={e => p.updateThreshold(i, { satisfiedLabel: e.target.value })}
-                          className="h-7 text-xs w-28" data-testid={`input-threshold-satisfied-${t.bandLabel}`} />
-                      </td>
-                      <td className="px-3 py-2 align-top">
-                        <Input value={t.unsatisfiedLabel} onChange={e => p.updateThreshold(i, { unsatisfiedLabel: e.target.value })}
-                          className="h-7 text-xs w-28" data-testid={`input-threshold-unsatisfied-${t.bandLabel}`} />
-                      </td>
+          {(() => {
+            const progress = p.form.stages.filter(s => s.order > 0).sort((a, b) => a.order - b.order);
+            return (
+              <div className="border rounded-md overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/40">
+                    <tr className="text-left text-xs text-muted-foreground uppercase tracking-wider">
+                      <th className="px-3 py-2 font-medium">Band</th>
+                      <th className="px-3 py-2 font-medium">Days remaining (min / max)</th>
+                      {progress.map(s => (
+                        <th key={s.id} className="px-3 py-2 font-medium">{s.displayName}</th>
+                      ))}
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody>
+                    {p.form.thresholds.map((t, i) => {
+                      const timing = bandTimingLabel(t.bandLabel);
+                      const isDefault = t.bandLabel === "default";
+                      const isPostWindow = t.bandLabel === "post_window";
+                      const expectedId = t.expectedInteractionId ?? null;
+                      return (
+                        <tr key={t.bandLabel} className={`border-t ${isDefault ? "bg-primary/5" : ""}`} data-testid={`row-threshold-${t.bandLabel}`}>
+                          <td className="px-3 py-2 align-top">
+                            <div className="flex items-center gap-2">
+                              <div className="font-medium">{t.bandDisplayName || timing.label}</div>
+                              {isDefault && (
+                                <Button size="icon" variant="ghost" className="h-5 w-5"
+                                  onClick={() => p.removeBand(i)}
+                                  data-testid={`button-remove-band-${t.bandLabel}`}>
+                                  <X className="h-3 w-3 text-destructive" />
+                                </Button>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground">{timing.example}</div>
+                            {!isPostWindow && (
+                              <div className="mt-2">
+                                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Typically</Label>
+                                <Select
+                                  value={expectedId === null ? "__none__" : String(expectedId)}
+                                  onValueChange={(v) => p.updateThreshold(i, { expectedInteractionId: v === "__none__" ? null : parseInt(v) })}
+                                >
+                                  <SelectTrigger className="h-7 text-xs mt-0.5" data-testid={`select-band-expected-interaction-${t.bandLabel}`}>
+                                    <SelectValue placeholder="No hint" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__none__"><span className="text-muted-foreground italic">No hint</span></SelectItem>
+                                    {p.interactions.filter(x => x.isActive && x.interactionType !== "continuous").map(x => (
+                                      <SelectItem key={x.id} value={String(x.id)}>{x.name}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <p className="text-[10px] text-muted-foreground mt-0.5 italic">Display only — does not affect routing.</p>
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 align-top">
+                            {isDefault ? (
+                              <Badge variant="outline" className="text-[11px]">Any days · fallback</Badge>
+                            ) : (
+                              <>
+                                <div className="flex items-center gap-1.5">
+                                  <Input type="number" placeholder="min" value={t.daysRemainingMin ?? ""}
+                                    onChange={e => p.updateThreshold(i, { daysRemainingMin: e.target.value === "" ? null : parseInt(e.target.value) })}
+                                    className="w-16 h-7 text-xs" data-testid={`input-threshold-min-${t.bandLabel}`} />
+                                  <span className="text-muted-foreground">/</span>
+                                  <Input type="number" placeholder="max" value={t.daysRemainingMax ?? ""}
+                                    onChange={e => p.updateThreshold(i, { daysRemainingMax: e.target.value === "" ? null : parseInt(e.target.value) })}
+                                    className="w-16 h-7 text-xs" data-testid={`input-threshold-max-${t.bandLabel}`} />
+                                </div>
+                                <div className="text-[10px] text-muted-foreground mt-1">{bandRangeLabel(t)}</div>
+                              </>
+                            )}
+                          </td>
+                          {progress.map(s => {
+                            const current = getCellOutcome(t, s.id);
+                            return (
+                              <td key={s.id} className="px-2 py-2 align-top">
+                                <Select
+                                  value={current}
+                                  onValueChange={(v) => p.setThresholdCellOutcome(i, s.id, v as Outcome)}
+                                >
+                                  <SelectTrigger
+                                    className={`h-8 text-xs px-2 ${OUTCOME_CHIP[current]} border`}
+                                    data-testid={`select-threshold-outcome-${t.bandLabel}-${s.id}`}
+                                  >
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {OUTCOME_OPTIONS.map(o => (
+                                      <SelectItem key={o.value} value={o.value}>
+                                        <span className={`inline-block px-1.5 rounded ${o.chip} text-xs mr-1`}>●</span>
+                                        {o.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
+          {p.form.stages.filter(s => s.order > 0).length === 0 && (
+            <p className="text-xs text-muted-foreground italic">Add at least one progress stage above to configure outcome cells.</p>
+          )}
           {!p.form.thresholds.some(t => t.bandLabel === "default") && (
             <div className="flex items-center gap-2 pt-1">
               <Button size="sm" variant="outline" onClick={p.addDefaultBand} data-testid="button-add-default-band">

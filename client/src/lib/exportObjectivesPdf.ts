@@ -21,15 +21,28 @@ interface Stage {
   order: number;
 }
 
+type Outcome = "achieved" | "on_track" | "not_achieved" | "na" | "not_discussed";
+
+interface StageOutcome {
+  stageId: string;
+  outcome: Outcome;
+}
+
 interface Threshold {
   bandLabel: string;
   bandDisplayName: string;
   daysRemainingMin: number | null;
   daysRemainingMax: number | null;
-  onTrackStageIds: string[];
-  satisfiedLabel: string;
-  unsatisfiedLabel: string;
+  stageOutcomes: StageOutcome[];
 }
+
+const OUTCOME_LABEL_PDF: Record<Outcome, string> = {
+  achieved: "Achieved",
+  on_track: "On track",
+  not_achieved: "Not achieved",
+  na: "N/A",
+  not_discussed: "Not discussed",
+};
 
 interface StageMapping {
   extractedValue: string;
@@ -78,7 +91,6 @@ export interface ObjectiveForPdf {
   interactionContextKey: string;
   windowDays: number;
   stages: Stage[];
-  achievedStageId: string;
   thresholds: Threshold[];
   observationName: string;
   stageMappings: StageMapping[];
@@ -208,14 +220,15 @@ export function exportObjectivesPdf(
     y = ensureSpace(doc, y, 60);
     y = sectionHeading(doc, "Stages", y);
     const sorted = [...obj.stages].sort((a, b) => a.order - b.order);
-    const achieved = obj.stages.find(s => s.id === obj.achievedStageId);
+    const progressStages = sorted.filter(s => s.order > 0);
+    const lastProgressId = progressStages[progressStages.length - 1]?.id || "";
     autoTable(doc, {
       startY: y,
       margin: { left: 40, right: 40 },
       head: [["#", "Display name", "Snake_case name", "Sublabel", "Mapped values", "Role"]],
       body: sorted.map(s => {
         const mapped = obj.stageMappings.filter(m => m.stageId === s.id).map(m => m.extractedValue);
-        const role = s.order === 0 ? "Unresolved" : s.id === obj.achievedStageId ? "Achieved" : "Progress";
+        const role = s.order === 0 ? "Unresolved" : s.id === lastProgressId ? "Final" : "Progress";
         return [
           String(s.order),
           s.displayName,
@@ -234,7 +247,7 @@ export function exportObjectivesPdf(
           if (val === "Unresolved") {
             data.cell.styles.textColor = BRAND.unresolved;
             data.cell.styles.fontStyle = "bold";
-          } else if (val === "Achieved") {
+          } else if (val === "Final") {
             data.cell.styles.textColor = BRAND.accent;
             data.cell.styles.fontStyle = "bold";
           }
@@ -242,13 +255,6 @@ export function exportObjectivesPdf(
       },
     });
     y = (doc as any).lastAutoTable.finalY + 10;
-    if (achieved) {
-      doc.setFont("helvetica", "italic");
-      doc.setFontSize(9);
-      doc.setTextColor(...BRAND.muted);
-      doc.text(`Objective achieved when stage = "${achieved.displayName}"`, 40, y);
-      y += 14;
-    }
 
     // Observation
     if (obj.observationName || obj.observationTopicIds.length) {
@@ -261,22 +267,23 @@ export function exportObjectivesPdf(
       ], y);
     }
 
-    // Thresholds
-    if (obj.thresholds.length) {
+    // Outcome mapping (band × stage)
+    if (obj.thresholds.length && progressStages.length) {
       y = ensureSpace(doc, y, 60);
-      y = sectionHeading(doc, "On-track thresholds", y);
-      const stageById = new Map(obj.stages.map(s => [s.id, s]));
+      y = sectionHeading(doc, "Outcome mapping (band × stage)", y);
+      const head = [["Band", "Window position", ...progressStages.map(s => s.displayName)]];
+      const body = obj.thresholds.map(t => {
+        const cells = progressStages.map(s => {
+          const o = (t.stageOutcomes || []).find(m => m.stageId === s.id)?.outcome || "na";
+          return OUTCOME_LABEL_PDF[o];
+        });
+        return [t.bandDisplayName || t.bandLabel, fmtDays(t), ...cells];
+      });
       autoTable(doc, {
         startY: y,
         margin: { left: 40, right: 40 },
-        head: [["Band", "Window position", "Stages on track", "Satisfied label", "Unsatisfied label"]],
-        body: obj.thresholds.map(t => [
-          t.bandDisplayName || t.bandLabel,
-          fmtDays(t),
-          t.onTrackStageIds.map(id => stageById.get(id)?.displayName || id).join(", ") || "—",
-          t.satisfiedLabel || "—",
-          t.unsatisfiedLabel || "—",
-        ]),
+        head,
+        body,
         styles: { fontSize: 8.5, cellPadding: 4, textColor: BRAND.ink, lineColor: BRAND.border, lineWidth: 0.5 },
         headStyles: { fillColor: BRAND.primary, textColor: [255, 255, 255], fontStyle: "bold" },
         alternateRowStyles: { fillColor: [248, 250, 252] },

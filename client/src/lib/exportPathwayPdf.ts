@@ -479,11 +479,15 @@ export async function exportPathwayPdf(
           startY: y,
           margin: { top: TOP_AFTER_HEADER, left: 50, right: 40 },
           head: [["#", "Stage", "Role", "Mapped values"]],
-          body: stages.map((s: any) => {
-            const mapped = (o.stageMappings || []).filter((m: any) => m.stageId === s.id).map((m: any) => m.extractedValue);
-            const role = s.order === 0 ? "Unresolved" : s.id === o.achievedStageId ? "Achieved" : "Progress";
-            return [String(s.order), s.displayName, role, mapped.length ? mapped.join(", ") : "—"];
-          }),
+          body: (() => {
+            const progress = stages.filter((s: any) => s.order > 0);
+            const lastId = progress[progress.length - 1]?.id || "";
+            return stages.map((s: any) => {
+              const mapped = (o.stageMappings || []).filter((m: any) => m.stageId === s.id).map((m: any) => m.extractedValue);
+              const role = s.order === 0 ? "Unresolved" : s.id === lastId ? "Final" : "Progress";
+              return [String(s.order), s.displayName, role, mapped.length ? mapped.join(", ") : "—"];
+            });
+          })(),
           styles: { fontSize: 8.5, cellPadding: 3, textColor: BRAND.ink, lineColor: BRAND.border, lineWidth: 0.5 },
           headStyles: { fillColor: [240, 244, 248], textColor: BRAND.ink, fontStyle: "bold" },
           alternateRowStyles: { fillColor: [248, 250, 252] },

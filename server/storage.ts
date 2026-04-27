@@ -629,7 +629,6 @@ function rowToActivationObjective(row: any): ActivationObjective {
       ? Number(row.window_days.value ?? row.window_days)
       : Number(row.window_days),
     stages,
-    achievedStageId: row.achieved_stage_id || "",
     thresholds,
     observationName: row.observation_name || "",
     stageMappings,
@@ -1553,7 +1552,7 @@ export class BigQueryStorage implements IStorage {
       interaction_context_key: data.interactionContextKey || "interaction_key",
       window_days: data.windowDays,
       stages: JSON.stringify(data.stages || []),
-      achieved_stage_id: data.achievedStageId || "",
+      achieved_stage_id: "",
       thresholds: JSON.stringify(data.thresholds || []),
       observation_name: data.observationName || "",
       extracted_enum_values: "[]",
@@ -1592,7 +1591,6 @@ export class BigQueryStorage implements IStorage {
     if (data.interactionContextKey !== undefined) { setClauses.push("interaction_context_key = @interactionContextKey"); params.interactionContextKey = data.interactionContextKey; }
     if (data.windowDays !== undefined) { setClauses.push("window_days = @windowDays"); params.windowDays = data.windowDays; }
     if (data.stages !== undefined) { setClauses.push("stages = @stages"); params.stages = JSON.stringify(data.stages); }
-    if (data.achievedStageId !== undefined) { setClauses.push("achieved_stage_id = @achievedStageId"); params.achievedStageId = data.achievedStageId; }
     if (data.thresholds !== undefined) { setClauses.push("thresholds = @thresholds"); params.thresholds = JSON.stringify(data.thresholds); }
     if (data.observationName !== undefined) { setClauses.push("observation_name = @observationName"); params.observationName = data.observationName; }
     if (data.stageMappings !== undefined) { setClauses.push("stage_mappings = @stageMappings"); params.stageMappings = JSON.stringify(data.stageMappings); }

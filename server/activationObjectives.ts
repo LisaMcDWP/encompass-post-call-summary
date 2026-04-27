@@ -4,12 +4,26 @@ import type {
   ActivationObjectiveThreshold,
   ActivationObjectiveStage,
   ActivationInteraction,
+  ActivationOutcome,
   CallActivationObjectiveResult,
   CallActivationObjectiveObservation,
   Observation,
 } from "@shared/schema";
 import { SYSTEM_STAGE_NOT_DISCUSSED_ID, SYSTEM_STAGE_EXCLUDED_ID } from "@shared/schema";
 import type { ActivationObjectiveExtraction } from "./gemini";
+
+function outcomeToOnTrack(outcome: ActivationOutcome): boolean | null {
+  switch (outcome) {
+    case "achieved":
+    case "on_track":
+      return true;
+    case "not_achieved":
+      return false;
+    case "na":
+    case "not_discussed":
+      return null;
+  }
+}
 
 function diffDaysISO(fromDate: string, toDate: string): number | null {
   const a = new Date(fromDate);
@@ -197,13 +211,16 @@ export function computeActivationObjectiveResults(args: {
       // out of this objective's denominator for reporting.
       onTrack = null;
       onTrackStatus = "excluded";
-    } else if (config?.canResolveObjective && currentStage && obj.achievedStageId && currentStage.id === obj.achievedStageId) {
-      onTrack = true;
-      onTrackStatus = "achieved";
     } else if (band && currentStage) {
-      const inOnTrackSet = (band.onTrackStageIds || []).includes(currentStage.id);
-      onTrack = inOnTrackSet;
-      onTrackStatus = inOnTrackSet ? (band.satisfiedLabel || "On track") : (band.unsatisfiedLabel || "At risk");
+      // Pure (band × stage) lookup. Missing mapping defaults to "na".
+      const mapping = (band.stageOutcomes || []).find((m) => m.stageId === currentStage!.id);
+      const outcome: ActivationOutcome = mapping?.outcome || "na";
+      // canResolveObjective gates the "achieved" outcome only — any objective
+      // that isn't allowed to resolve here downgrades "achieved" to "on_track".
+      const finalOutcome: ActivationOutcome =
+        outcome === "achieved" && config?.canResolveObjective === false ? "on_track" : outcome;
+      onTrack = outcomeToOnTrack(finalOutcome);
+      onTrackStatus = finalOutcome;
     } else if (currentStage) {
       onTrack = null;
       onTrackStatus = "no_band_match";
