@@ -9,7 +9,6 @@ const QA_PAIRS_TABLE_ID = "call_qa_pairs";
 const BARRIERS_TABLE_ID = "barriers";
 const BATCH_PROCESSING_TABLE_ID = "batch_processing";
 const CALL_QA_TABLE_ID = "call_qa_results";
-const KNOWN_CONTEXT_TABLE_ID = "known_context_details";
 const CALL_DISPOSITIONS_TABLE_ID = "call_dispositions";
 const CALL_REVIEWS_TABLE_ID = "call_reviews";
 const CALL_REVIEW_STATUSES_TABLE_ID = "call_review_statuses";
@@ -1134,87 +1133,6 @@ export async function getCallReviewList(limit = 200, targetProjectId?: string, o
   } catch (error: any) {
     console.error("Failed to get call review list:", error.message);
     throw error;
-  }
-}
-
-export async function ensureKnownContextTable(targetProjectId?: string): Promise<void> {
-  try {
-    const dataset = await ensureDataset(targetProjectId);
-    const table = dataset.table(KNOWN_CONTEXT_TABLE_ID);
-    const [exists] = await table.exists();
-    if (!exists) {
-      await dataset.createTable(KNOWN_CONTEXT_TABLE_ID, {
-        schema: {
-          fields: [
-            { name: "care_flow_id", type: "STRING", mode: "REQUIRED" },
-            { name: "parameter_name", type: "STRING", mode: "REQUIRED" },
-            { name: "display_name", type: "STRING", mode: "NULLABLE" },
-            { name: "value_type", type: "STRING", mode: "REQUIRED" },
-            { name: "value", type: "STRING", mode: "NULLABLE" },
-            { name: "active_ind", type: "BOOLEAN", mode: "REQUIRED" },
-            { name: "created_at", type: "TIMESTAMP", mode: "REQUIRED" },
-            { name: "updated_at", type: "TIMESTAMP", mode: "NULLABLE" },
-          ],
-        },
-      });
-      console.log(`Created known_context_details table in project ${resolveProjectId(targetProjectId)}`);
-    }
-  } catch (error: any) {
-    console.error("Failed to ensure known_context_details table:", error.message);
-  }
-}
-
-export interface KnownContextRow {
-  care_flow_id: string;
-  parameter_name: string;
-  display_name?: string;
-  value_type: "text" | "enum" | "boolean";
-  value: string | null;
-  active_ind?: boolean;
-}
-
-export async function insertKnownContextRows(rows: KnownContextRow[], targetProjectId?: string): Promise<void> {
-  try {
-    if (!rows || !Array.isArray(rows) || rows.length === 0) return;
-    await ensureKnownContextTable(targetProjectId);
-    const client = getOutputBigQueryClient(targetProjectId);
-    const now = new Date().toISOString();
-    const insertRows = rows.map((r) => ({
-      care_flow_id: r.care_flow_id,
-      parameter_name: r.parameter_name,
-      display_name: r.display_name || r.parameter_name,
-      value_type: r.value_type,
-      value: r.value,
-      active_ind: r.active_ind !== undefined ? r.active_ind : true,
-      created_at: now,
-      updated_at: null,
-    }));
-    await client
-      .dataset(DATASET_ID)
-      .table(KNOWN_CONTEXT_TABLE_ID)
-      .insert(insertRows);
-    console.log(`BigQuery known_context_details inserted: ${insertRows.length} rows`);
-  } catch (error: any) {
-    console.error("Failed to insert known_context_details:", error.message);
-    if (error.errors) {
-      console.error("BigQuery errors:", JSON.stringify(error.errors));
-    }
-  }
-}
-
-export async function getKnownContextForCareFlow(careFlowId: string, activeOnly = true, targetProjectId?: string): Promise<any[]> {
-  try {
-    const client = getOutputBigQueryClient(targetProjectId);
-    let query = `SELECT * FROM \`${client.projectId}.${DATASET_ID}.${KNOWN_CONTEXT_TABLE_ID}\` WHERE care_flow_id = @careFlowId`;
-    if (activeOnly) {
-      query += ` AND active_ind = TRUE`;
-    }
-    query += ` ORDER BY parameter_name`;
-    const [rows] = await client.query({ query, params: { careFlowId } });
-    return rows;
-  } catch (error: any) {
-    console.error("Failed to get known context details:", error.message);
-    return [];
   }
 }
 

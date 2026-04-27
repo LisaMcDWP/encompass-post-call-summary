@@ -346,7 +346,7 @@ gcloud builds submit --config cloudbuild.yaml`}
               </li>
               <li>
                 <strong className="text-foreground">Per-Client GCP Project (output isolation):</strong>
-                <p className="text-muted-foreground text-sm ml-5">Set the <code className="text-primary">gcp_project_id</code> field on the client/pathway record to point to the client's own GCP project. All output data (call_info, call_observations, call_qa_pairs, barriers, call_qa_results, call_dispositions, call_reviews, call_review_statuses, batch_processing, known_context_details) is written to that project's BigQuery <code className="text-primary">call_information</code> dataset. Config tables (observations, context_parameters, etc.) always remain in the central project. The central service account must have BigQuery Data Editor + Job User roles on the client's project.</p>
+                <p className="text-muted-foreground text-sm ml-5">Set the <code className="text-primary">gcp_project_id</code> field on the client/pathway record to point to the client's own GCP project. All output data (call_info, call_observations, call_qa_pairs, barriers, call_qa_results, call_dispositions, call_reviews, call_review_statuses, batch_processing) is written to that project's BigQuery <code className="text-primary">call_information</code> dataset. Config tables (observations, context_parameters, etc.) always remain in the central project. The central service account must have BigQuery Data Editor + Job User roles on the client's project.</p>
               </li>
               <li>
                 <strong className="text-foreground">Per-Client API Key:</strong>
@@ -631,16 +631,6 @@ gcloud builds submit --config cloudbuild.yaml`}
                 </div>
                 <div className="px-4 py-3 text-sm">
                   <p className="text-muted-foreground"><code className="text-primary">batch_id</code>, <code className="text-primary">bland_call_id</code>, <code className="text-primary">transcript</code>, <code className="text-primary">source_type</code>, <code className="text-primary">care_flow_id</code>, <code className="text-primary">created_at</code>, <code className="text-primary">status</code> (pending | processing | completed | failed), <code className="text-primary">error_message</code>, <code className="text-primary">result_call_id</code>, <code className="text-primary">processed_at</code>, <code className="text-primary">batch_label</code>, <code className="text-primary">context_values</code> (JSON)</p>
-                </div>
-              </div>
-
-              <div className="border border-border/50 rounded-lg overflow-hidden">
-                <div className="bg-primary/5 px-4 py-2 border-b border-border/50">
-                  <p className="text-primary font-mono text-sm font-semibold">known_context_details</p>
-                  <p className="text-muted-foreground text-xs">Cached Awell context data per care flow</p>
-                </div>
-                <div className="px-4 py-3 text-sm">
-                  <p className="text-muted-foreground"><code className="text-primary">care_flow_id</code>, <code className="text-primary">parameter_name</code>, <code className="text-primary">display_name</code>, <code className="text-primary">value</code>, <code className="text-primary">value_type</code>, <code className="text-primary">active_ind</code>, <code className="text-primary">created_at</code>, <code className="text-primary">updated_at</code></p>
                 </div>
               </div>
 

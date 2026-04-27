@@ -624,7 +624,6 @@ function exportReferencePdf() {
   bulletPoint("disposition_details — Disposition detail taxonomy");
   bulletPoint("call_review_items — Review item configuration");
   bulletPoint("client_pathway — Client/pathway definitions with gcp_project_id and secret_key");
-  bulletPoint("known_context_details — Known context per care flow");
   bulletPoint("settings — Key-value settings store");
 
   const totalPages = doc.getNumberOfPages();
@@ -2477,7 +2476,6 @@ gcloud builds submit --config cloudbuild.yaml`}
                   <li><code className="text-primary">observations</code> — Observation configuration (id, name, display_name, domain, value_type, value, is_active, prompt_guidance)</li>
                   <li><code className="text-primary">context_parameters</code> — Context parameter definitions (id, name, display_name, data_type, enum_values, is_active)</li>
                   <li><code className="text-primary">call_qa_prompts</code> — Call QA prompt configuration (id, name, display_name, prompt_text, response_type, response_options, is_active, display_order)</li>
-                  <li><code className="text-primary">known_context_details</code> — Known context per care flow (care_flow_id, parameter_name, display_name, value, value_type, active_ind, created_at, updated_at)</li>
                   <li><code className="text-primary">settings</code> — Key-value settings store (summary_instruction, observations_prompt_guidance, barriers_prompt_guidance)</li>
                 </ul>
               </div>
