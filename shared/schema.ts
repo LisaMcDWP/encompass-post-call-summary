@@ -208,6 +208,29 @@ export const activationObjectiveStageSchema = z.object({
 });
 export type ActivationObjectiveStage = z.infer<typeof activationObjectiveStageSchema>;
 
+// System-defined baseline stages (order === 0). Auto-injected on read by the
+// storage layer and stripped on write so they cannot be edited or removed.
+// "unresolved" = topic was discussed but the answer was unclear / deferred.
+// "not_discussed" = topic was never raised in the conversation.
+export const SYSTEM_STAGE_UNRESOLVED_ID = "stage_unresolved";
+export const SYSTEM_STAGE_UNRESOLVED_VALUE = "Unresolved";
+export const SYSTEM_STAGE_NOT_DISCUSSED_ID = "stage_not_discussed";
+export const SYSTEM_STAGE_NOT_DISCUSSED_VALUE = "Not discussed";
+export const SYSTEM_STAGE_IDS: readonly string[] = [
+  SYSTEM_STAGE_UNRESOLVED_ID,
+  SYSTEM_STAGE_NOT_DISCUSSED_ID,
+];
+export const isSystemStageId = (id: string | null | undefined): boolean =>
+  !!id && SYSTEM_STAGE_IDS.includes(id);
+
+export const SYSTEM_STAGE_NOT_DISCUSSED: ActivationObjectiveStage = {
+  id: SYSTEM_STAGE_NOT_DISCUSSED_ID,
+  name: "not_discussed",
+  displayName: SYSTEM_STAGE_NOT_DISCUSSED_VALUE,
+  description: "topic was not raised in the conversation",
+  order: 0,
+};
+
 export const activationObjectiveThresholdSchema = z.object({
   bandLabel: z.enum(["early", "near_window", "at_window", "post_window", "default"]),
   bandDisplayName: z.string().default(""),

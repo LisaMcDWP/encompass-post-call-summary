@@ -7,7 +7,72 @@ import type {
   ActivationObjective, InsertActivationObjective,
   ActivationObjectiveStage, ActivationObjectiveThreshold, ActivationObjectiveInteractionConfig,
   ActivationInteraction, InsertActivationInteraction,
+  ObservationEnumValue,
 } from "@shared/schema";
+import {
+  SYSTEM_STAGE_NOT_DISCUSSED,
+  SYSTEM_STAGE_NOT_DISCUSSED_ID,
+  SYSTEM_STAGE_NOT_DISCUSSED_VALUE,
+  SYSTEM_STAGE_IDS,
+} from "@shared/schema";
+
+// Match any case/whitespace variant of "not discussed" — covers legacy data
+// like "Not Discussed", " not discussed ", etc.
+const NORM_NOT_DISCUSSED = SYSTEM_STAGE_NOT_DISCUSSED_VALUE.trim().toLowerCase();
+const isNotDiscussedLabel = (s: string | null | undefined): boolean =>
+  !!s && s.trim().toLowerCase() === NORM_NOT_DISCUSSED;
+
+// Auto-inject the "Not discussed" baseline stage on read so every objective
+// has it without requiring per-objective config. Idempotent.
+function injectSystemStages(obj: ActivationObjective): ActivationObjective {
+  const stages = Array.isArray(obj.stages) ? [...obj.stages] : [];
+  if (!stages.some((s) => s.id === SYSTEM_STAGE_NOT_DISCUSSED_ID)) {
+    // Place after stage_unresolved (if present), otherwise at the start.
+    const insertAt = stages.findIndex((s) => s.id === "stage_unresolved");
+    if (insertAt >= 0) stages.splice(insertAt + 1, 0, { ...SYSTEM_STAGE_NOT_DISCUSSED });
+    else stages.unshift({ ...SYSTEM_STAGE_NOT_DISCUSSED });
+  }
+
+  // Ensure exactly one canonical "Not discussed" enum value; drop any
+  // case/whitespace variants so the model sees one entry.
+  const enumValues: ObservationEnumValue[] = (Array.isArray(obj.extractedEnumValues) ? obj.extractedEnumValues : [])
+    .filter((v) => v && !isNotDiscussedLabel(v.label));
+  enumValues.push({ label: SYSTEM_STAGE_NOT_DISCUSSED_VALUE, color: "GRAY", promptHint: "" });
+
+  // Ensure stageMappings always routes any "not discussed" variant to the
+  // system stage, overriding any stale legacy mapping. Strip ALL variants
+  // first, then push canonical — so nothing can shadow it on lookup.
+  const mappings = (Array.isArray(obj.stageMappings) ? obj.stageMappings : [])
+    .filter((m) => m && !isNotDiscussedLabel(m.extractedValue));
+  mappings.push({
+    extractedValue: SYSTEM_STAGE_NOT_DISCUSSED_VALUE,
+    stageId: SYSTEM_STAGE_NOT_DISCUSSED_ID,
+  });
+
+  return { ...obj, stages, extractedEnumValues: enumValues, stageMappings: mappings };
+}
+
+// Strip system-managed stage + mapping from write payloads so the canonical
+// definitions live only in one place (re-injected on read). Strips ALL
+// case/whitespace variants of "not discussed" too, so legacy variant rows
+// in BQ get cleaned up the next time the user saves the objective.
+function stripSystemStages<T extends Partial<InsertActivationObjective>>(data: T): T {
+  const out: any = { ...data };
+  if (Array.isArray(out.stages)) {
+    out.stages = out.stages.filter((s: ActivationObjectiveStage) => s.id !== SYSTEM_STAGE_NOT_DISCUSSED_ID);
+  }
+  if (Array.isArray(out.stageMappings)) {
+    out.stageMappings = out.stageMappings.filter(
+      (m: { extractedValue: string }) => !isNotDiscussedLabel(m.extractedValue),
+    );
+  }
+  if (Array.isArray(out.extractedEnumValues)) {
+    out.extractedEnumValues = out.extractedEnumValues.filter(
+      (v: ObservationEnumValue) => v && !isNotDiscussedLabel(v.label),
+    );
+  }
+  return out as T;
+}
 
 const DATASET_ID = "call_information";
 const TABLE_ID = "observations";
@@ -1434,7 +1499,7 @@ export class BigQueryStorage implements IStorage {
       query: `SELECT * FROM ${table} WHERE client_pathway_id = @cpId ORDER BY display_order ASC, id ASC`,
       params: { cpId: clientPathwayId },
     });
-    return rows.map(rowToActivationObjective);
+    return rows.map(rowToActivationObjective).map(injectSystemStages);
   }
 
   async getActiveActivationObjectives(clientPathwayId: number): Promise<ActivationObjective[]> {
@@ -1445,7 +1510,7 @@ export class BigQueryStorage implements IStorage {
       query: `SELECT * FROM ${table} WHERE client_pathway_id = @cpId AND is_active = TRUE ORDER BY display_order ASC, id ASC`,
       params: { cpId: clientPathwayId },
     });
-    return rows.map(rowToActivationObjective);
+    return rows.map(rowToActivationObjective).map(injectSystemStages);
   }
 
   async getActivationObjective(id: number, clientPathwayId?: number): Promise<ActivationObjective | undefined> {
@@ -1456,7 +1521,7 @@ export class BigQueryStorage implements IStorage {
     const params: Record<string, any> = { id };
     if (clientPathwayId != null) params.cpId = clientPathwayId;
     const [rows] = await client.query({ query: `SELECT * FROM ${table} WHERE id = @id${cpClause}`, params });
-    return rows.length > 0 ? rowToActivationObjective(rows[0]) : undefined;
+    return rows.length > 0 ? injectSystemStages(rowToActivationObjective(rows[0])) : undefined;
   }
 
   async createActivationObjective(clientPathwayId: number, data: InsertActivationObjective): Promise<ActivationObjective> {
@@ -1464,6 +1529,7 @@ export class BigQueryStorage implements IStorage {
     const client = getBigQueryClient();
     const table = this.getActivationObjectivesTable();
     const id = await this.getNextIdForTable(table);
+    data = stripSystemStages(data);
 
     const row = {
       id,
@@ -1502,6 +1568,7 @@ export class BigQueryStorage implements IStorage {
     const table = this.getActivationObjectivesTable();
     const existing = await this.getActivationObjective(id, clientPathwayId);
     if (!existing) return undefined;
+    data = stripSystemStages(data);
 
     const setClauses: string[] = [];
     const params: Record<string, any> = { id };

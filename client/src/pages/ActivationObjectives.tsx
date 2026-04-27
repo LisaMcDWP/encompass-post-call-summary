@@ -1927,6 +1927,29 @@ function ObjectiveEditor(p: EditorProps) {
             );
           })()}
 
+          {/* System stage: "Not discussed" — auto-injected by the server on
+              every objective. Shown read-only here so users know it exists;
+              cannot be renamed, removed, or remapped. */}
+          {(() => {
+            const sys = p.form.stages.find(s => s.id === "stage_not_discussed");
+            if (!sys) return null;
+            return (
+              <div className="rounded-md border-2 border-dashed border-muted-foreground/30 bg-muted/20 p-2 flex items-center gap-2" data-testid="row-stage-not-discussed">
+                <div className="w-12 shrink-0" />
+                <div className="w-7 h-7 rounded-full border-2 border-dashed border-muted-foreground/40 flex items-center justify-center text-xs font-semibold text-muted-foreground bg-background">0</div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">{sys.displayName}</span>
+                    <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted text-muted-foreground border">System</span>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground italic mt-0.5">
+                    Built-in baseline stage on every objective. Captures calls where the topic was never raised — distinct from "Unresolved" (raised but unclear). The model will return "Not discussed" when the topic isn't mentioned, and it auto-routes here.
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Progress stages (order > 0) */}
           <div className="space-y-2">
             {p.form.stages.map((s, absIdx) => {
