@@ -123,7 +123,7 @@ export default function Reference2() {
                   <p className="text-primary font-mono text-sm">gcp_project_id</p>
                   <Badge variant="outline" className="text-[10px]">optional</Badge>
                 </div>
-                <p className="text-muted-foreground text-sm mt-1">The Google Cloud project ID for this client's output data. When set, all output tables (call_info, call_observations, etc.) are written to this project's BigQuery. When empty, output falls back to the central project. Config tables always stay in the central project regardless.</p>
+                <p className="text-muted-foreground text-sm mt-1">The Google Cloud project ID for this client's output data. When set, all output tables (interaction_info, interaction_observations, etc.) are written to this project's BigQuery. When empty, output falls back to the central project. Config tables always stay in the central project regardless.</p>
               </div>
               <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
                 <div className="flex items-center gap-2">
@@ -219,7 +219,7 @@ export default function Reference2() {
               <p className="text-foreground"><span className="text-primary font-semibold">responseOptions</span> — For enum type: array of allowed response values</p>
               <p className="text-foreground"><span className="text-primary font-semibold">isActive</span> — Whether included in analysis</p>
             </div>
-            <p className="text-muted-foreground text-xs mt-2">BigQuery table: <code className="text-primary">call_qa_prompts</code> | UI: /call-qa</p>
+            <p className="text-muted-foreground text-xs mt-2">BigQuery table: <code className="text-primary">interaction_qa_prompts</code> | UI: /call-qa</p>
           </div>
 
           <Separator />
@@ -263,7 +263,7 @@ export default function Reference2() {
               <p className="text-foreground"><span className="text-primary font-semibold">isActive</span> — Whether shown in the review checklist</p>
               <p className="text-foreground"><span className="text-primary font-semibold">displayOrder</span> — Sort position</p>
             </div>
-            <p className="text-muted-foreground text-xs mt-2">BigQuery table: <code className="text-primary">call_review_items</code> | UI: /review-items</p>
+            <p className="text-muted-foreground text-xs mt-2">BigQuery table: <code className="text-primary">interaction_review_items</code> | UI: /review-items</p>
           </div>
 
           <Separator />
@@ -346,7 +346,7 @@ gcloud builds submit --config cloudbuild.yaml`}
               </li>
               <li>
                 <strong className="text-foreground">Per-Client GCP Project (output isolation):</strong>
-                <p className="text-muted-foreground text-sm ml-5">Set the <code className="text-primary">gcp_project_id</code> field on the client/pathway record to point to the client's own GCP project. All output data (call_info, call_observations, call_qa_pairs, barriers, call_qa_results, call_dispositions, call_reviews, call_review_statuses, batch_processing) is written to that project's BigQuery <code className="text-primary">call_information</code> dataset. Config tables (observations, context_parameters, etc.) always remain in the central project. The central service account must have BigQuery Data Editor + Job User roles on the client's project.</p>
+                <p className="text-muted-foreground text-sm ml-5">Set the <code className="text-primary">gcp_project_id</code> field on the client/pathway record to point to the client's own GCP project. All output data (interaction_info, interaction_observations, interaction_qa_pairs, barriers, interaction_qa_results, interaction_dispositions, interaction_reviews, interaction_review_statuses, batch_processing) is written to that project's BigQuery <code className="text-primary">call_information</code> dataset. Config tables (observations, context_parameters, etc.) always remain in the central project. The central service account must have BigQuery Data Editor + Job User roles on the client's project.</p>
               </li>
               <li>
                 <strong className="text-foreground">Per-Client API Key:</strong>
@@ -436,7 +436,7 @@ gcloud builds submit --config cloudbuild.yaml`}
             <div className="space-y-4">
               <div className="border border-border/50 rounded-lg overflow-hidden">
                 <div className="bg-primary/5 px-4 py-2 border-b border-border/50">
-                  <p className="text-primary font-mono text-sm font-semibold">call_info</p>
+                  <p className="text-primary font-mono text-sm font-semibold">interaction_info</p>
                   <p className="text-muted-foreground text-xs">One row per processed call — metadata, summary, token usage, cost</p>
                 </div>
                 <div className="px-4 py-3 text-sm space-y-1">
@@ -452,7 +452,7 @@ gcloud builds submit --config cloudbuild.yaml`}
 
               <div className="border border-border/50 rounded-lg overflow-hidden">
                 <div className="bg-primary/5 px-4 py-2 border-b border-border/50">
-                  <p className="text-primary font-mono text-sm font-semibold">call_observations</p>
+                  <p className="text-primary font-mono text-sm font-semibold">interaction_observations</p>
                   <p className="text-muted-foreground text-xs">One row per observation per call</p>
                 </div>
                 <div className="px-4 py-3 text-sm">
@@ -462,7 +462,7 @@ gcloud builds submit --config cloudbuild.yaml`}
 
               <div className="border border-border/50 rounded-lg overflow-hidden">
                 <div className="bg-primary/5 px-4 py-2 border-b border-border/50">
-                  <p className="text-primary font-mono text-sm font-semibold">call_qa_pairs</p>
+                  <p className="text-primary font-mono text-sm font-semibold">interaction_qa_pairs</p>
                   <p className="text-muted-foreground text-xs">One row per Q&A exchange per call</p>
                 </div>
                 <div className="px-4 py-3 text-sm">
@@ -482,7 +482,7 @@ gcloud builds submit --config cloudbuild.yaml`}
 
               <div className="border border-border/50 rounded-lg overflow-hidden">
                 <div className="bg-primary/5 px-4 py-2 border-b border-border/50">
-                  <p className="text-primary font-mono text-sm font-semibold">call_qa_results</p>
+                  <p className="text-primary font-mono text-sm font-semibold">interaction_qa_results</p>
                   <p className="text-muted-foreground text-xs">One row per Call QA assessment per call</p>
                 </div>
                 <div className="px-4 py-3 text-sm">
@@ -492,7 +492,7 @@ gcloud builds submit --config cloudbuild.yaml`}
 
               <div className="border border-border/50 rounded-lg overflow-hidden">
                 <div className="bg-primary/5 px-4 py-2 border-b border-border/50">
-                  <p className="text-primary font-mono text-sm font-semibold">call_dispositions</p>
+                  <p className="text-primary font-mono text-sm font-semibold">interaction_dispositions</p>
                   <p className="text-muted-foreground text-xs">One row per call — disposition classification</p>
                 </div>
                 <div className="px-4 py-3 text-sm">
@@ -513,7 +513,7 @@ gcloud builds submit --config cloudbuild.yaml`}
             <div className="space-y-4">
               <div className="border border-border/50 rounded-lg overflow-hidden">
                 <div className="bg-primary/5 px-4 py-2 border-b border-border/50">
-                  <p className="text-primary font-mono text-sm font-semibold">call_reviews</p>
+                  <p className="text-primary font-mono text-sm font-semibold">interaction_reviews</p>
                   <p className="text-muted-foreground text-xs">Human review submissions per call per review item</p>
                 </div>
                 <div className="px-4 py-3 text-sm">
@@ -523,7 +523,7 @@ gcloud builds submit --config cloudbuild.yaml`}
 
               <div className="border border-border/50 rounded-lg overflow-hidden">
                 <div className="bg-primary/5 px-4 py-2 border-b border-border/50">
-                  <p className="text-primary font-mono text-sm font-semibold">call_review_statuses</p>
+                  <p className="text-primary font-mono text-sm font-semibold">interaction_review_statuses</p>
                   <p className="text-muted-foreground text-xs">Per-call review status tracking</p>
                 </div>
                 <div className="px-4 py-3 text-sm">
@@ -574,7 +574,7 @@ gcloud builds submit --config cloudbuild.yaml`}
 
               <div className="border border-border/50 rounded-lg overflow-hidden">
                 <div className="bg-primary/5 px-4 py-2 border-b border-border/50">
-                  <p className="text-primary font-mono text-sm font-semibold">call_qa_prompts</p>
+                  <p className="text-primary font-mono text-sm font-semibold">interaction_qa_prompts</p>
                   <p className="text-muted-foreground text-xs">Call QA prompt configuration (scoped by client_pathway_id)</p>
                 </div>
                 <div className="px-4 py-3 text-sm">
@@ -595,7 +595,7 @@ gcloud builds submit --config cloudbuild.yaml`}
 
               <div className="border border-border/50 rounded-lg overflow-hidden">
                 <div className="bg-primary/5 px-4 py-2 border-b border-border/50">
-                  <p className="text-primary font-mono text-sm font-semibold">call_review_items</p>
+                  <p className="text-primary font-mono text-sm font-semibold">interaction_review_items</p>
                   <p className="text-muted-foreground text-xs">Review checklist item configuration (scoped by client_pathway_id)</p>
                 </div>
                 <div className="px-4 py-3 text-sm">
@@ -653,20 +653,20 @@ gcloud builds submit --config cloudbuild.yaml`}
             <div className="bg-[#172938] text-gray-300 p-4 rounded-lg text-sm font-mono overflow-x-auto">
               <pre>{`client_pathway (1) ──── (*) observations
                   ──── (*) context_parameters
-                  ──── (*) call_qa_prompts
+                  ──── (*) interaction_qa_prompts
                   ──── (*) disposition_categories ──── (*) disposition_details
-                  ──── (*) call_review_items
+                  ──── (*) interaction_review_items
                   ──── (*) settings
 
-call_info (1) ──── (*) call_observations
-             ──── (*) call_qa_pairs
+interaction_info (1) ──── (*) interaction_observations
+             ──── (*) interaction_qa_pairs
              ──── (*) barriers
-             ──── (*) call_qa_results
-             ──── (1) call_dispositions
-             ──── (*) call_reviews
-             ──── (1) call_review_statuses
+             ──── (*) interaction_qa_results
+             ──── (1) interaction_dispositions
+             ──── (*) interaction_reviews
+             ──── (1) interaction_review_statuses
 
-batch_processing (*) ──── (1) call_info  (via result_call_id)
+batch_processing (*) ──── (1) interaction_info  (via result_call_id)
 Bland.calls      (*) ──── (*) batch_processing  (via bland_call_id)`}</pre>
             </div>
           </div>

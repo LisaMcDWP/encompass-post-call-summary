@@ -86,11 +86,11 @@ const DATASET_ID = "call_information";
 const TABLE_ID = "observations";
 const SETTINGS_TABLE_ID = "settings";
 const CONTEXT_PARAMS_TABLE_ID = "context_parameters";
-const CALL_QA_PROMPTS_TABLE_ID = "call_qa_prompts";
+const INTERACTION_QA_PROMPTS_TABLE_ID = "interaction_qa_prompts";
 const CLIENT_PATHWAY_TABLE_ID = "client_pathway";
 const DISPOSITION_CATEGORIES_TABLE_ID = "disposition_categories";
 const DISPOSITION_DETAILS_TABLE_ID = "disposition_details";
-const CALL_REVIEW_ITEMS_TABLE_ID = "call_review_items";
+const INTERACTION_REVIEW_ITEMS_TABLE_ID = "interaction_review_items";
 const ACTIVATION_OBJECTIVES_TABLE_ID = "activation_objectives";
 const ACTIVATION_INTERACTIONS_TABLE_ID = "activation_interactions";
 
@@ -282,7 +282,7 @@ async function ensureCallQAPromptsTable(): Promise<void> {
 
   const client = getBigQueryClient();
   const projectId = process.env.GCP_PROJECT_ID;
-  const fullTable = `${projectId}.${DATASET_ID}.${CALL_QA_PROMPTS_TABLE_ID}`;
+  const fullTable = `${projectId}.${DATASET_ID}.${INTERACTION_QA_PROMPTS_TABLE_ID}`;
 
   try {
     await client.query({
@@ -298,10 +298,10 @@ async function ensureCallQAPromptsTable(): Promise<void> {
         client_pathway_id INT64
       )`,
     });
-    console.log(`BigQuery table ${DATASET_ID}.${CALL_QA_PROMPTS_TABLE_ID} ready.`);
+    console.log(`BigQuery table ${DATASET_ID}.${INTERACTION_QA_PROMPTS_TABLE_ID} ready.`);
   } catch (err: any) {
     if (err.message?.includes("Already Exists")) {
-      console.log(`BigQuery table ${DATASET_ID}.${CALL_QA_PROMPTS_TABLE_ID} already exists.`);
+      console.log(`BigQuery table ${DATASET_ID}.${INTERACTION_QA_PROMPTS_TABLE_ID} already exists.`);
     } else {
       throw err;
     }
@@ -406,7 +406,7 @@ export async function ensureCallReviewItemsTable(): Promise<void> {
   if (callReviewItemsTableInitialized) return;
   const client = getBigQueryClient();
   const projectId = process.env.GCP_PROJECT_ID;
-  const fullTable = `${projectId}.${DATASET_ID}.${CALL_REVIEW_ITEMS_TABLE_ID}`;
+  const fullTable = `${projectId}.${DATASET_ID}.${INTERACTION_REVIEW_ITEMS_TABLE_ID}`;
   try {
     await client.query({
       query: `CREATE TABLE IF NOT EXISTS \`${fullTable}\` (
@@ -420,10 +420,10 @@ export async function ensureCallReviewItemsTable(): Promise<void> {
         client_pathway_id INT64
       )`,
     });
-    console.log(`BigQuery table ${DATASET_ID}.${CALL_REVIEW_ITEMS_TABLE_ID} ready.`);
+    console.log(`BigQuery table ${DATASET_ID}.${INTERACTION_REVIEW_ITEMS_TABLE_ID} ready.`);
   } catch (err: any) {
     if (err.message?.includes("Already Exists")) {
-      console.log(`BigQuery table ${DATASET_ID}.${CALL_REVIEW_ITEMS_TABLE_ID} already exists.`);
+      console.log(`BigQuery table ${DATASET_ID}.${INTERACTION_REVIEW_ITEMS_TABLE_ID} already exists.`);
     } else { throw err; }
   }
   callReviewItemsTableInitialized = true;
@@ -814,7 +814,7 @@ export class BigQueryStorage implements IStorage {
   }
   private getCallQAPromptsTable(): string {
     const projectId = process.env.GCP_PROJECT_ID;
-    return `\`${projectId}.${DATASET_ID}.${CALL_QA_PROMPTS_TABLE_ID}\``;
+    return `\`${projectId}.${DATASET_ID}.${INTERACTION_QA_PROMPTS_TABLE_ID}\``;
   }
   private getSettingsTable(): string {
     const projectId = process.env.GCP_PROJECT_ID;
@@ -1419,7 +1419,7 @@ export class BigQueryStorage implements IStorage {
 
   private getCallReviewItemsTable(): string {
     const projectId = process.env.GCP_PROJECT_ID;
-    return `\`${projectId}.${DATASET_ID}.${CALL_REVIEW_ITEMS_TABLE_ID}\``;
+    return `\`${projectId}.${DATASET_ID}.${INTERACTION_REVIEW_ITEMS_TABLE_ID}\``;
   }
 
   async getCallReviewItems(clientPathwayId: number): Promise<CallReviewItem[]> {
@@ -1847,7 +1847,7 @@ async function migrateConfigTablesForClientPathway(): Promise<void> {
   const client = getBigQueryClient();
   const projectId = process.env.GCP_PROJECT_ID;
 
-  const tables = [TABLE_ID, CONTEXT_PARAMS_TABLE_ID, CALL_QA_PROMPTS_TABLE_ID, SETTINGS_TABLE_ID];
+  const tables = [TABLE_ID, CONTEXT_PARAMS_TABLE_ID, INTERACTION_QA_PROMPTS_TABLE_ID, SETTINGS_TABLE_ID];
   for (const tbl of tables) {
     const fullTable = `${projectId}.${DATASET_ID}.${tbl}`;
     try {

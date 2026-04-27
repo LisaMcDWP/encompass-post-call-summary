@@ -18,7 +18,7 @@ async function main() {
   const [calls] = await bq.query({
     query: `
       SELECT call_id, processed_at, call_date, response_json
-      FROM \`${enc}.call_information.call_info\`
+      FROM \`${enc}.call_information.interaction_info\`
       WHERE processed_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR)
         AND status = 'success'
         AND REGEXP_CONTAINS(response_json, r'"activation_objectives"\\s*:\\s*\\[')
@@ -36,7 +36,7 @@ async function main() {
   for (const c of calls) {
     const cid = c.call_id;
     const [existing] = await bq.query({
-      query: `SELECT objective_id, on_track_status FROM \`${enc}.call_information.call_activation_objectives\` WHERE call_id = "${cid}"`,
+      query: `SELECT objective_id, on_track_status FROM \`${enc}.call_information.interaction_activation_objectives\` WHERE call_id = "${cid}"`,
     });
     beforeSnapshot.set(cid, existing.map((r: any) => `${r.objective_id}:${r.on_track_status}`));
   }
@@ -75,7 +75,7 @@ async function main() {
   const targetId = "96b328ab-3a76-4f45-b976-700367cff54f";
   const before = beforeSnapshot.get(targetId);
   const [now] = await bq.query({
-    query: `SELECT objective_name, extracted_value, current_stage_name, on_track_status FROM \`${enc}.call_information.call_activation_objectives\` WHERE call_id = "${targetId}" ORDER BY objective_id`,
+    query: `SELECT objective_name, extracted_value, current_stage_name, on_track_status FROM \`${enc}.call_information.interaction_activation_objectives\` WHERE call_id = "${targetId}" ORDER BY objective_id`,
   });
   console.log("BEFORE:", before);
   console.log("AFTER:", JSON.stringify(now, null, 2));

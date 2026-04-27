@@ -4,11 +4,11 @@ const PROJECT_ID = process.env.GCP_PROJECT_ID || "guidewaycare-476802";
 const DATASET_ID = "call_information";
 
 const TABLES_TO_CLEAR = [
-  "call_info",
-  "call_observations",
-  "call_qa_pairs",
+  "interaction_info",
+  "interaction_observations",
+  "interaction_qa_pairs",
   "barriers",
-  "call_qa_results",
+  "interaction_qa_results",
   "batch_processing",
   "known_context_details",
 ];
@@ -17,7 +17,7 @@ const CONFIG_TABLES = [
   "client_pathway",
   "observations",
   "context_parameters",
-  "call_qa_prompts",
+  "interaction_qa_prompts",
   "settings",
 ];
 

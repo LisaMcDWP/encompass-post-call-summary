@@ -3,16 +3,16 @@ import type { ObservationResult, QAPair, Barrier, CallQAResult } from "./gemini"
 import type { CallActivationObjectiveResult } from "@shared/schema";
 
 const DATASET_ID = "call_information";
-const CALL_INFO_TABLE_ID = "call_info";
-const OBSERVATIONS_TABLE_ID = "call_observations";
-const QA_PAIRS_TABLE_ID = "call_qa_pairs";
+const INTERACTION_INFO_TABLE_ID = "interaction_info";
+const OBSERVATIONS_TABLE_ID = "interaction_observations";
+const QA_PAIRS_TABLE_ID = "interaction_qa_pairs";
 const BARRIERS_TABLE_ID = "barriers";
 const BATCH_PROCESSING_TABLE_ID = "batch_processing";
-const CALL_QA_TABLE_ID = "call_qa_results";
-const CALL_DISPOSITIONS_TABLE_ID = "call_dispositions";
-const CALL_REVIEWS_TABLE_ID = "call_reviews";
-const CALL_REVIEW_STATUSES_TABLE_ID = "call_review_statuses";
-const CALL_ACTIVATION_OBJECTIVES_TABLE_ID = "call_activation_objectives";
+const INTERACTION_QA_TABLE_ID = "interaction_qa_results";
+const INTERACTION_DISPOSITIONS_TABLE_ID = "interaction_dispositions";
+const INTERACTION_REVIEWS_TABLE_ID = "interaction_reviews";
+const INTERACTION_REVIEW_STATUSES_TABLE_ID = "interaction_review_statuses";
+const INTERACTION_ACTIVATION_OBJECTIVES_TABLE_ID = "interaction_activation_objectives";
 
 export interface CallInfoRow {
   call_id: string;
@@ -109,13 +109,13 @@ async function ensureDataset(targetProjectId?: string) {
 async function ensureCallInfoTable(targetProjectId?: string) {
   const client = getOutputBigQueryClient(targetProjectId);
   const dataset = await ensureDataset(targetProjectId);
-  const table = dataset.table(CALL_INFO_TABLE_ID);
+  const table = dataset.table(INTERACTION_INFO_TABLE_ID);
   const [tableExists] = await table.exists();
   if (tableExists) {
     return;
   }
   {
-    await dataset.createTable(CALL_INFO_TABLE_ID, {
+    await dataset.createTable(INTERACTION_INFO_TABLE_ID, {
       schema: {
         fields: [
           { name: "call_id", type: "STRING", mode: "REQUIRED" },
@@ -141,7 +141,7 @@ async function ensureCallInfoTable(targetProjectId?: string) {
         ],
       },
     });
-    console.log(`Created BigQuery table: ${DATASET_ID}.${CALL_INFO_TABLE_ID} in project ${resolveProjectId(targetProjectId)}`);
+    console.log(`Created BigQuery table: ${DATASET_ID}.${INTERACTION_INFO_TABLE_ID} in project ${resolveProjectId(targetProjectId)}`);
   }
 }
 
@@ -183,77 +183,77 @@ async function migrateCallInfoColumns(targetProjectId?: string): Promise<void> {
   try {
     const client = getOutputBigQueryClient(targetProjectId);
     const dataset = client.dataset(DATASET_ID);
-    const table = dataset.table(CALL_INFO_TABLE_ID);
+    const table = dataset.table(INTERACTION_INFO_TABLE_ID);
     const [metadata] = await table.getMetadata();
     const fields = metadata.schema?.fields || [];
     const fieldNames = new Set(fields.map((f: any) => f.name));
     if (!fieldNames.has("request_body")) {
       await client.query({
-        query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\` ADD COLUMN request_body STRING`,
+        query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${INTERACTION_INFO_TABLE_ID}\` ADD COLUMN request_body STRING`,
         location: "US",
       });
-      console.log("Added request_body column to call_info table.");
+      console.log("Added request_body column to interaction_info table.");
     }
     if (!fieldNames.has("client")) {
       await client.query({
-        query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\` ADD COLUMN client STRING`,
+        query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${INTERACTION_INFO_TABLE_ID}\` ADD COLUMN client STRING`,
         location: "US",
       });
-      console.log("Added client column to call_info table.");
+      console.log("Added client column to interaction_info table.");
     }
     if (!fieldNames.has("pathway")) {
       await client.query({
-        query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\` ADD COLUMN pathway STRING`,
+        query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${INTERACTION_INFO_TABLE_ID}\` ADD COLUMN pathway STRING`,
         location: "US",
       });
-      console.log("Added pathway column to call_info table.");
+      console.log("Added pathway column to interaction_info table.");
     }
     if (!fieldNames.has("call_date")) {
       await client.query({
-        query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\` ADD COLUMN call_date TIMESTAMP`,
+        query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${INTERACTION_INFO_TABLE_ID}\` ADD COLUMN call_date TIMESTAMP`,
         location: "US",
       });
-      console.log("Added call_date column to call_info table.");
+      console.log("Added call_date column to interaction_info table.");
     }
     if (!fieldNames.has("request_headers")) {
       await client.query({
-        query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\` ADD COLUMN request_headers STRING`,
+        query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${INTERACTION_INFO_TABLE_ID}\` ADD COLUMN request_headers STRING`,
         location: "US",
       });
-      console.log("Added request_headers column to call_info table.");
+      console.log("Added request_headers column to interaction_info table.");
     }
     if (!fieldNames.has("response_json")) {
       await client.query({
-        query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\` ADD COLUMN response_json STRING`,
+        query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${INTERACTION_INFO_TABLE_ID}\` ADD COLUMN response_json STRING`,
         location: "US",
       });
-      console.log("Added response_json column to call_info table.");
+      console.log("Added response_json column to interaction_info table.");
     }
     if (!fieldNames.has("processing_id")) {
       await client.query({
-        query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\` ADD COLUMN processing_id STRING`,
+        query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${INTERACTION_INFO_TABLE_ID}\` ADD COLUMN processing_id STRING`,
         location: "US",
       });
-      console.log("Added processing_id column to call_info table.");
+      console.log("Added processing_id column to interaction_info table.");
     }
   } catch (err: any) {
-    console.error("Migration check for call_info columns:", err.message);
+    console.error("Migration check for interaction_info columns:", err.message);
   }
 }
 
 export async function initializeCallTables(targetProjectId?: string): Promise<void> {
   try {
-    const ciKey = tableInitKey(CALL_INFO_TABLE_ID, targetProjectId);
+    const ciKey = tableInitKey(INTERACTION_INFO_TABLE_ID, targetProjectId);
     if (!initializedTables.has(ciKey)) {
       await ensureCallInfoTable(targetProjectId);
       initializedTables.add(ciKey);
-      console.log(`BigQuery table call_info ready in project ${resolveProjectId(targetProjectId)}.`);
+      console.log(`BigQuery table interaction_info ready in project ${resolveProjectId(targetProjectId)}.`);
     }
     const obsKey = tableInitKey(OBSERVATIONS_TABLE_ID, targetProjectId);
     if (!initializedTables.has(obsKey)) {
       await ensureObservationsTable(targetProjectId);
       initializedTables.add(obsKey);
-      console.log(`BigQuery table call_observations ready in project ${resolveProjectId(targetProjectId)}.`);
+      console.log(`BigQuery table interaction_observations ready in project ${resolveProjectId(targetProjectId)}.`);
     }
     await migrateCallInfoColumns(targetProjectId);
   } catch (err: any) {
@@ -303,13 +303,13 @@ async function deleteExistingCallData(callId: string, tableId: string, targetPro
 
 export async function insertCallInfo(entry: CallInfoEntry, targetProjectId?: string): Promise<void> {
   try {
-    const key = tableInitKey(CALL_INFO_TABLE_ID, targetProjectId);
+    const key = tableInitKey(INTERACTION_INFO_TABLE_ID, targetProjectId);
     if (!initializedTables.has(key)) {
       await ensureCallInfoTable(targetProjectId);
       initializedTables.add(key);
     }
 
-    await deleteExistingCallData(entry.callId, CALL_INFO_TABLE_ID, targetProjectId);
+    await deleteExistingCallData(entry.callId, INTERACTION_INFO_TABLE_ID, targetProjectId);
 
     const client = getOutputBigQueryClient(targetProjectId);
     const row: Record<string, any> = {
@@ -344,12 +344,12 @@ export async function insertCallInfo(entry: CallInfoEntry, targetProjectId?: str
 
     await client
       .dataset(DATASET_ID)
-      .table(CALL_INFO_TABLE_ID)
+      .table(INTERACTION_INFO_TABLE_ID)
       .insert([row]);
 
-    console.log(`BigQuery call_info inserted for call: ${entry.callId}`);
+    console.log(`BigQuery interaction_info inserted for call: ${entry.callId}`);
   } catch (error: any) {
-    console.error("Failed to insert call_info:", error.message);
+    console.error("Failed to insert interaction_info:", error.message);
     if (error.errors) {
       console.error("BigQuery errors:", JSON.stringify(error.errors));
     }
@@ -386,9 +386,9 @@ export async function insertCallObservations(callId: string, observations: Obser
       .table(OBSERVATIONS_TABLE_ID)
       .insert(rows);
 
-    console.log(`BigQuery call_observations inserted: ${rows.length} rows for call ${callId}`);
+    console.log(`BigQuery interaction_observations inserted: ${rows.length} rows for call ${callId}`);
   } catch (error: any) {
-    console.error("Failed to insert call_observations:", error.message);
+    console.error("Failed to insert interaction_observations:", error.message);
     if (error.errors) {
       console.error("BigQuery errors:", JSON.stringify(error.errors));
     }
@@ -465,9 +465,9 @@ export async function insertCallQAPairs(callId: string, qaPairs: QAPair[], targe
       .table(QA_PAIRS_TABLE_ID)
       .insert(rows);
 
-    console.log(`BigQuery call_qa_pairs inserted: ${rows.length} rows for call ${callId}`);
+    console.log(`BigQuery interaction_qa_pairs inserted: ${rows.length} rows for call ${callId}`);
   } catch (error: any) {
-    console.error("Failed to insert call_qa_pairs:", error.message);
+    console.error("Failed to insert interaction_qa_pairs:", error.message);
     if (error.errors) {
       console.error("BigQuery errors:", JSON.stringify(error.errors));
     }
@@ -563,10 +563,10 @@ export async function getCallBarriers(callId: string, targetProjectId?: string):
 export async function ensureCallQATable(targetProjectId?: string): Promise<void> {
   try {
     const dataset = await ensureDataset(targetProjectId);
-    const table = dataset.table(CALL_QA_TABLE_ID);
+    const table = dataset.table(INTERACTION_QA_TABLE_ID);
     const [exists] = await table.exists();
     if (!exists) {
-      await dataset.createTable(CALL_QA_TABLE_ID, {
+      await dataset.createTable(INTERACTION_QA_TABLE_ID, {
         schema: {
           fields: [
             { name: "call_id", type: "STRING", mode: "REQUIRED" },
@@ -578,10 +578,10 @@ export async function ensureCallQATable(targetProjectId?: string): Promise<void>
           ],
         },
       });
-      console.log(`Created call_qa_results table in project ${resolveProjectId(targetProjectId)}`);
+      console.log(`Created interaction_qa_results table in project ${resolveProjectId(targetProjectId)}`);
     }
   } catch (error: any) {
-    console.error("Failed to ensure call_qa_results table:", error.message);
+    console.error("Failed to ensure interaction_qa_results table:", error.message);
   }
 }
 
@@ -595,7 +595,7 @@ export async function insertCallQAResults(callId: string, results: CallQAResult[
 
     if (validResults.length === 0) return;
 
-    await deleteExistingCallData(callId, CALL_QA_TABLE_ID, targetProjectId);
+    await deleteExistingCallData(callId, INTERACTION_QA_TABLE_ID, targetProjectId);
 
     const client = getOutputBigQueryClient(targetProjectId);
     const rows = validResults.map((r) => ({
@@ -609,12 +609,12 @@ export async function insertCallQAResults(callId: string, results: CallQAResult[
 
     await client
       .dataset(DATASET_ID)
-      .table(CALL_QA_TABLE_ID)
+      .table(INTERACTION_QA_TABLE_ID)
       .insert(rows);
 
-    console.log(`BigQuery call_qa_results inserted: ${rows.length} rows for call ${callId}`);
+    console.log(`BigQuery interaction_qa_results inserted: ${rows.length} rows for call ${callId}`);
   } catch (error: any) {
-    console.error("Failed to insert call_qa_results:", error.message);
+    console.error("Failed to insert interaction_qa_results:", error.message);
     if (error.errors) {
       console.error("BigQuery errors:", JSON.stringify(error.errors));
     }
@@ -624,7 +624,7 @@ export async function insertCallQAResults(callId: string, results: CallQAResult[
 export async function getCallQAResults(callId: string, targetProjectId?: string): Promise<any[]> {
   try {
     const client = getOutputBigQueryClient(targetProjectId);
-    const query = `SELECT * FROM \`${client.projectId}.${DATASET_ID}.${CALL_QA_TABLE_ID}\` WHERE call_id = @callId`;
+    const query = `SELECT * FROM \`${client.projectId}.${DATASET_ID}.${INTERACTION_QA_TABLE_ID}\` WHERE call_id = @callId`;
     const [rows] = await client.query({ query, params: { callId } });
     return rows;
   } catch (error: any) {
@@ -636,10 +636,10 @@ export async function getCallQAResults(callId: string, targetProjectId?: string)
 export async function ensureCallDispositionsTable(targetProjectId?: string): Promise<void> {
   try {
     const dataset = await ensureDataset(targetProjectId);
-    const table = dataset.table(CALL_DISPOSITIONS_TABLE_ID);
+    const table = dataset.table(INTERACTION_DISPOSITIONS_TABLE_ID);
     const [exists] = await table.exists();
     if (!exists) {
-      await dataset.createTable(CALL_DISPOSITIONS_TABLE_ID, {
+      await dataset.createTable(INTERACTION_DISPOSITIONS_TABLE_ID, {
         schema: {
           fields: [
             { name: "call_id", type: "STRING", mode: "REQUIRED" },
@@ -653,10 +653,10 @@ export async function ensureCallDispositionsTable(targetProjectId?: string): Pro
           ],
         },
       });
-      console.log(`Created call_dispositions table in project ${resolveProjectId(targetProjectId)}`);
+      console.log(`Created interaction_dispositions table in project ${resolveProjectId(targetProjectId)}`);
     }
   } catch (error: any) {
-    console.error("Failed to ensure call_dispositions table:", error.message);
+    console.error("Failed to ensure interaction_dispositions table:", error.message);
   }
 }
 
@@ -673,7 +673,7 @@ export interface CallDispositionEntry {
 export async function insertCallDisposition(callId: string, disposition: CallDispositionEntry, targetProjectId?: string): Promise<void> {
   try {
     if (!disposition || !disposition.disposition_category) return;
-    await deleteExistingCallData(callId, CALL_DISPOSITIONS_TABLE_ID, targetProjectId);
+    await deleteExistingCallData(callId, INTERACTION_DISPOSITIONS_TABLE_ID, targetProjectId);
     const client = getOutputBigQueryClient(targetProjectId);
     const row = {
       call_id: callId,
@@ -685,7 +685,7 @@ export async function insertCallDisposition(callId: string, disposition: CallDis
       evidence: disposition.evidence || null,
       detail: disposition.detail || null,
     };
-    await client.dataset(DATASET_ID).table(CALL_DISPOSITIONS_TABLE_ID).insert([row]);
+    await client.dataset(DATASET_ID).table(INTERACTION_DISPOSITIONS_TABLE_ID).insert([row]);
     console.log(`BigQuery call_disposition inserted for call ${callId}: ${disposition.disposition_category} / ${disposition.disposition_detail}`);
   } catch (error: any) {
     console.error("Failed to insert call disposition:", error.message);
@@ -695,10 +695,10 @@ export async function insertCallDisposition(callId: string, disposition: CallDis
 export async function ensureCallActivationObjectivesTable(targetProjectId?: string): Promise<void> {
   try {
     const dataset = await ensureDataset(targetProjectId);
-    const table = dataset.table(CALL_ACTIVATION_OBJECTIVES_TABLE_ID);
+    const table = dataset.table(INTERACTION_ACTIVATION_OBJECTIVES_TABLE_ID);
     const [exists] = await table.exists();
     if (!exists) {
-      await dataset.createTable(CALL_ACTIVATION_OBJECTIVES_TABLE_ID, {
+      await dataset.createTable(INTERACTION_ACTIVATION_OBJECTIVES_TABLE_ID, {
         schema: {
           fields: [
             { name: "call_id", type: "STRING", mode: "REQUIRED" },
@@ -725,11 +725,11 @@ export async function ensureCallActivationObjectivesTable(targetProjectId?: stri
           ],
         },
       });
-      console.log(`Created call_activation_objectives table in project ${resolveProjectId(targetProjectId)}`);
+      console.log(`Created interaction_activation_objectives table in project ${resolveProjectId(targetProjectId)}`);
     } else {
       // Idempotent migration: add interaction_* columns if missing on legacy tables.
       const projectId = resolveProjectId(targetProjectId);
-      const fullTable = `\`${projectId}.${DATASET_ID}.${CALL_ACTIVATION_OBJECTIVES_TABLE_ID}\``;
+      const fullTable = `\`${projectId}.${DATASET_ID}.${INTERACTION_ACTIVATION_OBJECTIVES_TABLE_ID}\``;
       const client = getOutputBigQueryClient(targetProjectId);
       for (const stmt of [
         `ALTER TABLE ${fullTable} ADD COLUMN IF NOT EXISTS interaction_id INT64`,
@@ -741,30 +741,30 @@ export async function ensureCallActivationObjectivesTable(targetProjectId?: stri
           await client.query({ query: stmt });
         } catch (alterErr: any) {
           if (!/already exists/i.test(alterErr.message || "")) {
-            console.warn(`call_activation_objectives migration warning: ${alterErr.message}`);
+            console.warn(`interaction_activation_objectives migration warning: ${alterErr.message}`);
           }
         }
       }
     }
   } catch (error: any) {
-    console.error("Failed to ensure call_activation_objectives table:", error.message);
+    console.error("Failed to ensure interaction_activation_objectives table:", error.message);
   }
 }
 
 export async function insertCallActivationObjectives(callId: string, results: CallActivationObjectiveResult[], targetProjectId?: string): Promise<void> {
   try {
-    const key = tableInitKey(CALL_ACTIVATION_OBJECTIVES_TABLE_ID, targetProjectId);
+    const key = tableInitKey(INTERACTION_ACTIVATION_OBJECTIVES_TABLE_ID, targetProjectId);
     if (!initializedTables.has(key)) {
       await ensureCallActivationObjectivesTable(targetProjectId);
       initializedTables.add(key);
     }
 
     if (!results || results.length === 0) {
-      await deleteExistingCallData(callId, CALL_ACTIVATION_OBJECTIVES_TABLE_ID, targetProjectId);
+      await deleteExistingCallData(callId, INTERACTION_ACTIVATION_OBJECTIVES_TABLE_ID, targetProjectId);
       return;
     }
 
-    await deleteExistingCallData(callId, CALL_ACTIVATION_OBJECTIVES_TABLE_ID, targetProjectId);
+    await deleteExistingCallData(callId, INTERACTION_ACTIVATION_OBJECTIVES_TABLE_ID, targetProjectId);
 
     const client = getOutputBigQueryClient(targetProjectId);
     const rows = results.map(r => ({
@@ -795,12 +795,12 @@ export async function insertCallActivationObjectives(callId: string, results: Ca
 
     await client
       .dataset(DATASET_ID)
-      .table(CALL_ACTIVATION_OBJECTIVES_TABLE_ID)
+      .table(INTERACTION_ACTIVATION_OBJECTIVES_TABLE_ID)
       .insert(rows);
 
-    console.log(`BigQuery call_activation_objectives inserted: ${rows.length} rows for call ${callId}`);
+    console.log(`BigQuery interaction_activation_objectives inserted: ${rows.length} rows for call ${callId}`);
   } catch (error: any) {
-    console.error("Failed to insert call_activation_objectives:", error.message);
+    console.error("Failed to insert interaction_activation_objectives:", error.message);
     if (error.errors) {
       console.error("BigQuery errors:", JSON.stringify(error.errors));
     }
@@ -809,7 +809,7 @@ export async function insertCallActivationObjectives(callId: string, results: Ca
 
 export async function getCallActivationObjectives(callId: string, targetProjectId?: string): Promise<any[]> {
   try {
-    const key = tableInitKey(CALL_ACTIVATION_OBJECTIVES_TABLE_ID, targetProjectId);
+    const key = tableInitKey(INTERACTION_ACTIVATION_OBJECTIVES_TABLE_ID, targetProjectId);
     if (!initializedTables.has(key)) {
       await ensureCallActivationObjectivesTable(targetProjectId);
       initializedTables.add(key);
@@ -818,7 +818,7 @@ export async function getCallActivationObjectives(callId: string, targetProjectI
     const query = `
       SELECT * EXCEPT(__rn) FROM (
         SELECT *, ROW_NUMBER() OVER (PARTITION BY objective_id ORDER BY processed_at DESC) AS __rn
-        FROM \`${client.projectId}.${DATASET_ID}.${CALL_ACTIVATION_OBJECTIVES_TABLE_ID}\`
+        FROM \`${client.projectId}.${DATASET_ID}.${INTERACTION_ACTIVATION_OBJECTIVES_TABLE_ID}\`
         WHERE call_id = @callId
       )
       WHERE __rn = 1
@@ -843,10 +843,10 @@ export async function getCallActivationObjectives(callId: string, targetProjectI
 export async function ensureCallReviewsTable(targetProjectId?: string): Promise<void> {
   try {
     const dataset = await ensureDataset(targetProjectId);
-    const table = dataset.table(CALL_REVIEWS_TABLE_ID);
+    const table = dataset.table(INTERACTION_REVIEWS_TABLE_ID);
     const [exists] = await table.exists();
     if (!exists) {
-      await dataset.createTable(CALL_REVIEWS_TABLE_ID, {
+      await dataset.createTable(INTERACTION_REVIEWS_TABLE_ID, {
         schema: {
           fields: [
             { name: "id", type: "STRING", mode: "REQUIRED" },
@@ -861,10 +861,10 @@ export async function ensureCallReviewsTable(targetProjectId?: string): Promise<
           ],
         },
       });
-      console.log(`Created call_reviews table in project ${resolveProjectId(targetProjectId)}`);
+      console.log(`Created interaction_reviews table in project ${resolveProjectId(targetProjectId)}`);
     }
   } catch (error: any) {
-    console.error("Failed to ensure call_reviews table:", error.message);
+    console.error("Failed to ensure interaction_reviews table:", error.message);
   }
 }
 
@@ -881,7 +881,7 @@ export async function upsertCallReviews(sourceId: string, reviews: CallReviewEnt
   try {
     await ensureCallReviewsTable(targetProjectId);
     const client = getOutputBigQueryClient(targetProjectId);
-    const fullTable = `\`${client.projectId}.${DATASET_ID}.${CALL_REVIEWS_TABLE_ID}\``;
+    const fullTable = `\`${client.projectId}.${DATASET_ID}.${INTERACTION_REVIEWS_TABLE_ID}\``;
     try {
       await client.query({ query: `DELETE FROM ${fullTable} WHERE source_id = @sourceId`, params: { sourceId } });
     } catch (e: any) {
@@ -900,8 +900,8 @@ export async function upsertCallReviews(sourceId: string, reviews: CallReviewEnt
       reviewed_by: r.reviewedBy || null,
       reviewed_at: now,
     }));
-    await client.dataset(DATASET_ID).table(CALL_REVIEWS_TABLE_ID).insert(rows);
-    console.log(`BigQuery call_reviews upserted ${rows.length} items for ${sourceId}`);
+    await client.dataset(DATASET_ID).table(INTERACTION_REVIEWS_TABLE_ID).insert(rows);
+    console.log(`BigQuery interaction_reviews upserted ${rows.length} items for ${sourceId}`);
   } catch (error: any) {
     console.error("Failed to upsert call reviews:", error.message);
     throw error;
@@ -912,7 +912,7 @@ export async function getCallReviews(sourceId: string, targetProjectId?: string)
   try {
     await ensureCallReviewsTable(targetProjectId);
     const client = getOutputBigQueryClient(targetProjectId);
-    const fullTable = `\`${client.projectId}.${DATASET_ID}.${CALL_REVIEWS_TABLE_ID}\``;
+    const fullTable = `\`${client.projectId}.${DATASET_ID}.${INTERACTION_REVIEWS_TABLE_ID}\``;
     const [rows] = await client.query({
       query: `SELECT * FROM ${fullTable} WHERE source_id = @sourceId ORDER BY review_item_id`,
       params: { sourceId },
@@ -933,10 +933,10 @@ export interface CallReviewMeta {
 export async function ensureCallReviewStatusesTable(targetProjectId?: string): Promise<void> {
   try {
     const dataset = await ensureDataset(targetProjectId);
-    const table = dataset.table(CALL_REVIEW_STATUSES_TABLE_ID);
+    const table = dataset.table(INTERACTION_REVIEW_STATUSES_TABLE_ID);
     const [exists] = await table.exists();
     if (!exists) {
-      await dataset.createTable(CALL_REVIEW_STATUSES_TABLE_ID, {
+      await dataset.createTable(INTERACTION_REVIEW_STATUSES_TABLE_ID, {
         schema: {
           fields: [
             { name: "call_id", type: "STRING", mode: "REQUIRED" },
@@ -947,26 +947,26 @@ export async function ensureCallReviewStatusesTable(targetProjectId?: string): P
           ],
         },
       });
-      console.log(`Created call_review_statuses table in project ${resolveProjectId(targetProjectId)}`);
+      console.log(`Created interaction_review_statuses table in project ${resolveProjectId(targetProjectId)}`);
     } else {
       const [metadata] = await table.getMetadata();
       const fieldNames = new Set(metadata.schema.fields.map((f: any) => f.name));
       const bqClient = getOutputBigQueryClient(targetProjectId);
       if (!fieldNames.has("tags")) {
         await bqClient.query({
-          query: `ALTER TABLE \`${bqClient.projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\` ADD COLUMN tags STRING`,
+          query: `ALTER TABLE \`${bqClient.projectId}.${DATASET_ID}.${INTERACTION_REVIEW_STATUSES_TABLE_ID}\` ADD COLUMN tags STRING`,
         });
-        console.log("Added tags column to call_review_statuses table.");
+        console.log("Added tags column to interaction_review_statuses table.");
       }
       if (!fieldNames.has("notes")) {
         await bqClient.query({
-          query: `ALTER TABLE \`${bqClient.projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\` ADD COLUMN notes STRING`,
+          query: `ALTER TABLE \`${bqClient.projectId}.${DATASET_ID}.${INTERACTION_REVIEW_STATUSES_TABLE_ID}\` ADD COLUMN notes STRING`,
         });
-        console.log("Added notes column to call_review_statuses table.");
+        console.log("Added notes column to interaction_review_statuses table.");
       }
     }
   } catch (error: any) {
-    console.error("Failed to ensure call_review_statuses table:", error.message);
+    console.error("Failed to ensure interaction_review_statuses table:", error.message);
   }
 }
 
@@ -974,7 +974,7 @@ export async function upsertCallReviewMeta(callId: string, data: { reviewStatus?
   try {
     await ensureCallReviewStatusesTable(targetProjectId);
     const client = getOutputBigQueryClient(targetProjectId);
-    const fullTable = `\`${client.projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\``;
+    const fullTable = `\`${client.projectId}.${DATASET_ID}.${INTERACTION_REVIEW_STATUSES_TABLE_ID}\``;
     let existing: any = null;
     try {
       const [rows] = await client.query({
@@ -994,7 +994,7 @@ export async function upsertCallReviewMeta(callId: string, data: { reviewStatus?
     try { if (existing?.tags) existingTags = JSON.parse(existing.tags); } catch { existingTags = []; }
     const tags = data.tags !== undefined ? data.tags : existingTags;
     const notes = data.notes !== undefined ? data.notes : (existing?.notes ?? "");
-    await client.dataset(DATASET_ID).table(CALL_REVIEW_STATUSES_TABLE_ID).insert([{
+    await client.dataset(DATASET_ID).table(INTERACTION_REVIEW_STATUSES_TABLE_ID).insert([{
       call_id: callId,
       review_status: reviewStatus,
       tags: JSON.stringify(tags),
@@ -1016,7 +1016,7 @@ export async function getCallReviewMeta(callId: string, targetProjectId?: string
   try {
     await ensureCallReviewStatusesTable(targetProjectId);
     const client = getOutputBigQueryClient(targetProjectId);
-    const fullTable = `\`${client.projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\``;
+    const fullTable = `\`${client.projectId}.${DATASET_ID}.${INTERACTION_REVIEW_STATUSES_TABLE_ID}\``;
     const [rows] = await client.query({
       query: `SELECT * FROM ${fullTable} WHERE call_id = @callId ORDER BY updated_at DESC LIMIT 1`,
       params: { callId },
@@ -1045,7 +1045,7 @@ export async function getCallReviewStatusesBulk(callIds: string[], targetProject
     if (callIds.length === 0) return {};
     await ensureCallReviewStatusesTable(targetProjectId);
     const client = getOutputBigQueryClient(targetProjectId);
-    const fullTable = `\`${client.projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\``;
+    const fullTable = `\`${client.projectId}.${DATASET_ID}.${INTERACTION_REVIEW_STATUSES_TABLE_ID}\``;
     const [rows] = await client.query({
       query: `SELECT call_id, review_status FROM ${fullTable} WHERE call_id IN UNNEST(@callIds) QUALIFY ROW_NUMBER() OVER (PARTITION BY call_id ORDER BY updated_at DESC) = 1`,
       params: { callIds },
@@ -1064,8 +1064,8 @@ export async function getCallReviewList(limit = 200, targetProjectId?: string, o
   try {
     await ensureCallReviewStatusesTable(targetProjectId);
     const client = getOutputBigQueryClient(targetProjectId);
-    const ciTable = `\`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\``;
-    const crsTable = `\`${client.projectId}.${DATASET_ID}.${CALL_REVIEW_STATUSES_TABLE_ID}\``;
+    const ciTable = `\`${client.projectId}.${DATASET_ID}.${INTERACTION_INFO_TABLE_ID}\``;
+    const crsTable = `\`${client.projectId}.${DATASET_ID}.${INTERACTION_REVIEW_STATUSES_TABLE_ID}\``;
     const obsTable = `\`${client.projectId}.${DATASET_ID}.${OBSERVATIONS_TABLE_ID}\``;
     const params: Record<string, any> = { limit };
     let obsJoin = "";
@@ -1145,7 +1145,7 @@ function extractTimestamp(val: { value: string } | string | null | undefined): s
 export async function getCallInfoList(limit = 100, targetProjectId?: string, obsFilter?: { name: string; value?: string }): Promise<any[]> {
   const client = getOutputBigQueryClient(targetProjectId);
   const obsTable = `\`${client.projectId}.${DATASET_ID}.${OBSERVATIONS_TABLE_ID}\``;
-  const ciTable = `\`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\``;
+  const ciTable = `\`${client.projectId}.${DATASET_ID}.${INTERACTION_INFO_TABLE_ID}\``;
   const params: Record<string, any> = { limit };
   let obsJoin = "";
   let obsWhere = "";
@@ -1236,7 +1236,7 @@ export async function getCallStatsByDay(days = 30, targetProjectId?: string): Pr
       ROUND(AVG(processing_time_ms), 0) as avg_processing_ms,
       SUM(total_tokens) as total_tokens,
       ROUND(SUM(estimated_cost), 4) as total_cost
-    FROM \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\`
+    FROM \`${client.projectId}.${DATASET_ID}.${INTERACTION_INFO_TABLE_ID}\`
     WHERE DATE(processed_at, 'America/New_York') >= DATE_SUB(CURRENT_DATE('America/New_York'), INTERVAL @days DAY)
     GROUP BY date, client, pathway, source_type
     ORDER BY date DESC, client, pathway, source_type
@@ -1414,12 +1414,12 @@ export async function queryBlandCalls(filters: {
 
   if (filters.processedFilter === "unprocessed") {
     conditions.push(`c.call_id NOT IN (
-      SELECT source_id FROM \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\`
+      SELECT source_id FROM \`${client.projectId}.${DATASET_ID}.${INTERACTION_INFO_TABLE_ID}\`
       WHERE source_id IS NOT NULL
     )`);
   } else if (filters.processedFilter === "processed") {
     conditions.push(`c.call_id IN (
-      SELECT source_id FROM \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\`
+      SELECT source_id FROM \`${client.projectId}.${DATASET_ID}.${INTERACTION_INFO_TABLE_ID}\`
       WHERE source_id IS NOT NULL
     )`);
   }
@@ -2013,7 +2013,7 @@ export async function getCallProcessingRuns(callId: string, targetProjectId?: st
     SELECT
       ROW_NUMBER() OVER (ORDER BY processed_at ASC) AS run_number,
       processed_at, status, processing_time_ms, total_tokens, estimated_cost, prompt_version
-    FROM \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\`
+    FROM \`${client.projectId}.${DATASET_ID}.${INTERACTION_INFO_TABLE_ID}\`
     WHERE call_id = @callId
     ORDER BY processed_at ASC
   `;
@@ -2034,7 +2034,7 @@ export async function getCallDetail(callId: string, runIndex?: number, targetPro
 
   const allRunsQuery = `
     SELECT *, ROW_NUMBER() OVER (ORDER BY processed_at ASC) AS run_number
-    FROM \`${client.projectId}.${DATASET_ID}.${CALL_INFO_TABLE_ID}\`
+    FROM \`${client.projectId}.${DATASET_ID}.${INTERACTION_INFO_TABLE_ID}\`
     WHERE call_id = @callId
     ORDER BY processed_at ASC
   `;
@@ -2145,7 +2145,7 @@ export async function getCallDetail(callId: string, runIndex?: number, targetPro
     const callQAQuery = `
       SELECT * EXCEPT(rn) FROM (
         SELECT *, ROW_NUMBER() OVER (PARTITION BY call_id, name ORDER BY name) AS rn
-        FROM \`${client.projectId}.${DATASET_ID}.${CALL_QA_TABLE_ID}\`
+        FROM \`${client.projectId}.${DATASET_ID}.${INTERACTION_QA_TABLE_ID}\`
         WHERE call_id = @callId
       ) WHERE rn = 1
     `;
@@ -2188,7 +2188,7 @@ export async function getCallDetail(callId: string, runIndex?: number, targetPro
   try {
     const dispQuery = `
       SELECT *
-      FROM \`${client.projectId}.${DATASET_ID}.${CALL_DISPOSITIONS_TABLE_ID}\`
+      FROM \`${client.projectId}.${DATASET_ID}.${INTERACTION_DISPOSITIONS_TABLE_ID}\`
       WHERE call_id = @callId
       LIMIT 1
     `;

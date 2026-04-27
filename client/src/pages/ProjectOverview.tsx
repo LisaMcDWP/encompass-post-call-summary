@@ -47,7 +47,7 @@ const EPICS: Epic[] = [
       {
         id: "E0-S5",
         title: "Tenant-scoped analytics",
-        description: "call_info table stores client and pathway as string fields. The Call Volume dashboard, Call History, and all analytics filter by client/pathway. The API analyze endpoint accepts client and pathway fields for tenant routing.",
+        description: "interaction_info table stores client and pathway as string fields. The Call Volume dashboard, Call History, and all analytics filter by client/pathway. The API analyze endpoint accepts client and pathway fields for tenant routing.",
       },
       {
         id: "E0-S6",
@@ -196,12 +196,12 @@ const EPICS: Epic[] = [
     stories: [
       {
         id: "E5-S1",
-        title: "call_info table",
+        title: "interaction_info table",
         description: "One row per API call capturing: call_id, care_flow_id, processed_datetime, source_type, source_id, processed_at, processing_time_ms, prompt_version, context_values (JSON), transcript_length, summary, follow_up_areas, transition_status, token counts, estimated_cost, status, and error_message.",
       },
       {
         id: "E5-S2",
-        title: "call_observations table",
+        title: "interaction_observations table",
         description: "One row per extracted observation per call: call_id (FK), observation_name, display_name, domain, value_type, value, detail, evidence, and confidence. No duplication of call-level data.",
       },
       {
@@ -278,7 +278,7 @@ const EPICS: Epic[] = [
       {
         id: "E7-S4",
         title: "GET /api/calls and GET /api/calls/:callId",
-        description: "Backend endpoints that query BigQuery call_info and call_observations tables with parameterized queries and limit clamping (1-500).",
+        description: "Backend endpoints that query BigQuery interaction_info and interaction_observations tables with parameterized queries and limit clamping (1-500).",
       },
     ],
   },
@@ -366,8 +366,8 @@ const EPICS: Epic[] = [
       },
       {
         id: "E8c-S3",
-        title: "BigQuery call_qa_results table",
-        description: "call_information.call_qa_results table stores one row per QA assessment per call. Results visible in Call History detail panel and PDF export.",
+        title: "BigQuery interaction_qa_results table",
+        description: "call_information.interaction_qa_results table stores one row per QA assessment per call. Results visible in Call History detail panel and PDF export.",
       },
     ],
   },

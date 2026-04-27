@@ -21,7 +21,7 @@ A full-stack application that provides a Gemini-powered transcript analysis API.
 
 ### How it works:
 - `client_pathway` table stores multiple entries (id, client, pathway, description, gcp_project_id, secret_key)
-- Config tables (`observations`, `context_parameters`, `settings`, `call_qa_prompts`, `disposition_categories`, `disposition_details`, `activation_objectives`) all have a `client_pathway_id` column
+- Config tables (`observations`, `context_parameters`, `settings`, `interaction_qa_prompts`, `disposition_categories`, `disposition_details`, `activation_objectives`) all have a `client_pathway_id` column
 - All config API endpoints require `clientPathwayId` as a query param (GET/DELETE) or body param (POST/PUT)
 - Frontend uses React Context (`ClientPathwayContext`) with a sidebar dropdown selector
 - Setup pages automatically load/save config for the selected client/pathway
@@ -45,7 +45,7 @@ Gemini 2.5 Flash can produce duplicate items. Post-processing dedup applied to:
 ## Key Files
 - `server/routes.ts` — API endpoints (`POST /api/analyze`, `GET /api/prompt`, `GET /api/health`, observations CRUD, client-pathways CRUD, async webhook)
 - `server/gemini.ts` — Vertex AI Gemini integration with dynamic prompt builder from observations
-- `server/bigquery.ts` — BigQuery logging: `call_info` (one row per call) + `call_observations` (one row per observation)
+- `server/bigquery.ts` — BigQuery logging: `interaction_info` (one row per call) + `interaction_observations` (one row per observation)
 - `server/storage.ts` — BigQueryStorage class with all CRUD operations scoped by `clientPathwayId`
 - `server/seed.ts` — Seeds default 11 observation topics to BigQuery on first run (for a given clientPathwayId)
 - `server/batch-job.ts` — Standalone batch processing job for Cloud Run
@@ -60,7 +60,7 @@ Gemini 2.5 Flash can produce duplicate items. Post-processing dedup applied to:
 - `client/src/pages/CallQA.tsx` — Call QA prompt management UI (scoped by selected CP)
 - `client/src/pages/Dispositions.tsx` — Call Dispositions management UI (scoped by selected CP)
 - `client/src/pages/ReviewItems.tsx` — Call Review Items management UI (scoped by selected CP)
-- `client/src/pages/ActivationObjectives.tsx` — Activation Objectives management UI: anchor + window → target date, ordered progress stages, days-remaining threshold rules. Per-objective interaction routing: each objective references reusable Activation Interactions by id, configures its own extracted-value→stage mappings + inclusion rules + prompt guidance per interaction, and reads the interaction key from a configurable request-context field (default `interaction_key`). Each (objective, interaction) config also picks a list of Observation Topics to extract during analysis — values + evidence are stored on the call_activation_objectives row and shown on the call details page. (scoped by selected CP)
+- `client/src/pages/ActivationObjectives.tsx` — Activation Objectives management UI: anchor + window → target date, ordered progress stages, days-remaining threshold rules. Per-objective interaction routing: each objective references reusable Activation Interactions by id, configures its own extracted-value→stage mappings + inclusion rules + prompt guidance per interaction, and reads the interaction key from a configurable request-context field (default `interaction_key`). Each (objective, interaction) config also picks a list of Observation Topics to extract during analysis — values + evidence are stored on the interaction_activation_objectives row and shown on the call details page. (scoped by selected CP)
 - `client/src/pages/ActivationInteractions.tsx` — Activation Interactions management UI: top-level reusable interactions per client/pathway (key, name, description, optional expected day offset, active flag). Reused across multiple objectives so a single "Day 4 call" definition can drive several objectives.
 - `server/activationObjectives.ts` — `pickInteractionForObjective` matches a configured interaction by reading the interaction key from request context (`obj.interactionContextKey || "interaction_key"`) instead of calendar-day distance. If the key is missing/unknown/not-configured, falls back to the per-objective default interaction (config row with `isDefault: true`). Returns a typed `InteractionPickReason` so the caller can emit accurate ineligibility messages (`missing_key | unknown_key | not_configured | default_broken`). When the request context doesn't include the objective's `anchorContextKey`, processing still proceeds — extraction & stage mapping continue, but `targetDate / daysRemaining` become null. `pickBand` supports an optional `"default"` band (no day range) used as a last-resort fallback when no day-bound band matches; the same default band is also used when `daysRemaining` is unknown (anchor missing) so on-track labeling still works.
 - `client/src/pages/GeneratedPrompt.tsx` — Read-only generated prompt viewer (scoped by selected CP)
@@ -83,22 +83,22 @@ Configurable input parameters stored in BigQuery (`call_information.context_para
 
 ## Call Review Items
 Configurable checklist items for human reviewers to evaluate processed calls. Scoped by `client_pathway_id`.
-- **Config table**: `call_review_items` (id, name, displayName, description, category, displayOrder, isActive, clientPathwayId)
-- **Results table**: `call_reviews` (id, source_id, review_item_id, review_item_name, review_item_display_name, status, notes, reviewed_by, reviewed_at)
-- **Review statuses table**: `call_review_statuses` (call_id, review_status, tags (JSON string array), notes, updated_at) — per-call status: `not_reviewed`, `in_progress`, `reviewed`, `flagged`; tags (free-form string chips) and notes (freetext) for reviewer annotations
+- **Config table**: `interaction_review_items` (id, name, displayName, description, category, displayOrder, isActive, clientPathwayId)
+- **Results table**: `interaction_reviews` (id, source_id, review_item_id, review_item_name, review_item_display_name, status, notes, reviewed_by, reviewed_at)
+- **Review statuses table**: `interaction_review_statuses` (call_id, review_status, tags (JSON string array), notes, updated_at) — per-call status: `not_reviewed`, `in_progress`, `reviewed`, `flagged`; tags (free-form string chips) and notes (freetext) for reviewer annotations
 - **Checklist statuses**: `unchecked` → `checked` → `flagged` → `na` (cycled by clicking)
 - **API endpoints**: CRUD at `/api/call-review-items`; per-call reviews at `GET/POST /api/calls/:callId/reviews`; review status at `PUT /api/calls/:callId/review-status`; review meta (tags+notes) at `PUT /api/calls/:callId/review-meta`; bulk statuses at `GET /api/calls/review-statuses?callIds=...`
 - **Reprocess**: `POST /api/calls/:callId/reprocess` — re-runs Gemini analysis on the same transcript using original call metadata; creates a new run visible in the run history
 - **Admin UI**: `/review-items` page with category-grouped list, add/edit/delete dialogs
 - **Call detail integration**: Review checklist card in `CallDetailPanel` (CallHistory.tsx) with status cycling, notes, save to BigQuery, per-call review status selector, and reprocess button
 - **Call list integration**: Review status badge shown per call in the Processed Calls list
-- **Call Reviews page** (`/call-reviews`): Dedicated analytics page listing all calls with review status, tags, notes. Features status filter cards (counts per status), tag filtering, text search (ID, patient name, summary, notes, tags). Uses `GET /api/calls/review-list` endpoint joining `call_info` + `call_review_statuses`.
+- **Call Reviews page** (`/call-reviews`): Dedicated analytics page listing all calls with review status, tags, notes. Features status filter cards (counts per status), tag filtering, text search (ID, patient name, summary, notes, tags). Uses `GET /api/calls/review-list` endpoint joining `interaction_info` + `interaction_review_statuses`.
 
 ## Call Dispositions
 Two-level configurable taxonomy (Category → Detail) for classifying call outcomes. Stored in BigQuery config tables scoped by `client_pathway_id`.
 - **Config tables**: `disposition_categories` (id, name, displayName, description, displayOrder, isActive, isGlobal, clientPathwayId) and `disposition_details` (id, categoryId, name, displayName, description, displayOrder, isActive, isGlobal, clientPathwayId)
 - **Global dispositions**: Categories and details with `is_global = TRUE` appear for all client/pathways regardless of which CP created them. Toggle via "All Clients" / "Client-Specific" switch in the create/edit dialogs. Global items show an "All Clients" badge in the list. Update/delete operations work across client pathways for global items.
-- **Results table**: `call_dispositions` (source_id, category_name, category_display_name, detail_name, detail_display_name, confidence, evidence, inserted_at)
+- **Results table**: `interaction_dispositions` (source_id, category_name, category_display_name, detail_name, detail_display_name, confidence, evidence, inserted_at)
 - **Prompt integration**: `DispositionConfig` (categories + details) is injected into all Gemini analysis paths (webhook sync/async, /api/analyze, batch API, batch job). Gemini returns a `disposition` object with category, detail, confidence, and evidence.
 - **API endpoints**: Full CRUD at `/api/disposition-categories` and `/api/disposition-details`, plus seed endpoint at `/api/disposition-categories/seed`
 - **Admin UI**: `/dispositions` page with accordion-style category/detail management
@@ -157,17 +157,17 @@ Returns service connectivity status.
 ## BigQuery Schema
 - Dataset: `call_information`
 - Table: `client_pathway` — Client and pathway configurations (id, client, pathway, description, gcp_project_id, secret_key)
-- Table: `call_info` — One row per API call (call_id, care_flow_id, processed_datetime, source_type, source_id, processed_at, processing_time_ms, prompt_version, prompt_version_date, context_values JSON, transcript_length, summary, follow_up_areas, transition_status, prompt_tokens, completion_tokens, total_tokens, estimated_cost, status, error_message, request_body, client, pathway)
-- Table: `call_observations` — One row per observation per call
-- Table: `call_qa_pairs` — One row per Q&A exchange per call
+- Table: `interaction_info` — One row per API call (call_id, care_flow_id, processed_datetime, source_type, source_id, processed_at, processing_time_ms, prompt_version, prompt_version_date, context_values JSON, transcript_length, summary, follow_up_areas, transition_status, prompt_tokens, completion_tokens, total_tokens, estimated_cost, status, error_message, request_body, client, pathway)
+- Table: `interaction_observations` — One row per observation per call
+- Table: `interaction_qa_pairs` — One row per Q&A exchange per call
 - Table: `barriers` — One row per identified barrier per call
-- Table: `call_qa_results` — One row per Call QA assessment per call
-- Table: `call_qa_prompts` — Call QA prompt configuration (id, name, display_name, prompt_text, response_type, response_options, is_active, display_order, client_pathway_id)
+- Table: `interaction_qa_results` — One row per Call QA assessment per call
+- Table: `interaction_qa_prompts` — Call QA prompt configuration (id, name, display_name, prompt_text, response_type, response_options, is_active, display_order, client_pathway_id)
 - Table: `known_context_details` — Known context per care flow
 - Table: `observations` — Observation configuration (id, name, display_name, domain, display_order, value_type, value, is_active, prompt_guidance, description, client_pathway_id)
 - Table: `context_parameters` — Context parameter definitions (id, name, display_name, description, data_type, is_required, is_active, display_order, client_pathway_id)
 - Table: `settings` — Key/value settings per CP (key, value, client_pathway_id)
-- **IMPORTANT**: `call_info` and `call_observations` tables are LIVE PRODUCTION tables. NEVER drop, delete, or recreate them unless explicitly instructed by the user. Code only creates them if they don't exist.
+- **IMPORTANT**: `interaction_info` and `interaction_observations` tables are LIVE PRODUCTION tables. NEVER drop, delete, or recreate them unless explicitly instructed by the user. Code only creates them if they don't exist.
 
 ## Batch Processing
 - **Table**: `call_information.batch_processing` — stores calls queued for reprocessing

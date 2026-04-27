@@ -194,7 +194,7 @@ export default function CallQA() {
           <p>
             Each active Call QA prompt is injected into the Gemini analysis request. For every call transcript processed,
             Gemini evaluates and answers each prompt, returning a value, explanation, and supporting evidence. Results
-            are stored in the <code className="bg-blue-100 px-1 rounded text-xs">call_qa_results</code> BigQuery table and displayed in the call detail view.
+            are stored in the <code className="bg-blue-100 px-1 rounded text-xs">interaction_qa_results</code> BigQuery table and displayed in the call detail view.
           </p>
         </div>
       </div>

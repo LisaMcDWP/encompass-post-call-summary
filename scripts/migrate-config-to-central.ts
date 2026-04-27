@@ -9,10 +9,10 @@ const CONFIG_TABLES = [
   "observations",
   "context_parameters",
   "settings",
-  "call_qa_prompts",
+  "interaction_qa_prompts",
   "disposition_categories",
   "disposition_details",
-  "call_review_items",
+  "interaction_review_items",
 ];
 
 async function main() {

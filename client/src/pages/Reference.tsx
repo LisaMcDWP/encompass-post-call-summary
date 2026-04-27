@@ -381,7 +381,7 @@ function exportReferencePdf() {
   bulletPoint("Search — Query Bland.calls in BigQuery with filters (date range, answered_by, duration, tags, processing status).");
   bulletPoint("Select — Choose individual calls or select all from results.");
   bulletPoint("Load to Batch — Selected calls inserted into batch_processing table via DML INSERT.");
-  bulletPoint("Process — Click Process Batch to run pending items through Gemini. Writes call_info, call_observations, call_qa_pairs, barriers, call_qa_results.");
+  bulletPoint("Process — Click Process Batch to run pending items through Gemini. Writes interaction_info, interaction_observations, interaction_qa_pairs, barriers, interaction_qa_results.");
   bulletPoint("Review — Processed calls appear in Call History.");
   divider();
   subheading("GET /api/batch/bland-calls");
@@ -608,21 +608,21 @@ function exportReferencePdf() {
   fieldDesc("PORT", "Set automatically by Cloud Run (default 8080)");
   divider();
   subheading("BigQuery Tables");
-  bulletPoint("call_info — One row per API call (metadata, summary, tokens, cost, status)");
-  bulletPoint("call_observations — One row per observation per call");
-  bulletPoint("call_qa_pairs — One row per Q&A exchange per call");
+  bulletPoint("interaction_info — One row per API call (metadata, summary, tokens, cost, status)");
+  bulletPoint("interaction_observations — One row per observation per call");
+  bulletPoint("interaction_qa_pairs — One row per Q&A exchange per call");
   bulletPoint("barriers — One row per identified barrier per call");
-  bulletPoint("call_qa_results — One row per Call QA assessment per call");
-  bulletPoint("call_dispositions — One row per call with disposition classification");
-  bulletPoint("call_reviews — Review submissions per call");
-  bulletPoint("call_review_statuses — Review status tracking per call");
+  bulletPoint("interaction_qa_results — One row per Call QA assessment per call");
+  bulletPoint("interaction_dispositions — One row per call with disposition classification");
+  bulletPoint("interaction_reviews — Review submissions per call");
+  bulletPoint("interaction_review_statuses — Review status tracking per call");
   bulletPoint("batch_processing — Batch processing tracker");
   bulletPoint("observations — Observation configuration");
   bulletPoint("context_parameters — Context parameter definitions");
-  bulletPoint("call_qa_prompts — Call QA prompt configuration");
+  bulletPoint("interaction_qa_prompts — Call QA prompt configuration");
   bulletPoint("disposition_categories — Disposition category taxonomy");
   bulletPoint("disposition_details — Disposition detail taxonomy");
-  bulletPoint("call_review_items — Review item configuration");
+  bulletPoint("interaction_review_items — Review item configuration");
   bulletPoint("client_pathway — Client/pathway definitions with gcp_project_id and secret_key");
   bulletPoint("settings — Key-value settings store");
 
@@ -1530,7 +1530,7 @@ export default function Reference() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <p className="text-muted-foreground">Manage Call QA evaluation prompts that assess overall call quality. Each prompt defines a question that Gemini answers about the call as a whole. Stored in BigQuery (<code className="text-primary">call_information.call_qa_prompts</code>). Results are stored in <code className="text-primary">call_information.call_qa_results</code>. All endpoints require <code className="text-primary">clientPathwayId</code> (query param for GET/DELETE, body param for POST/PUT).</p>
+            <p className="text-muted-foreground">Manage Call QA evaluation prompts that assess overall call quality. Each prompt defines a question that Gemini answers about the call as a whole. Stored in BigQuery (<code className="text-primary">call_information.interaction_qa_prompts</code>). Results are stored in <code className="text-primary">call_information.interaction_qa_results</code>. All endpoints require <code className="text-primary">clientPathwayId</code> (query param for GET/DELETE, body param for POST/PUT).</p>
 
             <Separator />
 
@@ -1692,7 +1692,7 @@ export default function Reference() {
   "detail": "The patient was reached and all assessment questions were addressed."
 }`}
               </pre>
-              <p className="text-muted-foreground text-sm mt-2">Stored in <code className="text-primary">call_information.call_dispositions</code> — one row per call.</p>
+              <p className="text-muted-foreground text-sm mt-2">Stored in <code className="text-primary">call_information.interaction_dispositions</code> — one row per call.</p>
             </div>
           </CardContent>
         </Card>
@@ -1883,15 +1883,15 @@ export default function Reference() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <p className="text-muted-foreground">Search historical Bland AI calls, load them into a batch, and process them through the same Gemini extraction pipeline used by the live API. Results are written to <code className="text-primary">call_info</code>, <code className="text-primary">call_observations</code>, <code className="text-primary">call_qa_pairs</code>, and <code className="text-primary">barriers</code>.</p>
+            <p className="text-muted-foreground">Search historical Bland AI calls, load them into a batch, and process them through the same Gemini extraction pipeline used by the live API. Results are written to <code className="text-primary">interaction_info</code>, <code className="text-primary">interaction_observations</code>, <code className="text-primary">interaction_qa_pairs</code>, and <code className="text-primary">barriers</code>.</p>
 
             <div className="bg-primary/5 border border-primary/20 p-4 rounded-lg">
               <p className="text-primary font-semibold text-sm mb-2">How Batch Processing Works</p>
               <ol className="text-muted-foreground text-sm space-y-2 list-decimal list-inside">
-                <li><strong>Search</strong> — Query Bland.calls in BigQuery using filters (date range, answered_by, duration, tags, processing status). The "Not Yet Processed" filter cross-references <code className="text-primary">call_info.source_id</code> to exclude calls already processed.</li>
+                <li><strong>Search</strong> — Query Bland.calls in BigQuery using filters (date range, answered_by, duration, tags, processing status). The "Not Yet Processed" filter cross-references <code className="text-primary">interaction_info.source_id</code> to exclude calls already processed.</li>
                 <li><strong>Select</strong> — Choose individual calls or select all from the results. Each call shows its ID, date, duration, answered_by, transcript preview, and tags.</li>
                 <li><strong>Load to Batch</strong> — Selected calls are inserted into <code className="text-primary">call_information.batch_processing</code> via DML INSERT (not streaming API). Each row includes bland_call_id, transcript, care_flow_id, and status=pending.</li>
-                <li><strong>Process</strong> — Click "Process Batch" to run N pending items through Gemini. Each item: builds the prompt from current observation config → calls Gemini → writes call_info + call_observations + call_qa_pairs + barriers → updates batch status to completed or failed.</li>
+                <li><strong>Process</strong> — Click "Process Batch" to run N pending items through Gemini. Each item: builds the prompt from current observation config → calls Gemini → writes interaction_info + interaction_observations + interaction_qa_pairs + barriers → updates batch status to completed or failed.</li>
                 <li><strong>Review</strong> — Processed calls appear in Call History. Click any call to see the full detail panel including summary, observations, Q&A pairs, follow-up areas, and transition status.</li>
               </ol>
             </div>
@@ -1910,7 +1910,7 @@ export default function Reference() {
                 <p className="text-foreground"><span className="text-primary font-semibold">callIds</span> <span className="text-muted-foreground">(query, optional)</span> — Comma-separated list of specific call IDs.</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">requiredTags</span> <span className="text-muted-foreground">(query, optional)</span> — Comma-separated tags that must be present on the call.</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">excludeTags</span> <span className="text-muted-foreground">(query, optional)</span> — Comma-separated tags that must NOT be present on the call.</p>
-                <p className="text-foreground"><span className="text-primary font-semibold">processedFilter</span> <span className="text-muted-foreground">(query, optional)</span> — "unprocessed" (default), "processed", or "all". Cross-references call_info.source_id.</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">processedFilter</span> <span className="text-muted-foreground">(query, optional)</span> — "unprocessed" (default), "processed", or "all". Cross-references interaction_info.source_id.</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">limit</span> <span className="text-muted-foreground">(query, optional)</span> — Max results to return (default 50).</p>
               </div>
             </div>
@@ -1950,7 +1950,7 @@ export default function Reference() {
                 <p className="text-foreground"><span className="text-primary font-semibold">limit</span> <span className="text-muted-foreground">(body, optional)</span> — Max items to process in this run (default 5).</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">batchId</span> <span className="text-muted-foreground">(body, optional)</span> — Target a specific batch. Defaults to newest batch.</p>
               </div>
-              <p className="text-muted-foreground text-sm">For each pending item: builds prompt from current observation config → calls Gemini → writes to call_info, call_observations, call_qa_pairs, and barriers → updates batch item status to completed or failed.</p>
+              <p className="text-muted-foreground text-sm">For each pending item: builds prompt from current observation config → calls Gemini → writes to interaction_info, interaction_observations, interaction_qa_pairs, and barriers → updates batch item status to completed or failed.</p>
             </div>
 
             <Separator />
@@ -2054,12 +2054,12 @@ export default function Reference() {
                 <p className="text-foreground"><span className="text-primary font-semibold">Bland.variables</span> — Call variables including awell_care_flow_id (joined via call_id)</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">Bland.tags</span> — Call tags (assessment_completed, patient_deceased, etc.)</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">call_information.batch_processing</span> — Batch tracking table (bland_call_id, transcript, care_flow_id, status, batch_id, error_message)</p>
-                <p className="text-foreground"><span className="text-primary font-semibold">call_information.call_info</span> — Output: one row per processed call (cross-referenced by source_id for processed filter)</p>
-                <p className="text-foreground"><span className="text-primary font-semibold">call_information.call_observations</span> — Output: one row per observation per call</p>
-                <p className="text-foreground"><span className="text-primary font-semibold">call_information.call_qa_pairs</span> — Output: one row per Q&A exchange per call</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">call_information.interaction_info</span> — Output: one row per processed call (cross-referenced by source_id for processed filter)</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">call_information.interaction_observations</span> — Output: one row per observation per call</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">call_information.interaction_qa_pairs</span> — Output: one row per Q&A exchange per call</p>
                 <p className="text-foreground"><span className="text-primary font-semibold">call_information.barriers</span> — Output: one row per identified barrier per call (barrier, context, category, severity, evidence, observation linkage)</p>
-                <p className="text-foreground"><span className="text-primary font-semibold">call_information.call_qa_results</span> — Output: one row per Call QA assessment per call</p>
-                <p className="text-foreground"><span className="text-primary font-semibold">call_information.call_dispositions</span> — Output: one row per call with disposition classification (category, detail, confidence, evidence)</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">call_information.interaction_qa_results</span> — Output: one row per Call QA assessment per call</p>
+                <p className="text-foreground"><span className="text-primary font-semibold">call_information.interaction_dispositions</span> — Output: one row per call with disposition classification (category, detail, confidence, evidence)</p>
               </div>
             </div>
           </CardContent>
@@ -2467,15 +2467,15 @@ gcloud builds submit --config cloudbuild.yaml`}
                 <p className="text-foreground"><span className="text-primary font-semibold">Dataset:</span> call_information</p>
                 <p className="text-foreground mt-1"><span className="text-primary font-semibold">Tables:</span></p>
                 <ul className="text-muted-foreground text-sm list-disc list-inside ml-2 mt-1 space-y-1">
-                  <li><code className="text-primary">call_info</code> — One row per API call (metadata, summary, tokens, cost, status)</li>
-                  <li><code className="text-primary">call_observations</code> — One row per observation per call (name, value, detail, evidence, confidence)</li>
-                  <li><code className="text-primary">call_qa_pairs</code> — One row per Q&A exchange per call (sequence_number, question, answer, asked_by, answered_by, observation_name, category)</li>
+                  <li><code className="text-primary">interaction_info</code> — One row per API call (metadata, summary, tokens, cost, status)</li>
+                  <li><code className="text-primary">interaction_observations</code> — One row per observation per call (name, value, detail, evidence, confidence)</li>
+                  <li><code className="text-primary">interaction_qa_pairs</code> — One row per Q&A exchange per call (sequence_number, question, answer, asked_by, answered_by, observation_name, category)</li>
                   <li><code className="text-primary">barriers</code> — One row per identified barrier per call (barrier, context, category, severity, observation_name, observation_display_name, evidence)</li>
-                  <li><code className="text-primary">call_qa_results</code> — One row per Call QA assessment per call (call_id, name, display_name, value, detail, evidence)</li>
+                  <li><code className="text-primary">interaction_qa_results</code> — One row per Call QA assessment per call (call_id, name, display_name, value, detail, evidence)</li>
                   <li><code className="text-primary">batch_processing</code> — Batch processing tracker (bland_call_id, transcript, care_flow_id, status, batch_id, error_message, result_call_id, context_values)</li>
                   <li><code className="text-primary">observations</code> — Observation configuration (id, name, display_name, domain, value_type, value, is_active, prompt_guidance)</li>
                   <li><code className="text-primary">context_parameters</code> — Context parameter definitions (id, name, display_name, data_type, enum_values, is_active)</li>
-                  <li><code className="text-primary">call_qa_prompts</code> — Call QA prompt configuration (id, name, display_name, prompt_text, response_type, response_options, is_active, display_order)</li>
+                  <li><code className="text-primary">interaction_qa_prompts</code> — Call QA prompt configuration (id, name, display_name, prompt_text, response_type, response_options, is_active, display_order)</li>
                   <li><code className="text-primary">settings</code> — Key-value settings store (summary_instruction, observations_prompt_guidance, barriers_prompt_guidance)</li>
                 </ul>
               </div>

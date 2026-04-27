@@ -10,7 +10,7 @@ const targetId = "96b328ab-3a76-4f45-b976-700367cff54f";
 async function tryDelete(): Promise<boolean> {
   try {
     await bq.query({
-      query: `DELETE FROM \`${enc}.call_information.call_activation_objectives\` WHERE call_id = "${targetId}"`,
+      query: `DELETE FROM \`${enc}.call_information.interaction_activation_objectives\` WHERE call_id = "${targetId}"`,
       location: "US",
     });
     return true;
@@ -25,7 +25,7 @@ async function tryDelete(): Promise<boolean> {
 
 async function main() {
   const [current] = await bq.query({
-    query: `SELECT COUNT(*) c FROM \`${enc}.call_information.call_activation_objectives\` WHERE call_id = "${targetId}"`,
+    query: `SELECT COUNT(*) c FROM \`${enc}.call_information.interaction_activation_objectives\` WHERE call_id = "${targetId}"`,
   });
   console.log(`Current row count for call: ${current[0].c}`);
 
@@ -46,7 +46,7 @@ async function main() {
   }
 
   const [afterDelete] = await bq.query({
-    query: `SELECT COUNT(*) c FROM \`${enc}.call_information.call_activation_objectives\` WHERE call_id = "${targetId}"`,
+    query: `SELECT COUNT(*) c FROM \`${enc}.call_information.interaction_activation_objectives\` WHERE call_id = "${targetId}"`,
   });
   console.log(`Rows after DELETE: ${afterDelete[0].c}`);
 
@@ -56,7 +56,7 @@ async function main() {
   const activeObs = await storage.getActiveObservations(1);
 
   const [calls] = await bq.query({
-    query: `SELECT call_id, processed_at, call_date, response_json FROM \`${enc}.call_information.call_info\` WHERE call_id = "${targetId}" ORDER BY processed_at DESC LIMIT 1`,
+    query: `SELECT call_id, processed_at, call_date, response_json FROM \`${enc}.call_information.interaction_info\` WHERE call_id = "${targetId}" ORDER BY processed_at DESC LIMIT 1`,
   });
   const c = calls[0];
   const analysis = JSON.parse(c.response_json);
@@ -84,11 +84,11 @@ async function main() {
     processed_at: r.processedAt,
   }));
 
-  await bq.dataset("call_information").table("call_activation_objectives").insert(rows);
+  await bq.dataset("call_information").table("interaction_activation_objectives").insert(rows);
   console.log(`Inserted ${rows.length} fresh row(s).`);
 
   const [final] = await bq.query({
-    query: `SELECT objective_name, extracted_value, current_stage_name, on_track_status FROM \`${enc}.call_information.call_activation_objectives\` WHERE call_id = "${targetId}" ORDER BY objective_id`,
+    query: `SELECT objective_name, extracted_value, current_stage_name, on_track_status FROM \`${enc}.call_information.interaction_activation_objectives\` WHERE call_id = "${targetId}" ORDER BY objective_id`,
   });
   console.log("\nFinal state:");
   console.log(JSON.stringify(final, null, 2));

@@ -374,18 +374,15 @@ export default function Observations() {
           <div className="flex gap-2">
             <Button
               variant="outline"
+              disabled={observations.length === 0}
               onClick={() => {
-                if (observations.length === 0) {
-                  toast({ title: "Nothing to export", description: "Create at least one observation first.", variant: "destructive" });
-                  return;
-                }
                 const pathwayLabel = selectedCP
                   ? `${selectedCP.client} — ${selectedCP.pathway}`
                   : "Pathway";
                 exportObservationsPdf(pathwayLabel, observations as any, generalGuidance);
               }}
               data-testid="button-export-pdf"
-              title="Download a PDF of every observation in this pathway"
+              title={observations.length === 0 ? "Create at least one observation to enable export" : "Download a PDF of every observation in this pathway"}
             >
               <FileDown className="h-4 w-4 mr-2" /> Export PDF
             </Button>
