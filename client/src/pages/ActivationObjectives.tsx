@@ -300,24 +300,17 @@ export default function ActivationObjectives() {
       toast({ title: "Missing interaction context key", description: "Specify the request context field that carries the interaction key (e.g. interaction_key).", variant: "destructive" });
       return;
     }
-    // Validate the linked Observation: it must be set, resolve to an active
-    // enum observation in this pathway, and every one of its values must be
-    // mapped to a stage. Without this, runtime extraction silently skips the
-    // objective (gemini.ts: linkedAllowed is empty → continue).
-    {
-      if (!form.observationName.trim()) {
-        toast({
-          title: "Linked observation required",
-          description: "Pick an observation in the Observation section so the model knows what to extract.",
-          variant: "destructive",
-        });
-        return;
-      }
+    // Validate the linked Observation. The link is OPTIONAL — an objective
+    // can stand on its own (no observation-driven staging). But if a link IS
+    // set, it must resolve to a valid active enum observation with every
+    // value mapped to a stage; otherwise runtime extraction would silently
+    // skip the objective.
+    if (form.observationName.trim()) {
       const linked = observationTopics.find(o => o.name === form.observationName);
       if (!linked) {
         toast({
           title: "Linked observation missing",
-          description: `"${form.observationName}" isn't an observation in this pathway. Pick an existing one or create it on the Observations page.`,
+          description: `"${form.observationName}" isn't an observation in this pathway. Pick an existing one, create it on the Observations page, or clear the link.`,
           variant: "destructive",
         });
         return;
@@ -325,7 +318,7 @@ export default function ActivationObjectives() {
       if (!linked.isActive) {
         toast({
           title: "Linked observation is inactive",
-          description: `"${linked.displayName}" is marked inactive and won't run at extraction time. Activate it on the Observations page or pick a different one.`,
+          description: `"${linked.displayName}" is marked inactive and won't run at extraction time. Activate it on the Observations page, pick a different one, or clear the link.`,
           variant: "destructive",
         });
         return;
@@ -333,7 +326,7 @@ export default function ActivationObjectives() {
       if (linked.valueType !== "enum" || !Array.isArray(linked.value) || linked.value.length === 0) {
         toast({
           title: "Linked observation has no enum values",
-          description: `"${linked.displayName}" must be an enum with at least one value before it can drive stages.`,
+          description: `"${linked.displayName}" must be an enum with at least one value before it can drive stages. Add values on the Observations page or clear the link.`,
           variant: "destructive",
         });
         return;
