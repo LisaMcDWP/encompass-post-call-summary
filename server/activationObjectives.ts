@@ -8,7 +8,7 @@ import type {
   CallActivationObjectiveObservation,
   Observation,
 } from "@shared/schema";
-import { SYSTEM_STAGE_NOT_DISCUSSED_ID } from "@shared/schema";
+import { SYSTEM_STAGE_NOT_DISCUSSED_ID, SYSTEM_STAGE_EXCLUDED_ID } from "@shared/schema";
 import type { ActivationObjectiveExtraction } from "./gemini";
 
 function diffDaysISO(fromDate: string, toDate: string): number | null {
@@ -192,6 +192,11 @@ export function computeActivationObjectiveResults(args: {
       // call. Distinct from "unresolved" (discussed but unclear).
       onTrack = null;
       onTrackStatus = "not_discussed";
+    } else if (currentStage && currentStage.id === SYSTEM_STAGE_EXCLUDED_ID) {
+      // User mapped this observation value to "Excluded" — drop the patient
+      // out of this objective's denominator for reporting.
+      onTrack = null;
+      onTrackStatus = "excluded";
     } else if (config?.canResolveObjective && currentStage && obj.achievedStageId && currentStage.id === obj.achievedStageId) {
       onTrack = true;
       onTrackStatus = "achieved";

@@ -1809,16 +1809,20 @@ function ObjectiveEditor(p: EditorProps) {
             );
           })()}
 
-          {/* System stage: "Not discussed" — auto-injected by the server on
-              every objective. The stage itself can't be renamed or removed,
-              but observation values from the linked Observation CAN be mapped
-              to it (e.g. a "Patient declined" enum value that the user wants
-              to treat as not-discussed for reporting). */}
-          {(() => {
-            const sys = p.form.stages.find(s => s.id === "stage_not_discussed");
+          {/* System stages: "Not discussed" + "Excluded". Both auto-injected
+              by the server on every objective. The stage definitions can't be
+              renamed or removed, but observation values from the linked
+              Observation CAN be mapped to either (e.g. "Patient declined" →
+              Not discussed, or "Hospice / palliative" → Excluded). Rendered
+              with a small loop so they share the same chip-mapping pattern. */}
+          {([
+            { id: "stage_not_discussed", testId: "not-discussed", description: 'Built-in baseline stage on every objective. Captures calls where the topic was never raised — distinct from "Unresolved" (raised but unclear). The model returns "Not discussed" automatically when the topic isn\'t mentioned; you can also map other observation values here (e.g. "Patient declined").' },
+            { id: "stage_excluded", testId: "excluded", description: 'Built-in baseline stage. The model never returns "Excluded" automatically — only observation values you map here will route to it. Use this for values that should drop the patient out of the objective\'s denominator entirely (e.g. "Hospice / palliative", "Patient deceased", "Plan does not cover").' },
+          ] as const).map(({ id, testId, description }) => {
+            const sys = p.form.stages.find(s => s.id === id);
             if (!sys) return null;
             return (
-              <div className="rounded-md border-2 border-dashed border-muted-foreground/30 bg-muted/20 p-2 flex flex-col gap-2" data-testid="row-stage-not-discussed">
+              <div key={id} className="rounded-md border-2 border-dashed border-muted-foreground/30 bg-muted/20 p-2 flex flex-col gap-2" data-testid={`row-stage-${testId}`}>
                 <div className="flex items-center gap-2">
                   <div className="w-12 shrink-0" />
                   <div className="w-7 h-7 rounded-full border-2 border-dashed border-muted-foreground/40 flex items-center justify-center text-xs font-semibold text-muted-foreground bg-background">0</div>
@@ -1828,7 +1832,7 @@ function ObjectiveEditor(p: EditorProps) {
                       <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted text-muted-foreground border">System</span>
                     </div>
                     <div className="text-[11px] text-muted-foreground italic mt-0.5">
-                      Built-in baseline stage on every objective. Captures calls where the topic was never raised — distinct from "Unresolved" (raised but unclear). The model returns "Not discussed" automatically when the topic isn't mentioned; you can also map other observation values here (e.g. "Patient declined").
+                      {description}
                     </div>
                   </div>
                 </div>
@@ -1855,7 +1859,7 @@ function ObjectiveEditor(p: EditorProps) {
                                 ? `${c.bg} ${c.text} border-dashed ${c.border} opacity-60 hover:opacity-100`
                                 : `${c.bg} ${c.text} ${c.border} hover:opacity-80`)
                           }
-                          data-testid={`chip-stage-value-not-discussed-${v.label}`}
+                          data-testid={`chip-stage-value-${testId}-${v.label}`}
                         >
                           {v.label}
                         </button>
@@ -1865,7 +1869,7 @@ function ObjectiveEditor(p: EditorProps) {
                 )}
               </div>
             );
-          })()}
+          })}
 
           {/* Progress stages (order > 0) */}
           <div className="space-y-2">

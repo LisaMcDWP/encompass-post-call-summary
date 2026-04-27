@@ -259,13 +259,18 @@ export type ActivationObjectiveStage = z.infer<typeof activationObjectiveStageSc
 // storage layer and stripped on write so they cannot be edited or removed.
 // "unresolved" = topic was discussed but the answer was unclear / deferred.
 // "not_discussed" = topic was never raised in the conversation.
+// "excluded" = an observation value was extracted but the user has flagged it
+//   to drop the patient out of this objective entirely for reporting.
 export const SYSTEM_STAGE_UNRESOLVED_ID = "stage_unresolved";
 export const SYSTEM_STAGE_UNRESOLVED_VALUE = "Unresolved";
 export const SYSTEM_STAGE_NOT_DISCUSSED_ID = "stage_not_discussed";
 export const SYSTEM_STAGE_NOT_DISCUSSED_VALUE = "Not discussed";
+export const SYSTEM_STAGE_EXCLUDED_ID = "stage_excluded";
+export const SYSTEM_STAGE_EXCLUDED_VALUE = "Excluded";
 export const SYSTEM_STAGE_IDS: readonly string[] = [
   SYSTEM_STAGE_UNRESOLVED_ID,
   SYSTEM_STAGE_NOT_DISCUSSED_ID,
+  SYSTEM_STAGE_EXCLUDED_ID,
 ];
 export const isSystemStageId = (id: string | null | undefined): boolean =>
   !!id && SYSTEM_STAGE_IDS.includes(id);
@@ -275,6 +280,14 @@ export const SYSTEM_STAGE_NOT_DISCUSSED: ActivationObjectiveStage = {
   name: "not_discussed",
   displayName: SYSTEM_STAGE_NOT_DISCUSSED_VALUE,
   description: "topic was not raised in the conversation",
+  order: 0,
+};
+
+export const SYSTEM_STAGE_EXCLUDED: ActivationObjectiveStage = {
+  id: SYSTEM_STAGE_EXCLUDED_ID,
+  name: "excluded",
+  displayName: SYSTEM_STAGE_EXCLUDED_VALUE,
+  description: "patient excluded from this objective by an observation value",
   order: 0,
 };
 

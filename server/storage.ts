@@ -13,6 +13,8 @@ import {
   SYSTEM_STAGE_NOT_DISCUSSED,
   SYSTEM_STAGE_NOT_DISCUSSED_ID,
   SYSTEM_STAGE_NOT_DISCUSSED_VALUE,
+  SYSTEM_STAGE_EXCLUDED,
+  SYSTEM_STAGE_EXCLUDED_ID,
   SYSTEM_STAGE_IDS,
 } from "@shared/schema";
 
@@ -22,8 +24,11 @@ const NORM_NOT_DISCUSSED = SYSTEM_STAGE_NOT_DISCUSSED_VALUE.trim().toLowerCase()
 const isNotDiscussedLabel = (s: string | null | undefined): boolean =>
   !!s && s.trim().toLowerCase() === NORM_NOT_DISCUSSED;
 
-// Auto-inject the "Not discussed" baseline stage on read so every objective
-// has it without requiring per-objective config. Idempotent.
+// Auto-inject baseline stages on read so every objective has them without
+// requiring per-objective config. Idempotent. Two system stages are injected:
+//   - "Not discussed": auto-bound to the literal "Not discussed" extracted value.
+//   - "Excluded": stage exists by default but no auto-mapping; users opt-in by
+//     mapping specific observation values to it.
 function injectSystemStages(obj: ActivationObjective): ActivationObjective {
   const stages = Array.isArray(obj.stages) ? [...obj.stages] : [];
   if (!stages.some((s) => s.id === SYSTEM_STAGE_NOT_DISCUSSED_ID)) {
@@ -32,10 +37,18 @@ function injectSystemStages(obj: ActivationObjective): ActivationObjective {
     if (insertAt >= 0) stages.splice(insertAt + 1, 0, { ...SYSTEM_STAGE_NOT_DISCUSSED });
     else stages.unshift({ ...SYSTEM_STAGE_NOT_DISCUSSED });
   }
+  if (!stages.some((s) => s.id === SYSTEM_STAGE_EXCLUDED_ID)) {
+    // Place right after stage_not_discussed.
+    const insertAt = stages.findIndex((s) => s.id === SYSTEM_STAGE_NOT_DISCUSSED_ID);
+    if (insertAt >= 0) stages.splice(insertAt + 1, 0, { ...SYSTEM_STAGE_EXCLUDED });
+    else stages.unshift({ ...SYSTEM_STAGE_EXCLUDED });
+  }
 
   // Ensure stageMappings always routes any "not discussed" variant to the
   // system stage, overriding any stale legacy mapping. Strip ALL variants
   // first, then push canonical — so nothing can shadow it on lookup.
+  // No auto-mapping for "Excluded" — only user-defined observation values
+  // get routed there.
   const mappings = (Array.isArray(obj.stageMappings) ? obj.stageMappings : [])
     .filter((m) => m && !isNotDiscussedLabel(m.extractedValue));
   mappings.push({
@@ -46,14 +59,20 @@ function injectSystemStages(obj: ActivationObjective): ActivationObjective {
   return { ...obj, stages, stageMappings: mappings };
 }
 
-// Strip system-managed stage + mapping from write payloads so the canonical
+// Strip system-managed stages + mapping from write payloads so the canonical
 // definitions live only in one place (re-injected on read). Strips ALL
 // case/whitespace variants of "not discussed" too, so legacy variant rows
-// in BQ get cleaned up the next time the user saves the objective.
+// in BQ get cleaned up the next time the user saves the objective. User
+// mappings whose stageId points to a system stage (e.g. observation value
+// → "Excluded" or → "Not discussed") are PRESERVED — only the system stage
+// definitions themselves are stripped.
 function stripSystemStages<T extends Partial<InsertActivationObjective>>(data: T): T {
   const out: any = { ...data };
   if (Array.isArray(out.stages)) {
-    out.stages = out.stages.filter((s: ActivationObjectiveStage) => s.id !== SYSTEM_STAGE_NOT_DISCUSSED_ID);
+    out.stages = out.stages.filter(
+      (s: ActivationObjectiveStage) =>
+        s.id !== SYSTEM_STAGE_NOT_DISCUSSED_ID && s.id !== SYSTEM_STAGE_EXCLUDED_ID,
+    );
   }
   if (Array.isArray(out.stageMappings)) {
     out.stageMappings = out.stageMappings.filter(
