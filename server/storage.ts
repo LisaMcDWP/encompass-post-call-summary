@@ -290,6 +290,16 @@ async function ensureObservationsTable(): Promise<void> {
     }
   }
 
+  try {
+    await client.query({
+      query: `ALTER TABLE \`${fullTable}\` ADD COLUMN IF NOT EXISTS hide_from_formatted_view BOOL`,
+    });
+  } catch (err: any) {
+    if (!err.message?.includes("Already Exists") && !err.message?.includes("Duplicate column")) {
+      console.log(`Note: Could not add hide_from_formatted_view column (may already exist): ${err.message}`);
+    }
+  }
+
   tableInitialized = true;
 }
 
@@ -524,6 +534,7 @@ function rowToObservation(row: any): Observation {
     value,
     isActive: row.is_active,
     promptGuidance: row.prompt_guidance || "",
+    hideFromFormattedView: row.hide_from_formatted_view === true,
   };
 }
 
@@ -961,11 +972,12 @@ export class BigQueryStorage implements IStorage {
       value: JSON.stringify(observation.value || []),
       is_active: observation.isActive !== false,
       prompt_guidance: observation.promptGuidance || "",
+      hide_from_formatted_view: observation.hideFromFormattedView === true,
       client_pathway_id: clientPathwayId,
     };
 
     await client.query({
-      query: `INSERT INTO ${table} (id, name, display_name, description, domain, display_order, value_type, value, is_active, prompt_guidance, client_pathway_id) VALUES (@id, @name, @display_name, @description, @domain, @display_order, @value_type, @value, @is_active, @prompt_guidance, @client_pathway_id)`,
+      query: `INSERT INTO ${table} (id, name, display_name, description, domain, display_order, value_type, value, is_active, prompt_guidance, hide_from_formatted_view, client_pathway_id) VALUES (@id, @name, @display_name, @description, @domain, @display_order, @value_type, @value, @is_active, @prompt_guidance, @hide_from_formatted_view, @client_pathway_id)`,
       params: row,
     });
 
@@ -990,6 +1002,7 @@ export class BigQueryStorage implements IStorage {
     if (data.value !== undefined) { setClauses.push("value = @value"); params.value = JSON.stringify(data.value); }
     if (data.isActive !== undefined) { setClauses.push("is_active = @isActive"); params.isActive = data.isActive; }
     if (data.promptGuidance !== undefined) { setClauses.push("prompt_guidance = @promptGuidance"); params.promptGuidance = data.promptGuidance; }
+    if (data.hideFromFormattedView !== undefined) { setClauses.push("hide_from_formatted_view = @hideFromFormattedView"); params.hideFromFormattedView = data.hideFromFormattedView; }
     if (setClauses.length === 0) return existing;
 
     await client.query({ query: `UPDATE ${table} SET ${setClauses.join(", ")} WHERE id = @id`, params });

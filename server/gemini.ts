@@ -637,6 +637,48 @@ function deduplicateByName(items: any[]): any[] {
   });
 }
 
+function stripHiddenFromTransitionStatus(html: string, activeObservations: Observation[]): string {
+  if (!html || typeof html !== "string") return html;
+  const hiddenNames = new Set(
+    activeObservations
+      .filter(o => o.hideFromFormattedView === true)
+      .map(o => o.displayName.trim().toLowerCase()),
+  );
+  if (hiddenNames.size === 0) return html;
+
+  const topicBlocks = html.split(/<br\s*\/?>\s*<br\s*\/?>/i);
+  const kept: string[] = [];
+
+  for (const block of topicBlocks) {
+    const trimmed = block.trim();
+    if (!trimmed) continue;
+    const topicMatch = trimmed.match(/<b>([^<]+?):?\s*<\/b>/i);
+    let topicName = topicMatch ? topicMatch[1].trim().toLowerCase() : null;
+
+    // Fallback: if no <b>Topic</b> header, scan the leading plain text of the
+    // block for any hidden display name. This protects against malformed HTML
+    // from the model that would otherwise leak a hidden topic.
+    if (!topicName) {
+      const head = trimmed.replace(/<[^>]+>/g, " ").slice(0, 120).toLowerCase();
+      for (const hidden of hiddenNames) {
+        if (head.includes(hidden)) {
+          topicName = hidden;
+          break;
+        }
+      }
+    }
+
+    if (topicName && hiddenNames.has(topicName)) {
+      const label = topicMatch ? topicMatch[1].trim() : topicName;
+      console.log(`[HIDE_FORMATTED] Removed hidden topic from transition_status: "${label}"`);
+      continue;
+    }
+    kept.push(trimmed);
+  }
+
+  return kept.join("<br><br>") + (kept.length > 0 ? "<br><br>" : "");
+}
+
 function deduplicateTransitionStatus(html: string): string {
   if (!html || typeof html !== "string") return html;
 
@@ -798,6 +840,7 @@ export async function analyzeTranscript(
   }
   if (parsed.transition_status) {
     parsed.transition_status = deduplicateTransitionStatus(parsed.transition_status);
+    parsed.transition_status = stripHiddenFromTransitionStatus(parsed.transition_status, activeObservations);
   }
 
   return { analysis: parsed as TranscriptAnalysis, promptUsed: prompt, tokenUsage };
@@ -965,6 +1008,7 @@ export async function analyzeTranscriptFast(
   }
   if (parsed.transition_status) {
     parsed.transition_status = deduplicateTransitionStatus(parsed.transition_status);
+    parsed.transition_status = stripHiddenFromTransitionStatus(parsed.transition_status, activeObservations);
   }
 
   return { analysis: parsed, tokenUsage };

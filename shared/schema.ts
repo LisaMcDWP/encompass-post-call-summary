@@ -159,6 +159,7 @@ export const insertObservationSchema = z.object({
   value: coerceObservationEnumValues,
   isActive: z.boolean().default(true),
   promptGuidance: z.string().default(""),
+  hideFromFormattedView: z.boolean().default(false),
 });
 
 export type InsertObservation = z.infer<typeof insertObservationSchema>;
@@ -177,6 +178,10 @@ export interface Observation {
   value: ObservationEnumValueRich[];
   isActive: boolean;
   promptGuidance: string;
+  // When true, this observation is still extracted and written to the
+  // observations table, but is omitted from the HTML "transition_status"
+  // formatted view returned to API consumers.
+  hideFromFormattedView: boolean;
 }
 
 // Convenience alias so the Observation interface above can reference the rich

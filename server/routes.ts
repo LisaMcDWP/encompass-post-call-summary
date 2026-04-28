@@ -849,6 +849,7 @@ export async function registerRoutes(
     value: coerceObservationEnumValues,
     isActive: z.boolean().default(true),
     promptGuidance: z.string().default(""),
+    hideFromFormattedView: z.boolean().default(false),
   });
 
   const observationUpdateSchema = observationCreateSchema.partial();

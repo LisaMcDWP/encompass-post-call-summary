@@ -30,6 +30,7 @@ interface Observation {
   value: EnumValue[];
   isActive: boolean;
   promptGuidance: string;
+  hideFromFormattedView: boolean;
 }
 
 const COLOR_MAP: Record<string, { bg: string; text: string; border: string; label: string }> = {
@@ -52,6 +53,7 @@ const emptyForm = {
   value: [] as EnumValue[],
   isActive: true,
   promptGuidance: "",
+  hideFromFormattedView: false,
 };
 
 const VALID_COLORS = new Set(["GREEN", "YELLOW", "RED", "BLUE", "GRAY"]);
@@ -221,6 +223,7 @@ export default function Observations() {
       value: [...(obs.value || [])],
       isActive: obs.isActive,
       promptGuidance: obs.promptGuidance || "",
+      hideFromFormattedView: obs.hideFromFormattedView === true,
     });
     setNewEnumLabel("");
     setIsDialogOpen(true);
@@ -241,6 +244,7 @@ export default function Observations() {
       value: form.valueType === "enum" ? form.value : [],
       isActive: form.isActive,
       promptGuidance: form.promptGuidance.trim(),
+      hideFromFormattedView: form.hideFromFormattedView === true,
     };
 
     let res;
@@ -600,6 +604,11 @@ export default function Observations() {
                       <span className="font-semibold text-foreground" data-testid={`text-observation-name-${obs.id}`}>{obs.displayName}</span>
                       <Badge variant="outline" className="text-[10px] px-1.5">{obs.domain}</Badge>
                       <Badge variant="outline" className="text-[10px] px-1.5">{obs.valueType}</Badge>
+                      {obs.hideFromFormattedView && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 border-amber-300 bg-amber-50 text-amber-800" data-testid={`badge-hidden-${obs.id}`}>
+                          Hidden from formatted view
+                        </Badge>
+                      )}
                       <span className="text-xs text-muted-foreground font-mono">{obs.name}</span>
                     </div>
                     {obs.description && (
@@ -747,6 +756,23 @@ export default function Observations() {
               <p className="text-[11px] text-muted-foreground">
                 Extra instructions for Gemini on how to evaluate this observation. If blank, Gemini uses a generic instruction.
               </p>
+            </div>
+
+            <div className="flex items-start justify-between gap-3 rounded-md border border-border/60 bg-muted/20 p-3">
+              <div className="space-y-0.5 min-w-0">
+                <Label htmlFor="obs-hide-formatted" className="text-sm font-semibold">
+                  Hide from formatted view
+                </Label>
+                <p className="text-[11px] text-muted-foreground">
+                  When on, this observation is still extracted and stored, but is omitted from the HTML "transition_status" formatted view returned by the API.
+                </p>
+              </div>
+              <Switch
+                id="obs-hide-formatted"
+                checked={form.hideFromFormattedView}
+                onCheckedChange={(v) => setForm({ ...form, hideFromFormattedView: v === true })}
+                data-testid="switch-hide-from-formatted-view"
+              />
             </div>
 
             {form.valueType === "enum" && (
