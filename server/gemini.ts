@@ -38,6 +38,10 @@ export interface ObservationResult {
   domain: string;
   value_type: string;
   value: string | null;
+  // Stable id of the matched enum value on the observation definition. Resolved
+  // server-side after parsing by matching `value` (label) against the linked
+  // observation's enum values. Null for non-enum types or when no match found.
+  value_id: string | null;
   detail: string;
   evidence: string | null;
   confidence: string | null;
@@ -92,6 +96,9 @@ export interface ActivationObjectiveExtraction {
   objective_name: string;
   interaction_key: string;
   extracted_value: string | null;
+  // Stable id of the matched enum value on the linked observation. Resolved
+  // server-side after parsing. Null when no match (e.g. legacy or new label).
+  extracted_value_id?: string | null;
   rationale: string;
   evidence: string | null;
   observations?: ActivationObjectiveObservationExtraction[];
@@ -378,7 +385,7 @@ function buildContextBlock(contextParams: ContextParameter[]): string {
   const lines = contextParams.map(p => {
     const req = "(optional)";
     const enumHint = p.dataType === "enum" && p.enumValues && p.enumValues.length > 0
-      ? ` [Allowed values: ${p.enumValues.join(", ")}]`
+      ? ` [Allowed values: ${p.enumValues.map(v => v.label).join(", ")}]`
       : "";
     return `- ${p.displayName} (${p.name}): {{CONTEXT_${p.name.toUpperCase()}}} ${req}${enumHint}`;
   });
@@ -701,6 +708,54 @@ function parseGeminiResponse(response: any): any {
   }
 }
 
+// Resolve `value_id` on each observation row by matching its label against the
+// linked observation definition's enum values. Idempotent — only fills nulls.
+// Display labels can change over time; the id is the stable concept identity.
+function resolveObservationValueIds(
+  observations: any[],
+  defs: Observation[],
+): void {
+  if (!Array.isArray(observations) || observations.length === 0) return;
+  const defByName = new Map(defs.map(d => [d.name, d]));
+  for (const obs of observations) {
+    if (!obs || typeof obs !== "object") continue;
+    if (obs.value_id) continue;
+    obs.value_id = null;
+    const def = defByName.get(obs.name);
+    if (!def || def.valueType !== "enum" || !Array.isArray(def.value)) continue;
+    if (typeof obs.value !== "string" || !obs.value) continue;
+    const target = obs.value.trim().toLowerCase();
+    const match = def.value.find((v: any) => typeof v?.label === "string" && v.label.trim().toLowerCase() === target);
+    if (match && match.id) obs.value_id = match.id;
+  }
+}
+
+// Resolve `extracted_value_id` on each activation objective extraction by
+// matching its `extracted_value` label against the linked observation's enum
+// values (looked up via objective.observationName).
+function resolveActivationExtractedValueIds(
+  extractions: any[],
+  objectives: ActivationObjective[],
+  observationDefs: Observation[],
+): void {
+  if (!Array.isArray(extractions) || extractions.length === 0) return;
+  const objByName = new Map(objectives.map(o => [o.name, o]));
+  const obsByName = new Map(observationDefs.map(d => [d.name, d]));
+  for (const ext of extractions) {
+    if (!ext || typeof ext !== "object") continue;
+    if (ext.extracted_value_id) continue;
+    ext.extracted_value_id = null;
+    if (typeof ext.extracted_value !== "string" || !ext.extracted_value) continue;
+    const obj = objByName.get(ext.objective_name);
+    if (!obj || !obj.observationName) continue;
+    const def = obsByName.get(obj.observationName);
+    if (!def || def.valueType !== "enum" || !Array.isArray(def.value)) continue;
+    const target = ext.extracted_value.trim().toLowerCase();
+    const match = def.value.find((v: any) => typeof v?.label === "string" && v.label.trim().toLowerCase() === target);
+    if (match && match.id) ext.extracted_value_id = match.id;
+  }
+}
+
 export async function analyzeTranscript(
   sourceId: string,
   sourceText: string,
@@ -737,6 +792,10 @@ export async function analyzeTranscript(
   parsed.observations = deduplicateByName(parsed.observations);
   parsed.call_qa = deduplicateByName(parsed.call_qa);
   parsed.barriers = deduplicateBarriers(parsed.barriers);
+  resolveObservationValueIds(parsed.observations, activeObservations);
+  if (activationContext?.objectives) {
+    resolveActivationExtractedValueIds(parsed.activation_objectives, activationContext.objectives, activeObservations);
+  }
   if (parsed.transition_status) {
     parsed.transition_status = deduplicateTransitionStatus(parsed.transition_status);
   }
@@ -900,6 +959,10 @@ export async function analyzeTranscriptFast(
   if (!Array.isArray(parsed.activation_objectives)) parsed.activation_objectives = [];
 
   parsed.observations = deduplicateByName(parsed.observations);
+  resolveObservationValueIds(parsed.observations, activeObservations);
+  if (activationContext?.objectives) {
+    resolveActivationExtractedValueIds(parsed.activation_objectives, activationContext.objectives, activeObservations);
+  }
   if (parsed.transition_status) {
     parsed.transition_status = deduplicateTransitionStatus(parsed.transition_status);
   }

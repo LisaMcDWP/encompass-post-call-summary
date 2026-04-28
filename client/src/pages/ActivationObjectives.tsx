@@ -22,9 +22,17 @@ type BandLabel = "early" | "near_window" | "at_window" | "post_window" | "defaul
 type EnumColor = "GREEN" | "YELLOW" | "RED" | "BLUE" | "GRAY";
 
 interface EnumValue {
+  id: string;
   label: string;
   color: EnumColor;
   promptHint?: string;
+}
+
+function genEnumId(): string {
+  const u = (typeof crypto !== "undefined" && crypto.randomUUID)
+    ? crypto.randomUUID().replace(/-/g, "")
+    : Math.random().toString(36).slice(2) + Date.now().toString(36);
+  return `ev_${u.slice(0, 8)}`;
 }
 
 const COLOR_MAP: Record<EnumColor, { bg: string; text: string; border: string; chipActive: string; label: string }> = {
@@ -86,8 +94,17 @@ function setCellOutcome(t: Threshold, stageId: string, outcome: Outcome): Thresh
 }
 
 interface StageMapping {
+  valueId?: string;
   extractedValue: string;
   stageId: string;
+}
+
+function findMapping(mappings: StageMapping[], v: { id: string; label: string }): StageMapping | undefined {
+  if (v.id) {
+    const byId = mappings.find(m => m.valueId && m.valueId === v.id);
+    if (byId) return byId;
+  }
+  return mappings.find(m => !m.valueId && m.extractedValue === v.label);
 }
 
 interface InclusionRules {
@@ -370,10 +387,16 @@ export default function ActivationObjectives() {
         });
         return;
       }
-      const linkedValues = linked.value.map(v => v.label);
-      const unmapped = linkedValues.filter(label =>
-        !form.stageMappings.find(m => m.extractedValue === label && m.stageId)
-      );
+      const linkedValuesWithIds = (linked.value as EnumValue[]).map(v => ({
+        id: v.id || "",
+        label: v.label,
+      }));
+      const unmapped = linkedValuesWithIds
+        .filter(v => {
+          const m = findMapping(form.stageMappings, v);
+          return !m || !m.stageId;
+        })
+        .map(v => v.label);
       if (unmapped.length > 0) {
         toast({
           title: "Linked observation has unassigned values",
@@ -554,11 +577,16 @@ export default function ActivationObjectives() {
     updateForm({ interactions: form.interactions.filter((_, i) => i !== idx) });
   }
 
-  function setMapping(extractedValue: string, stageId: string) {
-    const exists = form.stageMappings.some(m => m.extractedValue === extractedValue);
+  function setMapping(value: { id: string; label: string }, stageId: string) {
+    const matchKey = (m: StageMapping) =>
+      (value.id && m.valueId && m.valueId === value.id) ||
+      (!m.valueId && m.extractedValue === value.label);
+    const exists = form.stageMappings.some(matchKey);
     const newMappings = exists
-      ? form.stageMappings.map(m => m.extractedValue === extractedValue ? { ...m, stageId } : m)
-      : [...form.stageMappings, { extractedValue, stageId }];
+      ? form.stageMappings.map(m => matchKey(m)
+          ? { ...m, valueId: value.id, extractedValue: value.label, stageId }
+          : m)
+      : [...form.stageMappings, { valueId: value.id, extractedValue: value.label, stageId }];
     updateForm({ stageMappings: newMappings });
   }
 
@@ -610,12 +638,12 @@ export default function ActivationObjectives() {
       const hint = pipeIdx >= 0 ? raw.slice(pipeIdx + 1).trim() : "";
       const m = head.match(/^(.+?)\s*\(([A-Z]+)\)\s*$/);
       if (!m) {
-        if (head) out.push({ label: head, color: "GRAY", promptHint: hint });
+        if (head) out.push({ id: genEnumId(), label: head, color: "GRAY", promptHint: hint });
         continue;
       }
       const color = (validColors.includes(m[2] as EnumColor) ? m[2] : "GRAY") as EnumColor;
       const label = m[1].trim();
-      if (label) out.push({ label, color, promptHint: hint });
+      if (label) out.push({ id: genEnumId(), label, color, promptHint: hint });
     }
     return out;
   }
@@ -1462,7 +1490,7 @@ interface EditorProps {
   addInteractionConfig: (interactionId: number) => void;
   updateInteractionConfig: (idx: number, patch: Partial<ObjectiveInteractionConfig>) => void;
   removeInteractionConfig: (idx: number) => void;
-  setMapping: (extractedValue: string, stageId: string) => void;
+  setMapping: (value: { id: string; label: string }, stageId: string) => void;
   onCancel: () => void;
   onSave: () => void;
   saving: boolean;
@@ -1563,6 +1591,7 @@ function ObjectiveEditor(p: EditorProps) {
     if (!linkedObservation || linkedObservation.valueType !== "enum") return [];
     if (!Array.isArray(linkedObservation.value)) return [];
     return (linkedObservation.value as EnumValue[]).map(v => ({
+      id: v.id || genEnumId(),
       label: v.label,
       color: v.color,
       promptHint: v.promptHint || "",
@@ -1720,14 +1749,20 @@ function ObjectiveEditor(p: EditorProps) {
           observationTopics={p.observationTopics}
           onNameChange={(v) => {
             // When the linked observation changes, clear stage mappings that no
-            // longer correspond to a value in the newly-picked observation.
+            // longer correspond to a value (matched by id or label) in the
+            // newly-picked observation.
             const next = p.observationTopics.find(o => o.name === v);
-            const valid = next && next.valueType === "enum" && Array.isArray(next.value)
-              ? new Set((next.value as { label: string }[]).map(x => x.label))
-              : null;
-            const cleaned = valid
-              ? p.form.stageMappings.filter(m => valid.has(m.extractedValue))
-              : p.form.stageMappings;
+            if (!(next && next.valueType === "enum" && Array.isArray(next.value))) {
+              p.updateForm({ observationName: v, stageMappings: p.form.stageMappings });
+              return;
+            }
+            const validIds = new Set(
+              (next.value as EnumValue[]).map(x => x.id).filter(Boolean) as string[],
+            );
+            const validLabels = new Set((next.value as EnumValue[]).map(x => x.label));
+            const cleaned = p.form.stageMappings.filter(m =>
+              (m.valueId && validIds.has(m.valueId)) || validLabels.has(m.extractedValue),
+            );
             p.updateForm({ observationName: v, stageMappings: cleaned });
           }}
         />
@@ -1785,7 +1820,7 @@ function ObjectiveEditor(p: EditorProps) {
                   <div className="ml-12 flex items-center gap-2 flex-wrap">
                     <Label className="text-[10px] uppercase tracking-wider text-muted-foreground shrink-0">Observation values</Label>
                     {linkedObservationValues.map(v => {
-                      const mapping = p.form.stageMappings.find(m => m.extractedValue === v.label);
+                      const mapping = findMapping(p.form.stageMappings, v);
                       const onThisStage = mapping?.stageId === u.id;
                       const onOtherStage = !!mapping?.stageId && mapping.stageId !== u.id;
                       const otherStageName = onOtherStage
@@ -1793,8 +1828,8 @@ function ObjectiveEditor(p: EditorProps) {
                         : null;
                       const c = COLOR_MAP[v.color] || COLOR_MAP.GRAY;
                       return (
-                        <button key={v.label} type="button"
-                          onClick={() => p.setMapping(v.label, onThisStage ? "" : u.id)}
+                        <button key={v.id} type="button"
+                          onClick={() => p.setMapping(v, onThisStage ? "" : u.id)}
                           title={onOtherStage ? `Currently mapped to "${otherStageName}". Click to move here.` : undefined}
                           className={
                             "text-[11px] font-mono px-2 py-0.5 rounded-md border transition-colors " +
@@ -1847,7 +1882,7 @@ function ObjectiveEditor(p: EditorProps) {
                   <div className="ml-12 flex items-center gap-2 flex-wrap">
                     <Label className="text-[10px] uppercase tracking-wider text-muted-foreground shrink-0">Observation values</Label>
                     {linkedObservationValues.map(v => {
-                      const mapping = p.form.stageMappings.find(m => m.extractedValue === v.label);
+                      const mapping = findMapping(p.form.stageMappings, v);
                       const onThisStage = mapping?.stageId === sys.id;
                       const onOtherStage = !!mapping?.stageId && mapping.stageId !== sys.id;
                       const otherStageName = onOtherStage
@@ -1855,8 +1890,8 @@ function ObjectiveEditor(p: EditorProps) {
                         : null;
                       const c = COLOR_MAP[v.color] || COLOR_MAP.GRAY;
                       return (
-                        <button key={v.label} type="button"
-                          onClick={() => p.setMapping(v.label, onThisStage ? "" : sys.id)}
+                        <button key={v.id} type="button"
+                          onClick={() => p.setMapping(v, onThisStage ? "" : sys.id)}
                           title={onOtherStage ? `Currently mapped to "${otherStageName}". Click to move here.` : undefined}
                           className={
                             "text-[11px] font-mono px-2 py-0.5 rounded-md border transition-colors " +
@@ -1914,7 +1949,7 @@ function ObjectiveEditor(p: EditorProps) {
                     <div className="ml-12 flex items-center gap-2 flex-wrap">
                       <Label className="text-[10px] uppercase tracking-wider text-muted-foreground shrink-0">Observation values</Label>
                       {linkedObservationValues.map(v => {
-                        const mapping = p.form.stageMappings.find(m => m.extractedValue === v.label);
+                        const mapping = findMapping(p.form.stageMappings, v);
                         const onThisStage = mapping?.stageId === s.id;
                         const onOtherStage = !!mapping?.stageId && mapping.stageId !== s.id;
                         const otherStageName = onOtherStage
@@ -1923,9 +1958,9 @@ function ObjectiveEditor(p: EditorProps) {
                         const c = COLOR_MAP[v.color] || COLOR_MAP.GRAY;
                         return (
                           <button
-                            key={v.label}
+                            key={v.id}
                             type="button"
-                            onClick={() => p.setMapping(v.label, onThisStage ? "" : s.id)}
+                            onClick={() => p.setMapping(v, onThisStage ? "" : s.id)}
                             title={onOtherStage ? `Currently mapped to "${otherStageName}". Click to move here.` : undefined}
                             className={
                               "text-[11px] font-mono px-2 py-0.5 rounded-md border transition-colors " +
@@ -2408,7 +2443,7 @@ function ObservationPicker({
   const NONE_VALUE = "__none__";
   const linked = observationTopics.find(o => o.name === observationName) || null;
   const enumValues: EnumValue[] = (linked && linked.valueType === "enum" && Array.isArray(linked.value))
-    ? linked.value.map(v => ({ label: v.label, color: v.color, promptHint: v.promptHint || "" }))
+    ? linked.value.map(v => ({ id: v.id || genEnumId(), label: v.label, color: v.color, promptHint: v.promptHint || "" }))
     : [];
   const guidance = (linked?.promptGuidance || "").trim();
 

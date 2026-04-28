@@ -184,14 +184,23 @@ export function computeActivationObjectiveResults(args: {
       console.warn(`[activationObjectives] no extraction found for objective="${obj.name}" interaction_key="${intKeyTrimmed}" (call=${callId}). Available keys:`, Array.from(extByKey.keys()));
     }
     const extractedValue = ext?.extracted_value && ext.extracted_value.trim() ? ext.extracted_value.trim() : null;
+    const extractedValueId: string | null = (ext as any)?.extracted_value_id && String((ext as any).extracted_value_id).trim()
+      ? String((ext as any).extracted_value_id).trim()
+      : null;
 
     let currentStage: ActivationObjectiveStage | null = null;
-    if (extractedValue) {
+    if (extractedValue || extractedValueId) {
       const norm = (s: string | null | undefined) => (s || "").trim().toLowerCase();
-      const target = norm(extractedValue);
-      const mapping = (obj.stageMappings || []).find((m) => norm(m.extractedValue) === target);
+      // Prefer the stable id mapping; fall back to label match for legacy rows.
+      let mapping = extractedValueId
+        ? (obj.stageMappings || []).find((m) => (m.valueId || "") === extractedValueId)
+        : undefined;
+      if (!mapping && extractedValue) {
+        const target = norm(extractedValue);
+        mapping = (obj.stageMappings || []).find((m) => norm(m.extractedValue) === target);
+      }
       if (mapping) {
-        currentStage = (obj.stages || []).find((s) => s.id === mapping.stageId) || null;
+        currentStage = (obj.stages || []).find((s) => s.id === mapping!.stageId) || null;
       }
     }
 

@@ -3,6 +3,17 @@ import { pgTable, text, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// Stable id generator for enum-value entries. Lives on every enum value across
+// the system so the underlying concept survives display-label rename. Uses
+// crypto.randomUUID() in any modern runtime (Node, browser, edge).
+export function genEnumValueId(): string {
+  // @ts-ignore — globalThis.crypto is available in node>=19 and all browsers
+  const c: any = (globalThis as any).crypto;
+  if (c && typeof c.randomUUID === "function") return `ev_${c.randomUUID().slice(0, 8)}`;
+  // Fallback: time + random
+  return `ev_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
@@ -17,12 +28,37 @@ export const insertUserSchema = createInsertSchema(users).pick({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
+// Context-parameter enum value: stable id + display label.
+// Coerces legacy `string[]` into `[{id, label}]` so old configs keep working.
+export const contextEnumValueSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+});
+export type ContextEnumValue = z.infer<typeof contextEnumValueSchema>;
+
+export const coerceContextEnumValues = z.preprocess(
+  (val) => {
+    if (!Array.isArray(val)) return val;
+    return val.map((v) => {
+      if (typeof v === "string") return { id: genEnumValueId(), label: v };
+      if (v && typeof v === "object") {
+        return {
+          id: typeof (v as any).id === "string" && (v as any).id ? (v as any).id : genEnumValueId(),
+          label: (v as any).label ?? "",
+        };
+      }
+      return v;
+    });
+  },
+  z.array(contextEnumValueSchema).default([])
+);
+
 export const insertContextParameterSchema = z.object({
   name: z.string(),
   displayName: z.string(),
   description: z.string().default(""),
   dataType: z.enum(["string", "number", "date", "boolean", "enum"]).default("string"),
-  enumValues: z.array(z.string()).optional().default([]),
+  enumValues: coerceContextEnumValues,
   isActive: z.boolean().default(true),
   displayOrder: z.number().int().default(0),
   awellDataPointKey: z.string().optional().default(""),
@@ -38,7 +74,7 @@ export interface ContextParameter {
   displayName: string;
   description: string;
   dataType: string;
-  enumValues: string[];
+  enumValues: ContextEnumValue[];
   isActive: boolean;
   displayOrder: number;
   awellDataPointKey: string;
@@ -65,32 +101,36 @@ export interface ClientPathway {
   secret_key: string;
 }
 
-// Legacy two-field shape (label + color). Retained as an alias so existing
-// references continue to compile while observation enum values converge on the
-// richer ObservationEnumValue (label + color + per-value promptHint) defined
-// further down in this file.
+// Legacy three-field shape (label + color + promptHint). Retained as an alias so
+// existing references continue to compile while observation enum values
+// converge on the richer ObservationEnumValueRich (id + label + color +
+// per-value promptHint) defined further down in this file.
 export const enumValueSchema = z.object({
+  id: z.string().optional(),
   label: z.string(),
   color: z.enum(["GREEN", "YELLOW", "RED", "BLUE", "GRAY"]),
   promptHint: z.string().default(""),
 });
 
 // Use the schema's *input* type (not output) so `{ label, color }` literals
-// without an explicit `promptHint` continue to type-check. The output type
-// (after parsing) always carries `promptHint: string` thanks to `.default("")`.
+// without an explicit `promptHint` or `id` continue to type-check. The output
+// type (after parsing/coercion) always carries the full shape.
 export type EnumValue = z.input<typeof enumValueSchema>;
 
 // Coerces inputs into the rich enum value shape:
-//   - bare string         → { label, color: "GRAY", promptHint: "" }
-//   - {label, color}      → adds promptHint: ""
-//   - {label,color,hint}  → preserved
-const coerceObservationEnumValues = z.preprocess(
+//   - bare string                 → { id: <new>, label, color: "GRAY", promptHint: "" }
+//   - {label, color}              → adds id (new) + promptHint: ""
+//   - {id, label, color, hint}    → preserved
+// IMPORTANT: The `id` is the stable identity of the concept. Display label
+// can be renamed freely without changing it.
+export const coerceObservationEnumValues = z.preprocess(
   (val) => {
     if (!Array.isArray(val)) return val;
     return val.map((v) => {
-      if (typeof v === "string") return { label: v, color: "GRAY", promptHint: "" };
+      if (typeof v === "string") return { id: genEnumValueId(), label: v, color: "GRAY", promptHint: "" };
       if (v && typeof v === "object") {
         return {
+          id: typeof (v as any).id === "string" && (v as any).id ? (v as any).id : genEnumValueId(),
           label: (v as any).label ?? "",
           color: (v as any).color ?? "GRAY",
           promptHint: (v as any).promptHint ?? "",
@@ -101,6 +141,7 @@ const coerceObservationEnumValues = z.preprocess(
   },
   z.array(
     z.object({
+      id: z.string().min(1),
       label: z.string().min(1),
       color: z.enum(["GREEN", "YELLOW", "RED", "BLUE", "GRAY"]).default("GRAY"),
       promptHint: z.string().default(""),
@@ -140,7 +181,9 @@ export interface Observation {
 
 // Convenience alias so the Observation interface above can reference the rich
 // enum-value shape without depending on the schema declaration order.
+// `id` is the stable concept identifier; `label` may be renamed freely.
 export type ObservationEnumValueRich = {
+  id: string;
   label: string;
   color: "GREEN" | "YELLOW" | "RED" | "BLUE" | "GRAY";
   promptHint: string;
@@ -322,13 +365,19 @@ export const activationObjectiveThresholdSchema = z.object({
 });
 export type ActivationObjectiveThreshold = z.infer<typeof activationObjectiveThresholdSchema>;
 
+// Stage mapping references an enum value by its stable `valueId` and keeps the
+// `extractedValue` label as a denormalized snapshot for legacy / display.
+// `valueId` is the canonical key used at runtime; `extractedValue` is the
+// fallback for legacy mappings created before ids existed.
 export const activationObjectiveStageMappingSchema = z.object({
+  valueId: z.string().optional().default(""),
   extractedValue: z.string().min(1),
   stageId: z.string().min(1),
 });
 export type ActivationObjectiveStageMapping = z.infer<typeof activationObjectiveStageMappingSchema>;
 
 export const observationEnumValueSchema = z.object({
+  id: z.string().min(1),
   label: z.string().min(1),
   color: z.enum(["GREEN", "YELLOW", "RED", "BLUE", "GRAY"]).default("GRAY"),
   promptHint: z.string().default(""),

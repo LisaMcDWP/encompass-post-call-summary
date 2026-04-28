@@ -48,6 +48,9 @@ export interface CallObservationRow {
   observation_domain: string | null;
   observation_value_type: string | null;
   observation_value: string | null;
+  // Stable id of the matched enum value from the observation definition.
+  // Survives display label rename. Null for non-enum or unmatched values.
+  observation_value_id: string | null;
   observation_detail: string | null;
   observation_evidence: string | null;
   observation_confidence: string | null;
@@ -145,6 +148,26 @@ async function ensureCallInfoTable(targetProjectId?: string) {
   }
 }
 
+async function migrateObservationsColumns(targetProjectId?: string) {
+  try {
+    const client = getOutputBigQueryClient(targetProjectId);
+    const [rows] = await client.query({
+      query: `SELECT column_name FROM \`${client.projectId}.${DATASET_ID}.INFORMATION_SCHEMA.COLUMNS\` WHERE table_name = '${OBSERVATIONS_TABLE_ID}'`,
+      location: "US",
+    });
+    const fieldNames = new Set(rows.map((r: any) => r.column_name));
+    if (!fieldNames.has("observation_value_id")) {
+      await client.query({
+        query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${OBSERVATIONS_TABLE_ID}\` ADD COLUMN observation_value_id STRING`,
+        location: "US",
+      });
+      console.log("Added observation_value_id column to interaction_observations table.");
+    }
+  } catch (err: any) {
+    console.error("Migration check for interaction_observations columns:", err.message);
+  }
+}
+
 async function ensureObservationsTable(targetProjectId?: string) {
   const client = getOutputBigQueryClient(targetProjectId);
   const dataset = await ensureDataset(targetProjectId);
@@ -163,6 +186,7 @@ async function ensureObservationsTable(targetProjectId?: string) {
           { name: "observation_domain", type: "STRING", mode: "NULLABLE" },
           { name: "observation_value_type", type: "STRING", mode: "NULLABLE" },
           { name: "observation_value", type: "STRING", mode: "NULLABLE" },
+          { name: "observation_value_id", type: "STRING", mode: "NULLABLE" },
           { name: "observation_detail", type: "STRING", mode: "NULLABLE" },
           { name: "observation_evidence", type: "STRING", mode: "NULLABLE" },
           { name: "observation_confidence", type: "STRING", mode: "NULLABLE" },
@@ -256,6 +280,7 @@ export async function initializeCallTables(targetProjectId?: string): Promise<vo
       console.log(`BigQuery table interaction_observations ready in project ${resolveProjectId(targetProjectId)}.`);
     }
     await migrateCallInfoColumns(targetProjectId);
+    await migrateObservationsColumns(targetProjectId);
   } catch (err: any) {
     console.error("Failed to initialize call tables:", err.message);
   }
@@ -376,6 +401,7 @@ export async function insertCallObservations(callId: string, observations: Obser
       observation_domain: obs.domain,
       observation_value_type: obs.value_type,
       observation_value: obs.value !== null && obs.value !== undefined ? String(obs.value) : null,
+      observation_value_id: obs.value_id ?? null,
       observation_detail: obs.detail || null,
       observation_evidence: obs.evidence || null,
       observation_confidence: obs.confidence || null,

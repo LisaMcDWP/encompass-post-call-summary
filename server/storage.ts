@@ -9,6 +9,7 @@ import type {
   ActivationInteraction, InsertActivationInteraction,
   ObservationEnumValue,
 } from "@shared/schema";
+import { genEnumValueId } from "@shared/schema";
 import {
   SYSTEM_STAGE_NOT_DISCUSSED,
   SYSTEM_STAGE_NOT_DISCUSSED_ID,
@@ -52,6 +53,7 @@ function injectSystemStages(obj: ActivationObjective): ActivationObjective {
   const mappings = (Array.isArray(obj.stageMappings) ? obj.stageMappings : [])
     .filter((m) => m && !isNotDiscussedLabel(m.extractedValue));
   mappings.push({
+    valueId: "",
     extractedValue: SYSTEM_STAGE_NOT_DISCUSSED_VALUE,
     stageId: SYSTEM_STAGE_NOT_DISCUSSED_ID,
   });
@@ -200,12 +202,26 @@ async function ensureContextParamsTable(): Promise<void> {
 }
 
 function rowToContextParameter(row: any): ContextParameter {
-  let enumValues: string[] = [];
+  // Coerce both legacy `string[]` and new `{id, label}[]` shapes into the
+  // canonical `{id, label}[]` shape. Bare strings get a stable id assigned
+  // (persisted on next save).
+  let raw: any[] = [];
   if (row.enum_values) {
     try {
-      enumValues = typeof row.enum_values === "string" ? JSON.parse(row.enum_values) : row.enum_values;
-    } catch { enumValues = []; }
+      raw = typeof row.enum_values === "string" ? JSON.parse(row.enum_values) : row.enum_values;
+    } catch { raw = []; }
   }
+  if (!Array.isArray(raw)) raw = [];
+  const enumValues = raw.map((v: any) => {
+    if (typeof v === "string") return { id: genEnumValueId(), label: v };
+    if (v && typeof v === "object") {
+      return {
+        id: typeof v.id === "string" && v.id ? v.id : genEnumValueId(),
+        label: typeof v.label === "string" ? v.label : "",
+      };
+    }
+    return { id: genEnumValueId(), label: String(v ?? "") };
+  });
   const mappingType = row.awell_mapping_type || (row.awell_data_point_key ? "data_point" : "none");
   return {
     id: row.id,
@@ -485,10 +501,11 @@ function rowToObservation(row: any): Observation {
   const value = Array.isArray(rawValues)
     ? rawValues.map((v: any) => {
         if (typeof v === "string") {
-          return { label: v, color: "GRAY" as const, promptHint: "" };
+          return { id: genEnumValueId(), label: v, color: "GRAY" as const, promptHint: "" };
         }
         const color = v?.color;
         return {
+          id: typeof v?.id === "string" && v.id ? v.id : genEnumValueId(),
           label: typeof v?.label === "string" ? v.label : "",
           color: (typeof color === "string" && VALID_COLORS.has(color) ? color : "GRAY") as
             "GREEN" | "YELLOW" | "RED" | "BLUE" | "GRAY",

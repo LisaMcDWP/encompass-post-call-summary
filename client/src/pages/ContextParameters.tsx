@@ -12,18 +12,41 @@ import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, GripVertical, Variable, X } from "lucide-react";
 import { useClientPathway } from "@/contexts/ClientPathwayContext";
 
+interface EnumValueEntry {
+  id: string;
+  label: string;
+}
+
 interface ContextParameter {
   id: number;
   name: string;
   displayName: string;
   description: string;
   dataType: string;
-  enumValues: string[];
+  enumValues: EnumValueEntry[];
   isActive: boolean;
   displayOrder: number;
   awellDataPointKey: string;
   awellMappingType: "none" | "data_point" | "patient_profile";
   awellPatientProfileField: string;
+}
+
+function genEnumId(): string {
+  const u = (typeof crypto !== "undefined" && crypto.randomUUID)
+    ? crypto.randomUUID().replace(/-/g, "")
+    : Math.random().toString(36).slice(2) + Date.now().toString(36);
+  return `ev_${u.slice(0, 8)}`;
+}
+
+function coerceEnumValues(raw: any): EnumValueEntry[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((v: any) => {
+    if (typeof v === "string") return { id: genEnumId(), label: v };
+    return {
+      id: typeof v?.id === "string" && v.id ? v.id : genEnumId(),
+      label: typeof v?.label === "string" ? v.label : "",
+    };
+  });
 }
 
 const DATA_TYPE_OPTIONS = ["string", "number", "date", "boolean", "enum"];
@@ -59,7 +82,7 @@ const emptyForm = {
   displayName: "",
   description: "",
   dataType: "string",
-  enumValues: [] as string[],
+  enumValues: [] as EnumValueEntry[],
   isActive: true,
   awellDataPointKey: "",
   awellMappingType: "none" as "none" | "data_point" | "patient_profile",
@@ -112,7 +135,7 @@ export default function ContextParameters() {
       displayName: p.displayName,
       description: p.description,
       dataType: p.dataType,
-      enumValues: p.enumValues || [],
+      enumValues: coerceEnumValues(p.enumValues),
       isActive: p.isActive,
       awellDataPointKey: p.awellDataPointKey || "",
       awellMappingType: p.awellMappingType || "none",
@@ -237,7 +260,7 @@ export default function ContextParameters() {
 {`{
   "source_text": "...",
   "context": {
-${params.filter(p => p.isActive).slice(0, 3).map(p => `    "${p.name}": "${p.dataType === 'number' ? '42' : p.dataType === 'boolean' ? 'true' : p.dataType === 'date' ? '2026-03-01' : p.dataType === 'enum' && p.enumValues?.length ? p.enumValues[0] : 'example value'}"`).join(",\n") || '    "patient_name": "Jane Doe"'}
+${params.filter(p => p.isActive).slice(0, 3).map(p => `    "${p.name}": "${p.dataType === 'number' ? '42' : p.dataType === 'boolean' ? 'true' : p.dataType === 'date' ? '2026-03-01' : p.dataType === 'enum' && p.enumValues?.length ? p.enumValues[0].label : 'example value'}"`).join(",\n") || '    "patient_name": "Jane Doe"'}
   }
 }`}
           </pre>
@@ -273,8 +296,8 @@ ${params.filter(p => p.isActive).slice(0, 3).map(p => `    "${p.name}": "${p.dat
                     </div>
                     {p.dataType === "enum" && p.enumValues && p.enumValues.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-1">
-                        {p.enumValues.map((val, i) => (
-                          <span key={i} className="text-[10px] bg-muted px-1.5 py-0.5 rounded-full text-muted-foreground">{val}</span>
+                        {p.enumValues.map((val) => (
+                          <span key={val.id} className="text-[10px] bg-muted px-1.5 py-0.5 rounded-full text-muted-foreground">{val.label}</span>
                         ))}
                       </div>
                     )}
@@ -364,11 +387,21 @@ ${params.filter(p => p.isActive).slice(0, 3).map(p => `    "${p.name}": "${p.dat
                   <Label className="text-sm font-semibold">Enum Values</Label>
                   <div className="flex flex-wrap gap-1.5 min-h-[32px] p-2 border border-border rounded-md bg-background">
                     {form.enumValues.map((val, idx) => (
-                      <span key={idx} className="inline-flex items-center gap-1 bg-primary/10 text-primary text-xs font-medium px-2 py-0.5 rounded-full" data-testid={`badge-enum-val-${idx}`}>
-                        {val}
+                      <span key={val.id} className="inline-flex items-center gap-1 bg-primary/10 text-primary text-xs font-medium px-2 py-0.5 rounded-full" data-testid={`badge-enum-val-${idx}`}>
+                        <input
+                          type="text"
+                          value={val.label}
+                          onChange={(e) => setForm({
+                            ...form,
+                            enumValues: form.enumValues.map((v) => v.id === val.id ? { ...v, label: e.target.value } : v),
+                          })}
+                          className="bg-transparent outline-none w-[max(60px,calc(var(--len,8)*0.55em))]"
+                          style={{ ['--len' as any]: Math.max(val.label.length, 4) }}
+                          data-testid={`input-enum-val-${idx}`}
+                        />
                         <button
                           type="button"
-                          onClick={() => setForm({ ...form, enumValues: form.enumValues.filter((_, i) => i !== idx) })}
+                          onClick={() => setForm({ ...form, enumValues: form.enumValues.filter((v) => v.id !== val.id) })}
                           className="hover:text-destructive"
                           data-testid={`button-remove-enum-${idx}`}
                         >
@@ -385,8 +418,8 @@ ${params.filter(p => p.isActive).slice(0, 3).map(p => `    "${p.name}": "${p.dat
                         if (e.key === "Enter") {
                           e.preventDefault();
                           const val = (e.target as HTMLInputElement).value.trim();
-                          if (val && !form.enumValues.includes(val)) {
-                            setForm({ ...form, enumValues: [...form.enumValues, val] });
+                          if (val && !form.enumValues.some(v => v.label === val)) {
+                            setForm({ ...form, enumValues: [...form.enumValues, { id: genEnumId(), label: val }] });
                             (e.target as HTMLInputElement).value = "";
                           }
                         }

@@ -1,13 +1,16 @@
 import { storage } from "./storage";
 import type { ObservationEnumValueRich, InsertDispositionCategory, InsertDispositionDetail } from "@shared/schema";
 
+// Seed values omit `id`; the storage layer's insert schema (coerceObservation
+// EnumValues) auto-assigns a stable id on insert.
+type SeedEnumValue = Omit<ObservationEnumValueRich, "id">;
 const DEFAULT_OBSERVATIONS: {
   name: string;
   displayName: string;
   domain: string;
   displayOrder: number;
   valueType: string;
-  value: ObservationEnumValueRich[];
+  value: SeedEnumValue[];
 }[] = [
   {
     name: "overall_feeling",
@@ -171,7 +174,14 @@ export async function seedObservations(clientPathwayId?: number) {
 
     console.log(`Seeding default observations to BigQuery for client/pathway ${cpId}...`);
     for (const obs of DEFAULT_OBSERVATIONS) {
-      await storage.createObservation(cpId, { ...obs, isActive: true, promptGuidance: "", description: "" });
+      // `value` items omit `id`; the storage insert schema's coerce step
+      // assigns stable ids on insert.
+      await storage.createObservation(cpId, {
+        ...obs,
+        isActive: true,
+        promptGuidance: "",
+        description: "",
+      } as any);
     }
     console.log(`Seeded ${DEFAULT_OBSERVATIONS.length} default observations.`);
   } catch (error: any) {

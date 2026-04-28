@@ -22,7 +22,7 @@ interface ContextParameter {
   displayName: string;
   description: string;
   dataType: string;
-  enumValues: string[];
+  enumValues: Array<string | { id?: string; label: string }>;
   isActive: boolean;
   displayOrder: number;
   awellDataPointKey: string;
@@ -395,7 +395,8 @@ export async function exportPathwayPdf(
       margin: { top: TOP_AFTER_HEADER, left: 40, right: 40 },
       head: [["Display name", "Key", "Type", "Allowed values", "Awell mapping", "Active"]],
       body: allContextParams.map(c => {
-        const enumStr = c.dataType === "enum" && c.enumValues?.length ? c.enumValues.join(" | ") : "—";
+        const enumLabels = (c.enumValues || []).map(v => typeof v === "string" ? v : v.label);
+        const enumStr = c.dataType === "enum" && enumLabels.length ? enumLabels.join(" | ") : "—";
         const mapping =
           c.awellMappingType === "data_point" ? `data_point: ${c.awellDataPointKey || "—"}` :
           c.awellMappingType === "patient_profile" ? `patient_profile: ${c.awellPatientProfileField || "—"}` :

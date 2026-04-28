@@ -5,7 +5,7 @@ import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBa
 import { computeActivationObjectiveResults } from "./activationObjectives";
 import { randomUUID, createHash } from "crypto";
 import { storage } from "./storage";
-import { insertObservationSchema, enumValueSchema, insertContextParameterSchema, insertCallQAPromptSchema, insertDispositionCategorySchema, insertDispositionDetailSchema, insertCallReviewItemSchema, insertActivationObjectiveSchema, insertActivationInteractionSchema, updateActivationInteractionSchema, type ActivationObjective } from "@shared/schema";
+import { insertObservationSchema, enumValueSchema, coerceObservationEnumValues, insertContextParameterSchema, insertCallQAPromptSchema, insertDispositionCategorySchema, insertDispositionDetailSchema, insertCallReviewItemSchema, insertActivationObjectiveSchema, insertActivationInteractionSchema, updateActivationInteractionSchema, type ActivationObjective } from "@shared/schema";
 import { z } from "zod";
 
 function ensureInteractionContextKeys(
@@ -846,7 +846,7 @@ export async function registerRoutes(
     domain: z.string().min(1),
     displayOrder: z.number().int().min(0),
     valueType: z.enum(["enum", "boolean", "text", "number"]),
-    value: z.array(enumValueSchema).default([]),
+    value: coerceObservationEnumValues,
     isActive: z.boolean().default(true),
     promptGuidance: z.string().default(""),
   });
@@ -1381,7 +1381,22 @@ export async function registerRoutes(
     displayName: z.string().min(1),
     description: z.string().default(""),
     dataType: z.enum(["string", "number", "date", "boolean", "enum"]).default("string"),
-    enumValues: z.array(z.string()).optional().default([]),
+    enumValues: z.preprocess(
+      (val) => {
+        if (!Array.isArray(val)) return val;
+        return val.map((v: any) => {
+          if (typeof v === "string") return { id: "", label: v };
+          return {
+            id: typeof v?.id === "string" ? v.id : "",
+            label: typeof v?.label === "string" ? v.label : "",
+          };
+        });
+      },
+      z.array(z.object({
+        id: z.string().default(""),
+        label: z.string(),
+      })).optional().default([]),
+    ),
     isActive: z.boolean().default(true),
     displayOrder: z.number().int().min(0).default(0),
     awellDataPointKey: z.string().optional().default(""),
