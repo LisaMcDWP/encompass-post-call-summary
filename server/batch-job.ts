@@ -1,5 +1,5 @@
 import { getPendingBatchItems, updateBatchItemStatus, claimPendingBatchItems, initializeBatchTable, ensureCallQATable, initializeCallTables, ensureCallDispositionsTable } from "./bigquery";
-import { insertCallInfo, insertCallObservations, insertCallQAResults, insertCallDisposition, insertCallActivationObjectives } from "./bigquery";
+import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBarriers, insertCallQAResults, insertCallDisposition, insertCallActivationObjectives } from "./bigquery";
 import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, type DispositionConfig, type ActivationObjectivesContext } from "./gemini";
 import { computeActivationObjectiveResults } from "./activationObjectives";
 import { storage } from "./storage";
@@ -67,6 +67,10 @@ async function processBatch() {
   const requestedCpId = process.env.CLIENT_PATHWAY_ID ? parseInt(process.env.CLIENT_PATHWAY_ID, 10) : null;
   const batchCP = requestedCpId ? allCPs.find(cp => cp.id === requestedCpId) || allCPs[0] : allCPs[0];
   const cpId = batchCP.id;
+  // Route batch writes to the per-tenant project (same as the Awell sync API
+  // path) so batch results land in the same BigQuery dataset as live calls.
+  const targetProjectId: string | undefined = batchCP.gcp_project_id || undefined;
+  console.log(`Batch writes routed to project: ${targetProjectId || "<default GCP_PROJECT_ID>"}`);
 
   const pendingItems = await getPendingBatchItems(BATCH_SIZE);
   console.log(`Found ${pendingItems.length} pending items to process (using client/pathway: ${batchCP.client}/${batchCP.pathway}).`);
@@ -198,12 +202,14 @@ async function processBatch() {
         responseJson: JSON.stringify(analysis),
         client: batchCP.client || null,
         pathway: batchCP.pathway || null,
-      });
+      }, targetProjectId);
 
-      await insertCallObservations(sourceId, analysis.observations);
-      await insertCallQAResults(sourceId, analysis.call_qa || []);
+      await insertCallObservations(sourceId, analysis.observations, targetProjectId);
+      await insertCallQAPairs(sourceId, analysis.qa_pairs || [], targetProjectId);
+      await insertCallBarriers(sourceId, analysis.barriers || [], targetProjectId);
+      await insertCallQAResults(sourceId, analysis.call_qa || [], targetProjectId);
       if (analysis.disposition) {
-        await insertCallDisposition(sourceId, analysis.disposition);
+        await insertCallDisposition(sourceId, analysis.disposition, targetProjectId);
       }
 
       const objectiveResults = batchActiveObjectives.length > 0
@@ -218,7 +224,7 @@ async function processBatch() {
             processedAt,
           })
         : [];
-      await insertCallActivationObjectives(sourceId, objectiveResults);
+      await insertCallActivationObjectives(sourceId, objectiveResults, targetProjectId);
 
       enqueueBqUpdate(async () => {
         await updateBatchItemStatus(item.bland_call_id, "completed", sourceId);
