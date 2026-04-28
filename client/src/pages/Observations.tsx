@@ -484,26 +484,35 @@ export default function Observations() {
                             {(() => {
                               const proposal = parseObservationProposal(msg.text);
                               if (!proposal) return null;
-                              const exists = observations.some(o => o.name === proposal.name);
+                              const existingNames = new Set(observations.map(o => o.name));
+                              const nameTaken = existingNames.has(proposal.name);
+                              // If the AI's proposed name collides, auto-suffix
+                              // with _2, _3, ... so the user isn't blocked.
+                              let uniqueName = proposal.name;
+                              if (nameTaken) {
+                                let n = 2;
+                                while (existingNames.has(`${proposal.name}_${n}`)) n++;
+                                uniqueName = `${proposal.name}_${n}`;
+                              }
                               return (
-                                <div className="mt-2 pt-2 border-t border-border/40 flex items-center gap-2">
+                                <div className="mt-2 pt-2 border-t border-border/40 flex items-center gap-2 flex-wrap">
                                   <Button
                                     size="sm"
                                     className="h-7 bg-primary hover:bg-primary/90 text-white text-xs"
                                     onClick={() => {
                                       setEditingId(null);
-                                      setForm(proposal);
+                                      setForm({ ...proposal, name: uniqueName });
                                       setNewEnumLabel("");
                                       setIsDialogOpen(true);
                                     }}
                                     data-testid={`button-apply-suggestion-${i}`}
                                   >
                                     <Plus className="h-3 w-3 mr-1" />
-                                    {exists ? "Edit & save as new" : "Add this observation"}
+                                    {nameTaken ? `Add as "${uniqueName}"` : "Add this observation"}
                                   </Button>
-                                  {exists && (
+                                  {nameTaken && (
                                     <span className="text-[11px] text-yellow-700">
-                                      "{proposal.name}" already exists
+                                      "{proposal.name}" already exists — will save as "{uniqueName}". You can rename it in the editor.
                                     </span>
                                   )}
                                 </div>
