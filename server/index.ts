@@ -4,6 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedObservations, seedDispositions } from "./seed";
 import { initializeCallTables, ensureCallDispositionsTable, ensureCallReviewsTable, ensureCallReviewStatusesTable } from "./bigquery";
+import { backfillEnumValueIds } from "./backfillEnumIds";
 
 const app = express();
 const httpServer = createServer(app);
@@ -69,6 +70,7 @@ app.use((req, res, next) => {
   await ensureCallReviewsTable();
   await ensureCallReviewStatusesTable();
   initializeCallTables();
+  backfillEnumValueIds().catch((err) => console.warn("[backfill] failed:", err));
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
