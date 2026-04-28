@@ -275,6 +275,35 @@ export default function ActivationObjectives() {
   const [editorAiMessage, setEditorAiMessage] = useState("");
   const [editorAiHistory, setEditorAiHistory] = useState<{ role: string; text: string }[]>([]);
   const [editorAiLoading, setEditorAiLoading] = useState(false);
+  const [draggedId, setDraggedId] = useState<number | null>(null);
+
+  const handleDragStart = (id: number) => setDraggedId(id);
+  const handleDragOver = (e: React.DragEvent, targetId: number) => {
+    e.preventDefault();
+    if (draggedId === null || draggedId === targetId) return;
+    const next = [...items];
+    const dragIdx = next.findIndex(o => o.id === draggedId);
+    const targetIdx = next.findIndex(o => o.id === targetId);
+    if (dragIdx < 0 || targetIdx < 0) return;
+    const [moved] = next.splice(dragIdx, 1);
+    next.splice(targetIdx, 0, moved);
+    setItems(next);
+  };
+  const handleDragEnd = async () => {
+    setDraggedId(null);
+    if (!selectedCPId) return;
+    const orderedIds = items.map(o => o.id);
+    try {
+      await fetch("/api/activation-objectives/reorder", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderedIds, clientPathwayId: selectedCPId }),
+      });
+      void loadAll();
+    } catch (err) {
+      toast({ title: "Failed to save order", description: String(err), variant: "destructive" });
+    }
+  };
 
   useEffect(() => {
     if (!selectedCPId) return;
@@ -1281,6 +1310,10 @@ export default function ActivationObjectives() {
               onToggleExpand={() => setExpandedId(expandedId === obj.id ? null : obj.id)}
               onEdit={() => startEdit(obj)}
               onDelete={() => deleteObjective(obj.id)}
+              isDragging={draggedId === obj.id}
+              onDragStart={() => handleDragStart(obj.id)}
+              onDragOver={(e) => handleDragOver(e, obj.id)}
+              onDragEnd={handleDragEnd}
             />
           ))}
         </div>
@@ -1295,6 +1328,7 @@ export default function ActivationObjectives() {
 
 function ObjectiveCard({
   obj, interactions, expanded, onToggleExpand, onEdit, onDelete,
+  isDragging, onDragStart, onDragOver, onDragEnd,
 }: {
   obj: ActivationObjective;
   interactions: ActivationInteraction[];
@@ -1302,12 +1336,24 @@ function ObjectiveCard({
   onToggleExpand: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  isDragging?: boolean;
+  onDragStart?: () => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDragEnd?: () => void;
 }) {
   const anchorLabel = ANCHOR_TYPES.find(a => a.value === obj.anchorEventType)?.label || obj.anchorEventType;
   return (
-    <Card data-testid={`card-objective-${obj.id}`}>
+    <Card
+      data-testid={`card-objective-${obj.id}`}
+      draggable={!!onDragStart}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragEnd={onDragEnd}
+      className={`transition-all ${isDragging ? "ring-2 ring-primary opacity-70" : ""}`}
+    >
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-4">
+          <GripVertical className="h-5 w-5 text-muted-foreground cursor-grab shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <h3 className="font-semibold text-base truncate" data-testid={`text-objective-name-${obj.id}`}>{obj.displayName}</h3>
