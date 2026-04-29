@@ -682,13 +682,13 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
           )}
 
           {info.request_body && (
-            <details className="group">
+            <details className="group" open>
               <summary className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 cursor-pointer hover:text-muted-foreground mb-1.5 list-none flex items-center gap-1">
                 <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
-                Raw Request JSON
+                Full API Request JSON (sent to /api/analyze)
               </summary>
               <pre
-                className="bg-[#172938] text-gray-300 p-4 rounded-lg text-xs overflow-x-auto max-h-48 overflow-y-auto mt-1"
+                className="bg-[#172938] text-gray-300 p-4 rounded-lg text-xs overflow-x-auto max-h-96 overflow-y-auto mt-1"
                 data-testid="detail-request-body"
               >{JSON.stringify(info.request_body, null, 2)}</pre>
             </details>
