@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { analyzeTranscript, analyzeTranscriptFast, analyzeTranscriptBackground, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, aiObservationAssistant, aiActivationObjectiveAssistant, type DispositionConfig, type ActivationObjectivesContext, type ActivationObjectiveExtraction } from "./gemini";
 import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBarriers, insertCallQAResults, insertCallDisposition, insertCallActivationObjectives, getCallActivationObjectives, ensureCallBarriersTable, ensureCallQATable, getCallBarriers, getCallInfoList, getCallDetail, getCallStatsByDay, queryBlandCalls, loadBlandCallsToBatch, fetchAwellContextForCareFlows, getBatchItems, getBatchSummary, initializeBatchTable, getPendingBatchItems, updateBatchItemStatus, bulkUpdateBatchItemStatus, bulkUpdateBatchResults, resetFailedBatchItems, resetStaleProcessingRows, deletePendingBatchItems, recreateBatch, getDistinctTags, upsertCallReviews, getCallReviews, upsertCallReviewStatus, upsertCallReviewMeta, getCallReviewStatusesBulk, ensureCallReviewStatusesTable, getCallReviewList } from "./bigquery";
-import { computeActivationObjectiveResults } from "./activationObjectives";
+import { computeActivationObjectiveResults, deriveActivationExtractionsFromObservations } from "./activationObjectives";
 import { randomUUID, createHash } from "crypto";
 import { storage } from "./storage";
 import { insertObservationSchema, enumValueSchema, coerceObservationEnumValues, insertContextParameterSchema, insertCallQAPromptSchema, insertDispositionCategorySchema, insertDispositionDetailSchema, insertCallReviewItemSchema, insertActivationObjectiveSchema, insertActivationInteractionSchema, updateActivationInteractionSchema, type ActivationObjective } from "@shared/schema";
@@ -230,7 +230,7 @@ export async function registerRoutes(
             objectives: activeObjectives,
             activeInteractions,
             observations: activeObs,
-            extractions: analysis.activation_objectives || [],
+            extractions: deriveActivationExtractionsFromObservations(activationContext, analysis.observations),
             processedAt,
           })
         : [];
@@ -466,7 +466,7 @@ export async function registerRoutes(
                       objectives: asyncActiveObjectives,
                       activeInteractions: asyncActiveInteractions,
                       observations: activeObs,
-                      extractions: (fastAnalysis.activation_objectives as ActivationObjectiveExtraction[]) || [],
+                      extractions: deriveActivationExtractionsFromObservations(asyncActivationContext, fullAnalysis.observations || []),
                       processedAt,
                     })
                   : [],
@@ -698,7 +698,7 @@ export async function registerRoutes(
                 objectives: syncAwellObjectives,
                 activeInteractions: syncAwellInteractions,
                 observations: activeObs,
-                extractions: (fastAnalysis.activation_objectives as ActivationObjectiveExtraction[]) || [],
+                extractions: deriveActivationExtractionsFromObservations(syncAwellActivationContext, fullAnalysis.observations || []),
                 processedAt,
               })
             : [];
@@ -2101,7 +2101,7 @@ export async function registerRoutes(
                   objectives: batchActiveObjectives,
                   activeInteractions: batchActiveInteractions,
                   observations: activeObs,
-                  extractions: analysis.activation_objectives || [],
+                  extractions: deriveActivationExtractionsFromObservations(batchActivationContext, analysis.observations),
                   processedAt,
                 })
               : [];

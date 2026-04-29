@@ -260,44 +260,23 @@ function buildActivationObjectivesPromptBlock(tasks: ResolvedObjectiveTask[]): s
       : `extracted_value MUST be null (no enum values configured for this objective).`;
     return `  • objective_name="${t.objective.name}" (${t.objective.displayName}) | ${interactionPart} | ${dayPart} | ${allowedPart}${guidanceLine}${hintsBlock}${obsBlock}`;
   });
-  return `\n###ACTIVATION OBJECTIVES (${tasks.length} task${tasks.length === 1 ? "" : "s"} — output exactly one JSON object per task in the activation_objectives array, no more, no less)
-For each task below, decide the patient's current status for that activation objective based ONLY on what was discussed in this call. Choose the single best match from the allowed values for that task. Use "Not discussed" when the topic was never raised in the conversation. Use null only when the topic was raised but you cannot determine status from what was said. Do NOT invent values that are not in the allowed list. For tasks that list observation topics, also extract a value for each listed topic into the per-objective observations array — copy the topic_name exactly.
-
-###CRITICAL RULE — ACTIVATION OBJECTIVES MUST NOT BE SKIPPED
-The activation_objectives array MUST contain EXACTLY ${tasks.length} object${tasks.length === 1 ? "" : "s"}. Iterate through the task list 1 to ${tasks.length} in order. Output ONE object per task. Never omit a task. If the topic was never raised in the conversation, set extracted_value to "Not discussed" and STILL output the object. The activation_objectives array is REQUIRED — never return an empty array when tasks are listed above.
-${lines.join("\n")}
-`;
+  // Activation objectives are now derived server-side from the observations
+  // the model already returns (see deriveActivationExtractionsFromObservations).
+  // The linked observation IS the source of truth, so re-prompting Gemini for
+  // the same answer is redundant. We deliberately omit this section from the
+  // prompt to save tokens and prevent prompt-drift between observations and
+  // activation objectives.
+  return "";
 }
 
-function buildActivationObjectivesJsonField(tasks: ResolvedObjectiveTask[]): string {
-  if (tasks.length === 0) return "";
-  return `,
-  "activation_objectives": [ <-- REQUIRED. EXACTLY ${tasks.length} object(s), one per task in the ACTIVATION OBJECTIVES section above. Never empty, never omitted. Use "Not discussed" for tasks the patient never raised.
-    {
-      "objective_name": "COPY exactly from the task line",
-      "interaction_key": "COPY exactly from the task line",
-      "extracted_value": "One of the allowed values for this task. Use \"Not discussed\" if the topic was never raised; use null only if it was raised but the answer is indeterminate.",
-      "rationale": "Brief 1-2 sentence explanation grounded in the transcript",
-      "evidence": "Direct quote from the transcript supporting the extracted_value, or null if no quote applies",
-      "observations": [ <-- one entry per observation topic listed for this task, OR an empty array if none were listed
-        {
-          "topic_name": "COPY exactly from the topic_name in the task line",
-          "value": "One of the allowed values for that topic, or null if not discussed",
-          "detail": "Brief 1-2 sentence summary of what was observed for this topic. Do NOT copy the topic hint. Use null if not discussed.",
-          "evidence": "Direct quote from the transcript supporting the value, or null"
-        }
-      ]
-    }
-  ]`;
+function buildActivationObjectivesJsonField(_tasks: ResolvedObjectiveTask[]): string {
+  // See buildActivationObjectivesPromptBlock — derived server-side now.
+  return "";
 }
 
-function buildActivationObjectivesGuideline(tasks: ResolvedObjectiveTask[]): string {
-  if (tasks.length === 0) return "";
-  const obsCount = tasks.reduce((sum, t) => sum + t.observationTopics.length, 0);
-  const obsLine = obsCount > 0
-    ? ` For each task that lists observation topics, also output one entry per topic in that task's observations array — copy topic_name exactly and pick value from that topic's allowed values, or null if not discussed. For each topic also write a 1-2 sentence detail summarizing what was observed (do NOT copy the topic hint), or null if the topic was not discussed.`
-    : "";
-  return `\n- activation_objectives: REQUIRED — output EXACTLY ${tasks.length} object(s), one per task in the ACTIVATION OBJECTIVES section. Never return an empty array; never omit a task. Use the exact objective_name and interaction_key from the task line. extracted_value MUST be one of the allowed values listed for that task. Use "Not discussed" when the topic was never raised in the call (still output the object). Use null only when the topic was raised but the answer is indeterminate. Copy the value verbatim from the allowed list — match the casing, spelling, and spacing exactly. Never substitute or invent values.${obsLine}`;
+function buildActivationObjectivesGuideline(_tasks: ResolvedObjectiveTask[]): string {
+  // See buildActivationObjectivesPromptBlock — derived server-side now.
+  return "";
 }
 
 const COLOR_STYLES: Record<string, string> = {

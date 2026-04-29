@@ -1,7 +1,7 @@
 import { getPendingBatchItems, updateBatchItemStatus, claimPendingBatchItems, initializeBatchTable, ensureCallQATable, initializeCallTables, ensureCallDispositionsTable } from "./bigquery";
 import { insertCallInfo, insertCallObservations, insertCallQAPairs, insertCallBarriers, insertCallQAResults, insertCallDisposition, insertCallActivationObjectives } from "./bigquery";
 import { analyzeTranscript, buildPromptTemplate, DEFAULT_SUMMARY_INSTRUCTION, type DispositionConfig, type ActivationObjectivesContext } from "./gemini";
-import { computeActivationObjectiveResults } from "./activationObjectives";
+import { computeActivationObjectiveResults, deriveActivationExtractionsFromObservations } from "./activationObjectives";
 import { storage } from "./storage";
 import type { ActivationObjective } from "@shared/schema";
 import { createHash, randomUUID } from "crypto";
@@ -220,7 +220,7 @@ async function processBatch() {
             objectives: batchActiveObjectives,
             activeInteractions: batchActiveInteractions,
             observations: activeObs,
-            extractions: analysis.activation_objectives || [],
+            extractions: deriveActivationExtractionsFromObservations(activationContext, analysis.observations),
             processedAt,
           })
         : [];

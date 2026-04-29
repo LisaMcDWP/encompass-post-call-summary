@@ -10,7 +10,63 @@ import type {
   Observation,
 } from "@shared/schema";
 import { SYSTEM_STAGE_NOT_DISCUSSED_ID, SYSTEM_STAGE_EXCLUDED_ID } from "@shared/schema";
-import type { ActivationObjectiveExtraction } from "./gemini";
+import type { ActivationObjectiveExtraction, ObservationResult, ActivationObjectivesContext } from "./gemini";
+import { resolveObjectiveTasks } from "./gemini";
+
+/**
+ * Derive activation_objectives extractions from the observations the model
+ * already produced. The linked observation IS the source of truth for an
+ * objective's extracted_value, so re-prompting Gemini for the same answer is
+ * redundant (and the model occasionally drops it). Building the extraction
+ * server-side guarantees alignment between observations and activation
+ * objectives, eliminates prompt drift, and shrinks the prompt.
+ */
+export function deriveActivationExtractionsFromObservations(
+  ctx: ActivationObjectivesContext | undefined,
+  observationResults: ObservationResult[] | undefined,
+): ActivationObjectiveExtraction[] {
+  if (!ctx) return [];
+  const tasks = resolveObjectiveTasks(ctx);
+  if (tasks.length === 0) return [];
+  const obsByName = new Map<string, ObservationResult>();
+  for (const r of observationResults || []) {
+    if (r && r.name) obsByName.set(r.name, r);
+  }
+  const extractions: ActivationObjectiveExtraction[] = [];
+  for (const t of tasks) {
+    const linkedName = t.linkedObservation?.name || "";
+    const linkedResult = linkedName ? obsByName.get(linkedName) : undefined;
+    const extractedValue = linkedResult?.value && linkedResult.value.trim()
+      ? linkedResult.value.trim()
+      : null;
+    const extractedValueId = linkedResult?.value_id && String(linkedResult.value_id).trim()
+      ? String(linkedResult.value_id).trim()
+      : null;
+    const rationale = linkedResult?.detail || "";
+    const evidence = linkedResult?.evidence || null;
+
+    const subObservations = (t.observationTopics || []).map((topic) => {
+      const r = obsByName.get(topic.name);
+      return {
+        topic_name: topic.name,
+        value: r?.value && r.value.trim() ? r.value.trim() : null,
+        detail: r?.detail || null,
+        evidence: r?.evidence || null,
+      };
+    });
+
+    extractions.push({
+      objective_name: t.objective.name,
+      interaction_key: t.interaction?.key || "",
+      extracted_value: extractedValue,
+      extracted_value_id: extractedValueId,
+      rationale,
+      evidence,
+      observations: subObservations,
+    });
+  }
+  return extractions;
+}
 
 function outcomeToOnTrack(outcome: ActivationOutcome): boolean | null {
   switch (outcome) {
