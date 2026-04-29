@@ -1621,8 +1621,9 @@ export default function CallHistory() {
       )}
 
       {calls && calls.length > 0 && (
-        <div className="space-y-2" data-testid="list-calls">
-          <div className="grid grid-cols-[1fr_1fr_1fr_1fr_120px_120px_100px_90px_80px_90px_32px] gap-3 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+        <div className="overflow-x-auto" data-testid="list-calls-wrap">
+        <div className="space-y-2 min-w-max" data-testid="list-calls">
+          <div className="grid grid-cols-[200px_200px_200px_140px_120px_120px_100px_90px_80px_90px_32px] gap-3 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
             <span>Call ID</span>
             <span>Source ID</span>
             <span>Client / Pathway</span>
@@ -1643,7 +1644,7 @@ export default function CallHistory() {
             return (
             <div
               key={rowKey}
-              className="grid grid-cols-[1fr_1fr_1fr_1fr_120px_120px_100px_90px_80px_90px_32px] gap-3 items-center px-4 py-3 rounded-lg border border-border/50 bg-card hover:bg-muted/30 cursor-pointer transition-colors shadow-sm"
+              className="grid grid-cols-[200px_200px_200px_140px_120px_120px_100px_90px_80px_90px_32px] gap-3 items-center px-4 py-3 rounded-lg border border-border/50 bg-card hover:bg-muted/30 cursor-pointer transition-colors shadow-sm"
               onClick={() => setSelectedCallId(call.call_id)}
               data-testid={`row-call-${call.call_id}`}
             >
@@ -1719,6 +1720,7 @@ export default function CallHistory() {
             </div>
           );
           })}
+        </div>
         </div>
       )}
 
