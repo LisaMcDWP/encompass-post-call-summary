@@ -2081,6 +2081,7 @@ export async function registerRoutes(
               responseJson: JSON.stringify(analysis),
               client: batchCPRecord?.client || null,
               pathway: batchCPRecord?.pathway || null,
+              processingSource: "batch",
             }, targetProjectId);
 
             await insertCallObservations(callId, analysis.observations, targetProjectId);

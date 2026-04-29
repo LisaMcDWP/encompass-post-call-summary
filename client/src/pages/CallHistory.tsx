@@ -37,6 +37,7 @@ interface CallInfo {
   response_json: any | null;
   client: string | null;
   pathway: string | null;
+  processing_source: string | null;
 }
 
 interface CallObservation {
@@ -626,6 +627,20 @@ function CallDetailPanel({ callId, onClose }: { callId: string; onClose: () => v
               <div className="grid grid-cols-[140px_1fr] text-xs">
                 <span className="text-muted-foreground px-3 py-2 font-medium">Source Type</span>
                 <span className="font-mono px-3 py-2" data-testid="detail-source-type">{info.source_type || <span className="text-muted-foreground/50 italic">not provided</span>}</span>
+              </div>
+              <div className="grid grid-cols-[140px_1fr] text-xs">
+                <span className="text-muted-foreground px-3 py-2 font-medium">Triggered Via</span>
+                <span className="px-3 py-2" data-testid="detail-processing-source">
+                  {info.processing_source ? (
+                    <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wider ${
+                      info.processing_source === "batch"
+                        ? "bg-[#96d410]/20 text-[#5a8500] border border-[#96d410]/40"
+                        : "bg-[#0098db]/20 text-[#0070a3] border border-[#0098db]/40"
+                    }`}>{info.processing_source}</span>
+                  ) : (
+                    <span className="text-muted-foreground/50 italic">unknown</span>
+                  )}
+                </span>
               </div>
               <div className="grid grid-cols-[140px_1fr] text-xs">
                 <span className="text-muted-foreground px-3 py-2 font-medium">Source ID</span>
@@ -1654,9 +1669,20 @@ export default function CallHistory() {
                 </p>
               </div>
               <div className="min-w-0">
-                <p className="text-xs font-mono truncate text-muted-foreground" data-testid={`text-source-id-${call.call_id}`}>
-                  {call.source_id || "—"}
-                </p>
+                <div className="flex items-center gap-1.5">
+                  {call.processing_source && (
+                    <span
+                      title={`Triggered via ${call.processing_source}`}
+                      className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                        call.processing_source === "batch" ? "bg-[#96d410]" : "bg-[#0098db]"
+                      }`}
+                      data-testid={`badge-processing-source-${call.call_id}`}
+                    />
+                  )}
+                  <p className="text-xs font-mono truncate text-muted-foreground" data-testid={`text-source-id-${call.call_id}`}>
+                    {call.source_id || "—"}
+                  </p>
+                </div>
                 {call.source_type && (
                   <p className="text-[10px] text-muted-foreground/60 truncate">{call.source_type}</p>
                 )}

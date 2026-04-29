@@ -202,6 +202,7 @@ async function processBatch() {
         responseJson: JSON.stringify(analysis),
         client: batchCP.client || null,
         pathway: batchCP.pathway || null,
+        processingSource: "batch",
       }, targetProjectId);
 
       await insertCallObservations(sourceId, analysis.observations, targetProjectId);

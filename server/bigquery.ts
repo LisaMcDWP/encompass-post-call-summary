@@ -39,6 +39,7 @@ export interface CallInfoRow {
   request_body: string | null;
   client: string | null;
   pathway: string | null;
+  processing_source: string | null;
 }
 
 export interface CallObservationRow {
@@ -260,6 +261,13 @@ async function migrateCallInfoColumns(targetProjectId?: string): Promise<void> {
       });
       console.log("Added processing_id column to interaction_info table.");
     }
+    if (!fieldNames.has("processing_source")) {
+      await client.query({
+        query: `ALTER TABLE \`${client.projectId}.${DATASET_ID}.${INTERACTION_INFO_TABLE_ID}\` ADD COLUMN processing_source STRING`,
+        location: "US",
+      });
+      console.log("Added processing_source column to interaction_info table.");
+    }
   } catch (err: any) {
     console.error("Migration check for interaction_info columns:", err.message);
   }
@@ -314,6 +322,7 @@ export interface CallInfoEntry {
   errorMessage?: string;
   client?: string | null;
   pathway?: string | null;
+  processingSource?: "api" | "batch" | string | null;
 }
 
 async function deleteExistingCallData(callId: string, tableId: string, targetProjectId?: string): Promise<void> {
@@ -365,6 +374,7 @@ export async function insertCallInfo(entry: CallInfoEntry, targetProjectId?: str
       response_json: entry.responseJson || null,
       client: entry.client || null,
       pathway: entry.pathway || null,
+      processing_source: entry.processingSource || "api",
     };
 
     await client
@@ -1116,7 +1126,7 @@ export async function getCallReviewList(limit = 200, targetProjectId?: string, o
       )
       SELECT DISTINCT
         c.call_id, c.source_id, c.source_type, c.call_date, c.processed_at,
-        c.summary, c.status, c.client, c.pathway, c.context_values,
+        c.summary, c.status, c.client, c.pathway, c.processing_source, c.context_values,
         c.transcript_length, c.error_message,
         r.review_status, r.tags, r.notes, r.updated_at AS review_updated_at
       FROM latest_calls c
@@ -1147,6 +1157,7 @@ export async function getCallReviewList(limit = 200, targetProjectId?: string, o
         status: row.status,
         client: row.client || null,
         pathway: row.pathway || null,
+        processing_source: row.processing_source || null,
         context_values: contextValues,
         transcript_length: row.transcript_length,
         error_message: row.error_message,
@@ -1244,6 +1255,7 @@ export async function getCallInfoList(limit = 100, targetProjectId?: string, obs
       request_body: row.request_body ? JSON.parse(row.request_body) : null,
       client: row.client || null,
       pathway: row.pathway || null,
+      processing_source: row.processing_source || null,
     };
   });
 }
@@ -2134,6 +2146,7 @@ export async function getCallDetail(callId: string, runIndex?: number, targetPro
       response_json: responseJsonParsed,
       client: row.client || null,
       pathway: row.pathway || null,
+      processing_source: row.processing_source || null,
     };
   })() : null;
 
