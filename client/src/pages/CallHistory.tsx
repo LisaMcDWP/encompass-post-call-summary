@@ -1635,12 +1635,14 @@ export default function CallHistory() {
             <span>Review</span>
             <span></span>
           </div>
-          {calls.map((call) => {
+          {calls.map((call, callIdx) => {
             const rs = reviewStatuses?.[call.call_id];
             const rsOpt = REVIEW_STATUS_OPTIONS.find(o => o.value === rs);
+            const rowKey = call.processing_id
+              || `${call.call_id}-${call.processed_at || ""}-${callIdx}`;
             return (
             <div
-              key={call.call_id}
+              key={rowKey}
               className="grid grid-cols-[1fr_1fr_1fr_1fr_120px_120px_100px_90px_80px_90px_32px] gap-3 items-center px-4 py-3 rounded-lg border border-border/50 bg-card hover:bg-muted/30 cursor-pointer transition-colors shadow-sm"
               onClick={() => setSelectedCallId(call.call_id)}
               data-testid={`row-call-${call.call_id}`}
