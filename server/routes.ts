@@ -2184,15 +2184,17 @@ export async function registerRoutes(
 
   app.post("/api/batch/trigger-job", async (req, res) => {
     try {
-      const projectId = process.env.GCP_PROJECT_ID;
-      if (!projectId) {
-        return res.status(500).json({ message: "GCP_PROJECT_ID not configured" });
-      }
-
       const region = "us-central1";
       const jobName = "guideway-batch-job";
       const batchSize = req.body.batchSize || 50;
       const clientPathwayId = req.body.clientPathwayId || null;
+
+      const projectId =
+        (await resolveTargetProjectId(clientPathwayId)) ||
+        process.env.GCP_PROJECT_ID;
+      if (!projectId) {
+        return res.status(500).json({ message: "GCP project not configured for this client pathway" });
+      }
 
       const saKeyRaw = process.env.GCP_SERVICE_ACCOUNT_KEY;
       if (!saKeyRaw) {
@@ -2256,14 +2258,17 @@ export async function registerRoutes(
 
   app.get("/api/batch/job-status", async (req, res) => {
     try {
-      const projectId = process.env.GCP_PROJECT_ID;
-      if (!projectId) {
-        return res.status(500).json({ message: "GCP_PROJECT_ID not configured" });
-      }
-
       const region = "us-central1";
       const jobName = "guideway-batch-job";
       const executionName = req.query.executionName as string | undefined;
+      const clientPathwayId = Number(req.query.clientPathwayId) || null;
+
+      const projectId =
+        (await resolveTargetProjectId(clientPathwayId)) ||
+        process.env.GCP_PROJECT_ID;
+      if (!projectId) {
+        return res.status(500).json({ message: "GCP project not configured for this client pathway" });
+      }
 
       const saKeyRaw = process.env.GCP_SERVICE_ACCOUNT_KEY;
       if (!saKeyRaw) {
