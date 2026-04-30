@@ -918,29 +918,109 @@ export async function registerRoutes(
         }));
 
       let totalUpdated = 0;
+      const phase1Errors: any[] = [];
       for (const obs of activeObs) {
-        const [job] = await bq.createQueryJob({
+        try {
+          const [job] = await bq.createQueryJob({
+            query: `
+              UPDATE ${tableRef}
+              SET observation_display_name = @canonical
+              WHERE observation_name = @name
+                AND (observation_display_name IS NULL OR observation_display_name != @canonical)
+            `,
+            params: { canonical: obs.displayName, name: obs.name },
+            location: "US",
+          });
+          await job.promise();
+          const [meta] = await job.getMetadata();
+          const affected = Number(meta?.statistics?.query?.numDmlAffectedRows || 0);
+          totalUpdated += affected;
+        } catch (e: any) {
+          phase1Errors.push({ observation: obs.name, error: e.message });
+        }
+      }
+
+      // ---- Phase 2: canonicalize observation_value labels by value_id ----
+      // Strategy: detect drift first, then issue one UPDATE per drifting tuple.
+      const valueMismatches: any[] = [];
+      const phase2Errors: any[] = [];
+      let valueLabelsUpdated = 0;
+
+      const obsWithEnum = activeObs.filter(o => Array.isArray(o.value) && o.value.length > 0);
+      if (obsWithEnum.length > 0) {
+        const obsNames = obsWithEnum.map(o => o.name);
+        const [allDrift] = await bq.query({
           query: `
-            UPDATE ${tableRef}
-            SET observation_display_name = @canonical
-            WHERE observation_name = @name
-              AND (observation_display_name IS NULL OR observation_display_name != @canonical)
+            SELECT observation_name, observation_value_id, observation_value, COUNT(*) AS row_count
+            FROM ${tableRef}
+            WHERE observation_name IN UNNEST(@names) AND observation_value_id IS NOT NULL
+            GROUP BY observation_name, observation_value_id, observation_value
           `,
-          params: { canonical: obs.displayName, name: obs.name },
+          params: { names: obsNames },
           location: "US",
         });
-        await job.promise();
-        const [meta] = await job.getMetadata();
-        const affected = Number(meta?.statistics?.query?.numDmlAffectedRows || 0);
-        totalUpdated += affected;
+
+        const canonicalByObsAndId = new Map<string, Map<string, string>>();
+        for (const obs of obsWithEnum) {
+          const m = new Map<string, string>();
+          for (const v of obs.value as any[]) {
+            if (v?.id && typeof v.label === "string") m.set(v.id, v.label);
+          }
+          canonicalByObsAndId.set(obs.name, m);
+        }
+
+        for (const r of allDrift as any[]) {
+          const canonical = canonicalByObsAndId.get(r.observation_name)?.get(r.observation_value_id);
+          if (canonical && canonical !== r.observation_value) {
+            valueMismatches.push({
+              observation_name: r.observation_name,
+              value_id: r.observation_value_id,
+              old_value: r.observation_value,
+              canonical_value: canonical,
+              row_count: Number(r.row_count),
+            });
+          }
+        }
+
+        for (const m of valueMismatches) {
+          try {
+            const [job] = await bq.createQueryJob({
+              query: `
+                UPDATE ${tableRef}
+                SET observation_value = @canonical
+                WHERE observation_name = @name
+                  AND observation_value_id = @valueId
+                  AND observation_value = @oldValue
+              `,
+              params: {
+                canonical: m.canonical_value,
+                name: m.observation_name,
+                valueId: m.value_id,
+                oldValue: m.old_value,
+              },
+              location: "US",
+            });
+            await job.promise();
+            const [meta] = await job.getMetadata();
+            valueLabelsUpdated += Number(meta?.statistics?.query?.numDmlAffectedRows || 0);
+          } catch (e: any) {
+            phase2Errors.push({
+              observation: m.observation_name,
+              value_id: m.value_id,
+              error: e.message,
+            });
+          }
+        }
       }
 
       res.json({
         updated: totalUpdated,
         mismatches,
+        valueLabelsUpdated,
+        valueMismatches,
         clientPathwayId: cpId,
         targetProjectId: projectId,
-        message: `Backfill complete. Updated ${totalUpdated} rows in ${projectId}.call_information.interaction_observations.`,
+        message: `Backfill complete. Updated ${totalUpdated} display-name rows and ${valueLabelsUpdated} value-label rows in ${projectId}.call_information.interaction_observations.`,
       });
     } catch (error: any) {
       console.error("backfill-observation-display-names failed:", error);

@@ -108,11 +108,18 @@ Two-level configurable taxonomy (Category → Detail) for classifying call outco
 ## Observations Model
 Observations are dynamic topics stored in BigQuery (`call_information.observations`) used in the Gemini analysis prompt. Each observation has:
 - `id` (INT64), `name` (key), `display_name`, `domain`, `display_order`, `value_type`, `value` (JSON string), `is_active`, `prompt_guidance`, `client_pathway_id`
-- For enum types, `value` contains a JSON-serialized array of `{label, color}` objects
+- For enum types, `value` contains a JSON-serialized array of `{id, label, color, promptHint?}` objects. `id` is the stable concept identity; `label` may be renamed without breaking history.
 - Colors: GREEN, YELLOW, RED, BLUE, GRAY — mapped to inline HTML styles
 - The prompt is dynamically built from active observations at analysis time
 - Default seed: 11 post-discharge topics (Overall Feeling, Disposition Change, Prescription Pickup, etc.)
 - Service account: configured via `GCP_SERVICE_ACCOUNT_KEY` env var
+
+### Display-name & value-label canonicalization
+On every write to `call_information.interaction_observations`, `insertCallObservations` (server/bigquery.ts) overrides both:
+1. `observation_display_name` — looked up from the active observations definitions by `observation_name`
+2. `observation_value` (label) — looked up from the active observation's enum values by `observation_value_id`
+
+This protects analytics from LLM label drift (e.g. "Visit Completed" vs "Completed", "Not Discussed" vs "Not discussed"). To fix historical rows after renaming a `display_name` or enum-value `label`, POST to `/api/admin/backfill-observation-display-names` with `{ "clientPathwayId": <id> }` (gated by optional `ADMIN_API_KEY` x-api-key header). Response includes `updated`, `mismatches`, `valueLabelsUpdated`, `valueMismatches`. Per-observation errors are caught (e.g. streaming-buffer rows < ~90 min old cannot be UPDATEd; re-run later).
 
 ## Environment Variables (Secrets)
 - `GCP_PROJECT_ID` — Central Google Cloud project ID (`guidewaycare-476802`)

@@ -395,7 +395,7 @@ export async function insertCallObservations(
   callId: string,
   observations: ObservationResult[],
   targetProjectId?: string,
-  activeObservations?: { name: string; displayName: string }[],
+  activeObservations?: { name: string; displayName: string; value?: { id: string; label: string }[] }[],
 ): Promise<void> {
   try {
     const key = tableInitKey(OBSERVATIONS_TABLE_ID, targetProjectId);
@@ -413,19 +413,38 @@ export async function insertCallObservations(
     );
     const canonicalGet = (name: string): string | undefined => canonicalMap.get(name);
 
+    // For each observation_name, build a Map<value_id, canonical_label>
+    const valueLabelByObsName = new Map<string, Map<string, string>>();
+    for (const obs of activeObservations || []) {
+      if (!Array.isArray(obs.value)) continue;
+      const m = new Map<string, string>();
+      for (const v of obs.value) {
+        if (v && typeof v.id === "string" && typeof v.label === "string") m.set(v.id, v.label);
+      }
+      if (m.size > 0) valueLabelByObsName.set(obs.name, m);
+    }
+    const canonicalValueLabel = (obsName: string, valueId: string | null | undefined): string | undefined => {
+      if (!valueId) return undefined;
+      return valueLabelByObsName.get(obsName)?.get(valueId);
+    };
+
     const client = getOutputBigQueryClient(targetProjectId);
-    const rows = observations.map(obs => ({
+    const rows = observations.map(obs => {
+      const rawValue = obs.value !== null && obs.value !== undefined ? String(obs.value) : null;
+      const canonicalLabel = canonicalValueLabel(obs.name, obs.value_id);
+      return {
       call_id: callId,
       observation_name: obs.name,
       observation_display_name: canonicalGet(obs.name) ?? obs.display_name,
       observation_domain: obs.domain,
       observation_value_type: obs.value_type,
-      observation_value: obs.value !== null && obs.value !== undefined ? String(obs.value) : null,
+      observation_value: canonicalLabel ?? rawValue,
       observation_value_id: obs.value_id ?? null,
       observation_detail: obs.detail || null,
       observation_evidence: obs.evidence || null,
       observation_confidence: obs.confidence || null,
-    }));
+      };
+    });
 
     await client
       .dataset(DATASET_ID)
