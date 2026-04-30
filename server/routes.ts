@@ -215,7 +215,7 @@ export async function registerRoutes(
         pathway: resolvedPathway,
       }, targetProjectId);
 
-      await insertCallObservations(resolvedSourceId, analysis.observations, targetProjectId);
+      await insertCallObservations(resolvedSourceId, analysis.observations, targetProjectId, activeObs);
       await insertCallQAPairs(resolvedSourceId, analysis.qa_pairs, targetProjectId);
       await insertCallBarriers(resolvedSourceId, analysis.barriers, targetProjectId);
       await insertCallQAResults(resolvedSourceId, analysis.call_qa || [], targetProjectId);
@@ -451,7 +451,7 @@ export async function registerRoutes(
                 responseJson: JSON.stringify(fullAnalysis),
                 client: resolvedClient, pathway: resolvedPathway,
               }, targetProjectId),
-              insertCallObservations(resolvedSourceId, fullAnalysis.observations || [], targetProjectId),
+              insertCallObservations(resolvedSourceId, fullAnalysis.observations || [], targetProjectId, activeObs),
               insertCallQAPairs(resolvedSourceId, bgResult.qa_pairs, targetProjectId),
               insertCallBarriers(resolvedSourceId, bgResult.barriers, targetProjectId),
               insertCallQAResults(resolvedSourceId, bgResult.call_qa, targetProjectId),
@@ -536,7 +536,7 @@ export async function registerRoutes(
               client: resolvedClient, pathway: resolvedPathway,
               errorMessage: `Background processing failed: ${bgErr.message}`,
             }, targetProjectId).catch(() => {});
-            insertCallObservations(resolvedSourceId, fastAnalysis.observations || [], targetProjectId).catch(() => {});
+            insertCallObservations(resolvedSourceId, fastAnalysis.observations || [], targetProjectId, activeObs).catch(() => {});
             if (fastAnalysis.disposition) {
               insertCallDisposition(resolvedSourceId, fastAnalysis.disposition, targetProjectId).catch(() => {});
             }
@@ -682,7 +682,7 @@ export async function registerRoutes(
               responseJson: JSON.stringify(fullAnalysis),
               client: resolvedClient, pathway: resolvedPathway,
             }, targetProjectId),
-            insertCallObservations(resolvedSourceId, fullAnalysis.observations || [], targetProjectId),
+            insertCallObservations(resolvedSourceId, fullAnalysis.observations || [], targetProjectId, activeObs),
             insertCallQAPairs(resolvedSourceId, bgResult.qa_pairs, targetProjectId),
             insertCallBarriers(resolvedSourceId, bgResult.barriers, targetProjectId),
             insertCallQAResults(resolvedSourceId, bgResult.call_qa, targetProjectId),
@@ -721,7 +721,7 @@ export async function registerRoutes(
             client: resolvedClient, pathway: resolvedPathway,
             errorMessage: `Background processing failed: ${bgErr.message}`,
           }, targetProjectId).catch(() => {});
-          insertCallObservations(resolvedSourceId, fastAnalysis.observations || [], targetProjectId).catch(() => {});
+          insertCallObservations(resolvedSourceId, fastAnalysis.observations || [], targetProjectId, activeObs).catch(() => {});
           if (fastAnalysis.disposition) {
             insertCallDisposition(resolvedSourceId, fastAnalysis.disposition, targetProjectId).catch(() => {});
           }
@@ -866,6 +866,85 @@ export async function registerRoutes(
       res.status(201).json(obs);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/admin/backfill-observation-display-names", async (req, res) => {
+    try {
+      const adminKey = process.env.ADMIN_API_KEY;
+      if (adminKey) {
+        const provided = req.headers["x-api-key"];
+        if (!provided || provided !== adminKey) {
+          return res.status(401).json({ message: "Invalid or missing admin API key" });
+        }
+      }
+
+      const cpId = Number(req.body.clientPathwayId || req.query.clientPathwayId);
+      if (!cpId) return res.status(400).json({ message: "clientPathwayId is required" });
+
+      const targetProjectId = await resolveTargetProjectId(cpId);
+      const activeObs = await storage.getActiveObservations(cpId);
+      if (activeObs.length === 0) {
+        return res.json({ updated: 0, mismatches: [], message: "No active observations configured for this client pathway." });
+      }
+
+      const { BigQuery } = await import("@google-cloud/bigquery");
+      const saKey = JSON.parse(process.env.GCP_SERVICE_ACCOUNT_KEY!);
+      const projectId = targetProjectId || process.env.GCP_PROJECT_ID!;
+      const bq = new BigQuery({ projectId, credentials: saKey });
+
+      const tableRef = `\`${projectId}.call_information.interaction_observations\``;
+
+      const [mismatchRows] = await bq.query({
+        query: `
+          SELECT observation_name, observation_display_name, COUNT(*) AS row_count
+          FROM ${tableRef}
+          WHERE observation_name IN UNNEST(@names)
+          GROUP BY observation_name, observation_display_name
+          ORDER BY observation_name, row_count DESC
+        `,
+        params: { names: activeObs.map(o => o.name) },
+        location: "US",
+      });
+
+      const canonicalByName = new Map(activeObs.map(o => [o.name, o.displayName]));
+      const mismatches = (mismatchRows as any[])
+        .filter(r => canonicalByName.get(r.observation_name) !== r.observation_display_name)
+        .map(r => ({
+          observation_name: r.observation_name,
+          old_display_name: r.observation_display_name,
+          canonical_display_name: canonicalByName.get(r.observation_name),
+          row_count: Number(r.row_count),
+        }));
+
+      let totalUpdated = 0;
+      for (const obs of activeObs) {
+        const [job] = await bq.createQueryJob({
+          query: `
+            UPDATE ${tableRef}
+            SET observation_display_name = @canonical
+            WHERE observation_name = @name
+              AND (observation_display_name IS NULL OR observation_display_name != @canonical)
+          `,
+          params: { canonical: obs.displayName, name: obs.name },
+          location: "US",
+        });
+        await job.promise();
+        const [meta] = await job.getMetadata();
+        const affected = Number(meta?.statistics?.query?.numDmlAffectedRows || 0);
+        totalUpdated += affected;
+      }
+
+      res.json({
+        updated: totalUpdated,
+        mismatches,
+        clientPathwayId: cpId,
+        targetProjectId: projectId,
+        message: `Backfill complete. Updated ${totalUpdated} rows in ${projectId}.call_information.interaction_observations.`,
+      });
+    } catch (error: any) {
+      console.error("backfill-observation-display-names failed:", error);
+      res.status(500).json({ message: error.message, detail: error.errors || null });
     }
   });
 
@@ -2084,7 +2163,7 @@ export async function registerRoutes(
               processingSource: "batch",
             }, targetProjectId);
 
-            await insertCallObservations(callId, analysis.observations, targetProjectId);
+            await insertCallObservations(callId, analysis.observations, targetProjectId, activeObs);
             await insertCallQAPairs(callId, analysis.qa_pairs, targetProjectId);
             await insertCallBarriers(callId, analysis.barriers, targetProjectId);
             await insertCallQAResults(callId, analysis.call_qa || [], targetProjectId);

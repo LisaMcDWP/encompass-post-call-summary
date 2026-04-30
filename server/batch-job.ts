@@ -205,7 +205,7 @@ async function processBatch() {
         processingSource: "batch",
       }, targetProjectId);
 
-      await insertCallObservations(sourceId, analysis.observations, targetProjectId);
+      await insertCallObservations(sourceId, analysis.observations, targetProjectId, activeObs);
       await insertCallQAPairs(sourceId, analysis.qa_pairs || [], targetProjectId);
       await insertCallBarriers(sourceId, analysis.barriers || [], targetProjectId);
       await insertCallQAResults(sourceId, analysis.call_qa || [], targetProjectId);

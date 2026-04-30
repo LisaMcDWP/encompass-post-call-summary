@@ -391,7 +391,12 @@ export async function insertCallInfo(entry: CallInfoEntry, targetProjectId?: str
   }
 }
 
-export async function insertCallObservations(callId: string, observations: ObservationResult[], targetProjectId?: string): Promise<void> {
+export async function insertCallObservations(
+  callId: string,
+  observations: ObservationResult[],
+  targetProjectId?: string,
+  activeObservations?: { name: string; displayName: string }[],
+): Promise<void> {
   try {
     const key = tableInitKey(OBSERVATIONS_TABLE_ID, targetProjectId);
     if (!initializedTables.has(key)) {
@@ -403,11 +408,16 @@ export async function insertCallObservations(callId: string, observations: Obser
 
     await deleteExistingCallData(callId, OBSERVATIONS_TABLE_ID, targetProjectId);
 
+    const canonicalMap = new Map<string, string>(
+      (activeObservations || []).map(o => [o.name, o.displayName])
+    );
+    const canonicalGet = (name: string): string | undefined => canonicalMap.get(name);
+
     const client = getOutputBigQueryClient(targetProjectId);
     const rows = observations.map(obs => ({
       call_id: callId,
       observation_name: obs.name,
-      observation_display_name: obs.display_name,
+      observation_display_name: canonicalGet(obs.name) ?? obs.display_name,
       observation_domain: obs.domain,
       observation_value_type: obs.value_type,
       observation_value: obs.value !== null && obs.value !== undefined ? String(obs.value) : null,
