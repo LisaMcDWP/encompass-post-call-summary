@@ -121,6 +121,11 @@ On every write to `call_information.interaction_observations`, `insertCallObserv
 
 This protects analytics from LLM label drift (e.g. "Visit Completed" vs "Completed", "Not Discussed" vs "Not discussed"). To fix historical rows after renaming a `display_name` or enum-value `label`, POST to `/api/admin/backfill-observation-display-names` with `{ "clientPathwayId": <id> }` (gated by optional `ADMIN_API_KEY` x-api-key header). Response includes `updated`, `mismatches`, `valueLabelsUpdated`, `valueMismatches`. Per-observation errors are caught (e.g. streaming-buffer rows < ~90 min old cannot be UPDATEd; re-run later).
 
+## Batch Processing (`call_information.batch_processing`)
+The batch worker (`server/batch-job.ts`) processes `pending` rows one at a time, writes results to `interaction_info` with `call_id = "batch_" + bland_call_id`, then **awaits** `updateBatchItemStatus` inline before moving to the next item. Earlier fire-and-forget queueing could lose status updates on worker crashes, leaving rows stuck in `pending` even though their interaction data was already written — which would cause re-processing and duplicate `interaction_info` rows on the next batch run (the dedupe DELETE cannot touch BigQuery's ~30–90 min streaming buffer).
+
+**Reconcile endpoint** for legacy stuck rows: `POST /api/admin/reconcile-batch-status` with `{ "clientPathwayId": <id> }` (optional `ADMIN_API_KEY` via x-api-key). Marks any `pending`/`processing` rows as `completed` if their `bland_call_id` already appears in `interaction_info` (matching either the raw id or the `batch_<id>` form). Response: `{ reconciled, previewByBatch: [{batch_id, count}], ... }`.
+
 ## Environment Variables (Secrets)
 - `GCP_PROJECT_ID` — Central Google Cloud project ID (`guidewaycare-476802`)
 - `GCP_SERVICE_ACCOUNT_KEY` — Full JSON service account key (needs Vertex AI User, BigQuery Data Editor, BigQuery Job User roles)

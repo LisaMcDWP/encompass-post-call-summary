@@ -1028,6 +1028,99 @@ export async function registerRoutes(
     }
   });
 
+  // Reconcile pending batch_processing rows whose bland_call_id is already
+  // present in interaction_info. These are leftovers from worker crashes
+  // before the fix that awaits status updates inline. Marks them 'completed'
+  // so the next batch run skips them.
+  app.post("/api/admin/reconcile-batch-status", async (req, res) => {
+    try {
+      const adminKey = process.env.ADMIN_API_KEY;
+      if (adminKey) {
+        const provided = req.headers["x-api-key"];
+        if (!provided || provided !== adminKey) {
+          return res.status(401).json({ message: "Invalid or missing admin API key" });
+        }
+      }
+      const cpId = Number(req.body.clientPathwayId || req.query.clientPathwayId);
+      if (!cpId) return res.status(400).json({ message: "clientPathwayId is required" });
+
+      const targetProjectId = await resolveTargetProjectId(cpId);
+      const { BigQuery } = await import("@google-cloud/bigquery");
+      const saKey = JSON.parse(process.env.GCP_SERVICE_ACCOUNT_KEY!);
+      const projectId = targetProjectId || process.env.GCP_PROJECT_ID!;
+      const bq = new BigQuery({ projectId, credentials: saKey });
+
+      const batchRef = `\`${projectId}.call_information.batch_processing\``;
+      const infoRef = `\`${projectId}.call_information.interaction_info\``;
+
+      // interaction_info.call_id may be the raw bland_call_id (when processed
+      // via /api/analyze) OR prefixed with "batch_" (when processed via the
+      // batch worker). For each batch row, find the actual matched call_id
+      // (preferring the batch_<id> form when present) so we set the correct
+      // result_call_id. Only target rows that are 'pending' AND have not been
+      // updated in the last 30 minutes — this avoids racing with an actively
+      // running batch worker (which would otherwise be blocked from writing
+      // its own status due to the pending/processing guard in
+      // updateBatchItemStatus).
+      const matchedExpr = `
+        COALESCE(
+          (SELECT i.call_id FROM ${infoRef} i
+            WHERE i.call_id = CONCAT('batch_', b.bland_call_id)
+            ORDER BY i.processed_at DESC LIMIT 1),
+          (SELECT i.call_id FROM ${infoRef} i
+            WHERE i.call_id = b.bland_call_id
+            ORDER BY i.processed_at DESC LIMIT 1)
+        )
+      `;
+      const targetWhere = `
+        b.status = 'pending'
+          AND b.bland_call_id IS NOT NULL
+          AND (b.processed_at IS NULL
+               OR b.processed_at < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 MINUTE))
+          AND ${matchedExpr} IS NOT NULL
+      `;
+
+      const [preview] = await bq.query({
+        query: `
+          SELECT b.batch_id, COUNT(*) AS reconcile_count
+          FROM ${batchRef} b
+          WHERE ${targetWhere}
+          GROUP BY b.batch_id
+          ORDER BY reconcile_count DESC
+        `,
+        location: "US",
+      });
+
+      const [job] = await bq.createQueryJob({
+        query: `
+          UPDATE ${batchRef} AS b
+          SET status = 'completed',
+              result_call_id = COALESCE(b.result_call_id, ${matchedExpr}),
+              processed_at = CURRENT_TIMESTAMP()
+          WHERE ${targetWhere}
+        `,
+        location: "US",
+      });
+      await job.promise();
+      const [meta] = await job.getMetadata();
+      const reconciled = Number(meta?.statistics?.query?.numDmlAffectedRows || 0);
+
+      res.json({
+        reconciled,
+        previewByBatch: preview.map((r: any) => ({
+          batch_id: r.batch_id,
+          count: Number(r.reconcile_count),
+        })),
+        clientPathwayId: cpId,
+        targetProjectId: projectId,
+        message: `Marked ${reconciled} pending rows as completed in ${projectId}.call_information.batch_processing.`,
+      });
+    } catch (error: any) {
+      console.error("reconcile-batch-status failed:", error);
+      res.status(500).json({ message: error.message, detail: error.errors || null });
+    }
+  });
+
   app.put("/api/observations/reorder", async (req, res) => {
     const { orderedIds } = req.body;
     if (!Array.isArray(orderedIds) || !orderedIds.every((id: any) => typeof id === "number")) {

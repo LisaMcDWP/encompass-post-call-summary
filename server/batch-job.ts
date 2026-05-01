@@ -119,26 +119,6 @@ async function processBatch() {
     return;
   }
 
-  const bqUpdateQueue: Array<() => Promise<void>> = [];
-  let bqQueueRunning = false;
-
-  async function drainBqQueue() {
-    if (bqQueueRunning) return;
-    bqQueueRunning = true;
-    while (bqUpdateQueue.length > 0) {
-      const task = bqUpdateQueue.shift()!;
-      try { await task(); } catch (err: any) {
-        console.error(`BQ queue task error: ${err.message}`);
-      }
-    }
-    bqQueueRunning = false;
-  }
-
-  function enqueueBqUpdate(fn: () => Promise<void>) {
-    bqUpdateQueue.push(fn);
-    drainBqQueue();
-  }
-
   async function processItem(item: any) {
     console.log(`Processing: ${item.bland_call_id}`);
     try {
@@ -227,18 +207,21 @@ async function processBatch() {
         : [];
       await insertCallActivationObjectives(sourceId, objectiveResults, targetProjectId);
 
-      enqueueBqUpdate(async () => {
-        await updateBatchItemStatus(item.bland_call_id, "completed", sourceId);
-      });
+      // Mark completed inline. If we crash/restart, this guarantees the
+      // batch row reflects the persisted interaction_info write so the next
+      // run does NOT re-process this call_id.
+      await updateBatchItemStatus(item.bland_call_id, "completed", sourceId);
 
       successCount++;
       console.log(`Completed: ${item.bland_call_id} → ${sourceId} (${processingTimeMs}ms)`);
     } catch (err: any) {
       failCount++;
       console.error(`Failed: ${item.bland_call_id} - ${err.message}`);
-      enqueueBqUpdate(async () => {
+      try {
         await updateBatchItemStatus(item.bland_call_id, "failed", undefined, err.message);
-      });
+      } catch (statusErr: any) {
+        console.error(`Could not mark failed for ${item.bland_call_id}: ${statusErr.message}`);
+      }
     }
   }
 
@@ -249,10 +232,6 @@ async function processBatch() {
     if (DELAY_MS > 0 && i + CONCURRENCY < claimedItems.length) {
       await new Promise(resolve => setTimeout(resolve, DELAY_MS));
     }
-  }
-
-  while (bqUpdateQueue.length > 0 || bqQueueRunning) {
-    await new Promise(resolve => setTimeout(resolve, 200));
   }
 
   console.log(`Batch job complete. Claimed: ${claimedItems.length}, Success: ${successCount}, Failed: ${failCount}, Skipped: ${skippedCount}`);
