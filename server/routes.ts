@@ -2365,10 +2365,23 @@ export async function registerRoutes(
                 })
               : [];
             await insertCallActivationObjectives(callId, batchObjResults, targetProjectId);
+            // Persist status inline so a server restart mid-run cannot leave
+            // this row stuck on 'processing'. Also keep batchResults for the
+            // end-of-run flush as a safety net (cheap no-op if already done).
+            try {
+              await updateBatchItemStatus(callId, "completed", callId, undefined, targetProjectId);
+            } catch (statusErr: any) {
+              console.error(`Batch job ${jobId}: ${callId} status update failed: ${statusErr.message}`);
+            }
             batchResults.push({ callId, success: true, resultCallId: callId });
             jobState.completed++;
             console.log(`Batch job ${jobId}: [${idx + 1}/${total}] ${callId} completed (${processingTimeMs}ms)`);
           } catch (err: any) {
+            try {
+              await updateBatchItemStatus(callId, "failed", undefined, err.message, targetProjectId);
+            } catch (statusErr: any) {
+              console.error(`Batch job ${jobId}: ${callId} failed-status update failed: ${statusErr.message}`);
+            }
             batchResults.push({ callId, success: false, error: err.message });
             jobState.failed++;
             jobState.errors.push({ callId, error: err.message });
