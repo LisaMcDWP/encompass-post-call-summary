@@ -1055,29 +1055,35 @@ export async function registerRoutes(
 
       // interaction_info.call_id may be the raw bland_call_id (when processed
       // via /api/analyze) OR prefixed with "batch_" (when processed via the
-      // batch worker). For each batch row, find the actual matched call_id
-      // (preferring the batch_<id> form when present) so we set the correct
-      // result_call_id. Only target rows that are 'pending' AND have not been
-      // updated in the last 30 minutes — this avoids racing with an actively
-      // running batch worker (which would otherwise be blocked from writing
-      // its own status due to the pending/processing guard in
-      // updateBatchItemStatus).
+      // batch worker). Use TWO uncorrelated subqueries so BigQuery can
+      // de-correlate the predicates.
+      // - rawSet: bland_call_ids that exist as raw call_id in interaction_info
+      // - batchSet: bland_call_ids that exist as batch_<id> call_id in interaction_info
+      // We only target rows that are 'pending' AND not actively being processed
+      // (processed_at older than 30 min, or null).
+      const batchSet = `
+        SELECT DISTINCT REGEXP_REPLACE(call_id, r'^batch_', '') AS bland_call_id
+        FROM ${infoRef}
+        WHERE STARTS_WITH(call_id, 'batch_')
+      `;
+      const rawSet = `
+        SELECT DISTINCT call_id AS bland_call_id FROM ${infoRef}
+      `;
       const matchedExpr = `
-        COALESCE(
-          (SELECT i.call_id FROM ${infoRef} i
-            WHERE i.call_id = CONCAT('batch_', b.bland_call_id)
-            ORDER BY i.processed_at DESC LIMIT 1),
-          (SELECT i.call_id FROM ${infoRef} i
-            WHERE i.call_id = b.bland_call_id
-            ORDER BY i.processed_at DESC LIMIT 1)
-        )
+        CASE
+          WHEN b.bland_call_id IN (${batchSet}) THEN CONCAT('batch_', b.bland_call_id)
+          ELSE b.bland_call_id
+        END
       `;
       const targetWhere = `
         b.status = 'pending'
           AND b.bland_call_id IS NOT NULL
           AND (b.processed_at IS NULL
                OR b.processed_at < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 MINUTE))
-          AND ${matchedExpr} IS NOT NULL
+          AND (
+            b.bland_call_id IN (${batchSet})
+            OR b.bland_call_id IN (${rawSet})
+          )
       `;
 
       const [preview] = await bq.query({

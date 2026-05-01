@@ -566,9 +566,31 @@ export default function BatchProcessing() {
           Run on GCP
         </Button>
         <Button
-          onClick={() => {
-            queryClient.invalidateQueries({ queryKey: ["/api/batch/summary"] });
-            queryClient.invalidateQueries({ queryKey: ["/api/batch/items"] });
+          onClick={async () => {
+            // Reconcile any stuck pending rows (items already in interaction_info
+            // but whose status update was lost) so the displayed counts always
+            // reflect reality, then refetch.
+            try {
+              if (selectedCPId) {
+                const res = await fetch("/api/admin/reconcile-batch-status", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ clientPathwayId: selectedCPId }),
+                });
+                if (res.ok) {
+                  const data = await res.json();
+                  if (data.reconciled > 0) {
+                    toast({ title: "Reconciled", description: `${data.reconciled} processed item(s) had stale status — fixed.` });
+                  }
+                }
+              }
+            } catch {
+              // non-fatal — still refetch
+            }
+            await Promise.all([
+              queryClient.invalidateQueries({ queryKey: ["/api/batch/summary"] }),
+              queryClient.invalidateQueries({ queryKey: ["/api/batch/items"] }),
+            ]);
             toast({ title: "Refreshed", description: "Batch status updated" });
           }}
           variant="outline"
